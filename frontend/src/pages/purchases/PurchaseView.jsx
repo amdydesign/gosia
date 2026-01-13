@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ArrowLeft, Edit2, ShoppingBag, Calendar, ExternalLink, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Edit2, ShoppingBag, Calendar, ExternalLink, RotateCcw, Clock } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { formatCurrency, formatDate } from '../../utils/format';
 

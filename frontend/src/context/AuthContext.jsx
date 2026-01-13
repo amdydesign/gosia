@@ -29,8 +29,8 @@ export function AuthProvider({ children }) {
     }, []);
 
     // Login
-    const login = async (username, password) => {
-        const data = await authService.login(username, password);
+    const login = async (username, password, rememberMe = false) => {
+        const data = await authService.login(username, password, rememberMe);
         setUser(data.user);
         setIsAuthenticated(true);
         return data;
