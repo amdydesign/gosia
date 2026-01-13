@@ -148,7 +148,11 @@ export default function Dashboard() {
                     ) : (
                         <>
                             {stats?.upcoming_collaborations?.map(collab => (
-                                <div key={`collab-${collab.id}`} className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4">
+                                <Link
+                                    key={`collab-${collab.id}`}
+                                    to={`/collaborations/${collab.id}`}
+                                    className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4 cursor-pointer"
+                                >
                                     <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center flex-shrink-0">
                                         <Briefcase size={18} />
                                     </div>
@@ -157,18 +161,22 @@ export default function Dashboard() {
                                         <div className="text-xs text-gray-500 flex items-center gap-2">
                                             <span>{getCollabTypeLabel(collab.type)}</span>
                                             <span>•</span>
-                                            <span className="text-gray-700">{formatCurrency(collab.amount)}</span>
+                                            <span className="text-gray-700">{formatCurrency(collab.amount_gross || collab.amount_net || 0)}</span>
                                         </div>
                                     </div>
                                     <div className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md whitespace-nowrap">
                                         {formatDate(collab.date)}
                                     </div>
-                                </div>
+                                </Link>
                             ))}
                             {stats?.upcoming_purchases?.map(purchase => {
                                 const urgency = getReturnUrgency(purchase.days_remaining);
                                 return (
-                                    <div key={`purchase-${purchase.id}`} className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4">
+                                    <Link
+                                        key={`purchase-${purchase.id}`}
+                                        to={`/purchases/${purchase.id}`}
+                                        className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4 cursor-pointer"
+                                    >
                                         <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center flex-shrink-0">
                                             <ShoppingBag size={18} />
                                         </div>
@@ -179,7 +187,7 @@ export default function Dashboard() {
                                         <div className={`text-xs font-bold px-2 py-1 rounded-md whitespace-nowrap ${urgency.className.replace('badge-', 'text-').replace('badge', 'bg-opacity-10 bg-current')}`}>
                                             {urgency.message}
                                         </div>
-                                    </div>
+                                    </Link>
                                 );
                             })}
                         </>
