@@ -1,0 +1,18 @@
+{
+    "name": "gosia/stylist-manager-api",
+    "description": "Backend API for Gosia Stylist Manager",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "vlucas/phpdotenv": "^5.5",
+        "firebase/php-jwt": "^6.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

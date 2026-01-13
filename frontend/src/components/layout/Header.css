@@ -1,0 +1,57 @@
+@reference "../../index.css";
+
+/* ========================================
+   HEADER COMPONENT - Tailwind Enhanced
+   ======================================== */
+
+.header {
+    @apply sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100;
+}
+
+.header-content {
+    @apply flex items-center justify-between gap-4 max-w-6xl mx-auto px-4 py-3 min-h-[64px];
+}
+
+/* Adjust content for sidebar offset on desktop */
+@media (min-width: 1024px) {
+    .header-content {
+        @apply pl-72;
+        /* Sidebar width (64) + padding */
+        padding-left: calc(16rem + 2rem);
+    }
+}
+
+.header-title-group {
+    @apply flex-1 min-w-0;
+}
+
+.header-title {
+    @apply text-xl font-bold text-gray-800 truncate;
+}
+
+.header-subtitle {
+    @apply text-sm text-gray-500 capitalize mt-0.5;
+}
+
+/* User info section */
+.header-user {
+    @apply flex items-center gap-3;
+}
+
+.header-avatar {
+    @apply w-9 h-9 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold;
+}
+
+/* Logout button */
+.header-logout {
+    @apply flex items-center justify-center w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors cursor-pointer;
+}
+
+@media (min-width: 1024px) {
+
+    /* Hide user/logout in header on desktop (it's in sidebar) */
+    .header-user,
+    .header-logout {
+        @apply hidden;
+    }
+}

@@ -1,0 +1,57 @@
+@reference "../index.css";
+
+/* ========================================
+   LOGIN PAGE - Tailwind Enhanced
+   ======================================== */
+
+.login-page {
+    @apply min-h-screen flex items-center justify-center p-4 relative overflow-hidden;
+    background: linear-gradient(135deg, #faf8f9 0%, #f5f0f3 50%, #e8e0e5 100%);
+}
+
+.login-page::before {
+    content: '';
+    @apply absolute -top-1/2 -left-1/2 w-[200%] h-[200%];
+    background: radial-gradient(circle, rgba(192, 132, 160, 0.08) 0%, transparent 50%);
+    animation: float 20s ease-in-out infinite;
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+
+    50% {
+        transform: translate(2%, 4%) rotate(1deg);
+    }
+}
+
+.login-container {
+    @apply w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 sm:p-10 relative z-10 border border-gray-100;
+}
+
+.login-header {
+    @apply text-center mb-8;
+}
+
+.login-header h1 {
+    @apply text-2xl sm:text-3xl font-bold text-gray-800 mb-2;
+}
+
+.login-header p {
+    @apply text-gray-400;
+}
+
+.login-form {
+    @apply flex flex-col gap-5;
+}
+
+.error-message {
+    @apply bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm text-center border border-red-200;
+}
+
+.login-button {
+    @apply w-full py-4 bg-gradient-to-r from-primary to-secondary text-white rounded-xl font-semibold text-base transition-all duration-300 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0;
+}

@@ -1,0 +1,8 @@
+@reference "../index.css";
+
+/* ========================================
+   DASHBOARD PAGE - Uses App.css shared styles
+   ======================================== */
+
+/* Dashboard-specific styles are now in App.css as shared components */
+/* This file kept for page-specific overrides if needed */

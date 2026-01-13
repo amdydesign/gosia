@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #c084a0;
+  --color-primary-light: #e8c5d5;
+  --color-primary-dark: #9a6b81;
+  --color-secondary: #a78bba;
+  --color-secondary-light: #d4c4e3;
+  --color-secondary-dark: #8a6fa0;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+/* ========================================
+   GOSIA 2.0 - DESIGN SYSTEM
+   Tailwind CSS + Custom Styles
+   ======================================== */
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply font-sans text-gray-800 bg-gray-50 min-h-screen;
+  }
+
+  /* Focus states */
+  :focus-visible {
+    @apply outline-2 outline-primary outline-offset-2;
+  }
+}
+
+@layer components {
+
+  /* Container */
+  .container {
+    @apply w-full max-w-6xl mx-auto px-4 pb-24;
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      @apply pl-72 pb-8;
+    }
+  }
+
+  /* Loading */
+  .loading {
+    @apply text-center py-10 text-gray-500;
+  }
+
+  .error {
+    @apply text-center py-10 text-red-500;
+  }
+}

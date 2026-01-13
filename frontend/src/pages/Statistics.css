@@ -1,0 +1,89 @@
+@reference "../index.css";
+
+/* ========================================
+   STATISTICS PAGE - Tailwind Enhanced
+   ======================================== */
+
+.stats-summary {
+    @apply grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6;
+}
+
+.summary-card {
+    @apply bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center;
+}
+
+.summary-value {
+    @apply text-2xl lg:text-3xl font-bold text-primary-dark mb-1;
+}
+
+.summary-label {
+    @apply text-xs font-semibold text-gray-400 uppercase tracking-wider;
+}
+
+/* Chart containers */
+.chart-card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4;
+}
+
+.chart-header {
+    @apply flex items-center justify-between p-5 border-b border-gray-100;
+}
+
+.chart-title {
+    @apply text-base font-semibold text-gray-800;
+}
+
+.chart-body {
+    @apply p-5 min-h-[200px] flex items-center justify-center;
+}
+
+/* Period selector */
+.period-selector {
+    @apply flex gap-1 bg-gray-100 p-1 rounded-lg;
+}
+
+.period-btn {
+    @apply px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors;
+}
+
+.period-btn.active {
+    @apply bg-white text-primary-dark shadow-sm;
+}
+
+/* Bar chart */
+.bar-chart {
+    @apply w-full flex flex-col gap-3;
+}
+
+.bar-item {
+    @apply flex items-center gap-3;
+}
+
+.bar-label {
+    @apply w-20 text-sm text-gray-500 flex-shrink-0;
+}
+
+.bar-track {
+    @apply flex-1 h-6 bg-gray-100 rounded-full overflow-hidden;
+}
+
+.bar-fill {
+    @apply h-full bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-end pr-2 transition-all duration-500;
+}
+
+.bar-value {
+    @apply text-xs font-semibold text-white;
+}
+
+/* Empty chart */
+.chart-empty {
+    @apply text-center text-gray-400 py-10;
+}
+
+.chart-empty-icon {
+    @apply text-4xl mb-3 opacity-40;
+}
+
+.chart-empty-text {
+    @apply text-sm;
+}
