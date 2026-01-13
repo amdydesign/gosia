@@ -1,14 +1,14 @@
 RewriteEngine On
 RewriteBase /
 
-# Serve static assets from frontend/dist
-RewriteCond %{REQUEST_URI} \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$
-RewriteRule ^(.*)$ frontend/dist/$1 [L]
-
 # API - pass through
 RewriteRule ^api/(.*)$ api/$1 [L]
+
+# Static files - serve directly if they exist
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
 
 # All other requests go to React index.html
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^.*$ frontend/dist/index.html [L]
+RewriteRule ^.*$ index.html [L]
