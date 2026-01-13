@@ -92,6 +92,17 @@ try {
     $stmt->execute(['user_id' => $userId]);
     $urgentPurchases = $stmt->fetchAll();
 
+    // Get count of returns due in 7 days or less (for badge)
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) as count
+        FROM purchases 
+        WHERE user_id = :user_id 
+        AND status IN ('kept', 'partial')
+        AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 7
+    ");
+    $stmt->execute(['user_id' => $userId]);
+    $urgentReturnsCount = intval($stmt->fetch()['count']);
+
     // Get upcoming items (next 7 days)
     $upcomingCollabs = [];
     $stmt = $conn->prepare("
@@ -140,6 +151,7 @@ try {
         'active_collaborations' => $activeCollabs,
         'active_purchases' => $activePurchases, // Renamed from pending_returns
         'urgent_purchases' => $urgentPurchases, // Renamed from urgent_returns
+        'urgent_returns_count' => $urgentReturnsCount, // New field for badge (<= 7 days)
         'upcoming_collaborations' => $upcomingCollabs,
         'upcoming_purchases' => $upcomingPurchases, // Renamed from upcoming_returns
         'total_earnings' => floatval($totals['total_earnings']),

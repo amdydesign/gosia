@@ -1,16 +1,14 @@
-import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, ShoppingBag, Briefcase, BarChart2, LogOut, User, Lightbulb } from 'lucide-react';
-
+import { useUrgentReturns } from '../../hooks/useUrgentReturns';
 
 export default function Sidebar() {
     const { user, logout } = useAuth();
     const location = useLocation();
+    const urgentCount = useUrgentReturns();
 
     const menuItems = [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/collaborations', label: 'Współprace', icon: Briefcase },
-        { path: '/purchases', label: 'Zakupy', icon: ShoppingBag },
+        { path: '/purchases', label: 'Zakupy', icon: ShoppingBag, badge: urgentCount > 0 ? urgentCount : null },
         { path: '/ideas', label: 'Pomysły', icon: Lightbulb },
         { path: '/statistics', label: 'Statystyki', icon: BarChart2 },
     ];
@@ -34,7 +32,7 @@ export default function Sidebar() {
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative
                 ${isActive
                                     ? 'bg-primary/10 text-primary font-semibold'
                                     : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -47,7 +45,13 @@ export default function Sidebar() {
                             />
                             <span>{item.label}</span>
 
-                            {isActive && (
+                            {item.badge && (
+                                <span className="absolute right-4 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] h-[18px] flex items-center justify-center">
+                                    {item.badge}
+                                </span>
+                            )}
+
+                            {isActive && !item.badge && (
                                 <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
                             )}
                         </Link>

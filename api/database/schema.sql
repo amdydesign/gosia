@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS collaboration_team (
     id INT AUTO_INCREMENT PRIMARY KEY,
     collaboration_id INT NOT NULL,
     name VARCHAR(100) NOT NULL,
+    amount DECIMAL(10, 2) DEFAULT 0.00,
     
     FOREIGN KEY (collaboration_id) REFERENCES collaborations(id) ON DELETE CASCADE,
     INDEX idx_collaboration_id (collaboration_id)
