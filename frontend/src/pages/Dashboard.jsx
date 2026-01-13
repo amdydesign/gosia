@@ -107,25 +107,39 @@ export default function Dashboard() {
                     <div className="flex items-start gap-3">
                         <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
                         <div className="flex-1">
-                            <h3 className="font-bold text-red-700 text-sm mb-3">Pilne zwroty!</h3>
+                            <h3 className="font-bold text-gray-800 text-sm mb-3">Pilne zwroty!</h3>
                             <div className="space-y-2">
-                                {stats.urgent_purchases.map(purchase => (
-                                    <Link
-                                        key={purchase.id}
-                                        to={`/purchases/${purchase.id}`}
-                                        className="block text-sm bg-white p-3 rounded-lg hover:shadow-md transition-shadow"
-                                    >
-                                        <div className="flex justify-between items-start gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="font-semibold text-red-700 truncate">{purchase.store}</div>
-                                                <div className="text-xs text-red-600 mt-0.5">{purchase.items}</div>
+                                {stats.urgent_purchases.map(purchase => {
+                                    const urgency = getReturnUrgency(purchase.days_remaining);
+                                    let itemStyle = "bg-white border-transparent hover:border-red-200";
+                                    let textStyle = "text-gray-900";
+
+                                    if (urgency.level === 'urgent' || urgency.level === 'overdue' || urgency.level === 'today') {
+                                        itemStyle = "bg-red-100 border-red-200";
+                                        textStyle = "text-red-900";
+                                    } else if (urgency.level === 'soon') {
+                                        itemStyle = "bg-orange-100 border-orange-200";
+                                        textStyle = "text-orange-900";
+                                    }
+
+                                    return (
+                                        <Link
+                                            key={purchase.id}
+                                            to={`/purchases/${purchase.id}`}
+                                            className={`block text-sm p-3 rounded-lg border hover:shadow-md transition-all ${itemStyle}`}
+                                        >
+                                            <div className="flex justify-between items-start gap-3">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className={`font-semibold truncate ${textStyle}`}>{purchase.store}</div>
+                                                    <div className="text-xs text-gray-500 mt-0.5">{purchase.items}</div>
+                                                </div>
+                                                <div className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded whitespace-nowrap ${urgency.className.replace('badge-', 'text-').replace('badge', 'bg-white/50')}`}>
+                                                    {urgency.message}
+                                                </div>
                                             </div>
-                                            <div className="flex-shrink-0 text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded whitespace-nowrap">
-                                                {getReturnUrgency(purchase.days_remaining).message}
-                                            </div>
-                                        </div>
-                                    </Link>
-                                ))}
+                                        </Link>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>

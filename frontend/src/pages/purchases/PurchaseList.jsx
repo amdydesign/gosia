@@ -90,11 +90,22 @@ export default function PurchaseList() {
                 <div className="grid gap-4">
                     {filteredPurchases.map(purchase => {
                         const urgency = getReturnUrgency(purchase.days_remaining);
+                        let cardStyle = "bg-white border-gray-100 hover:border-teal-500/30";
+
+                        // Highlight based on urgency
+                        if (purchase.status === 'kept') {
+                            if (urgency.level === 'urgent' || urgency.level === 'overdue' || urgency.level === 'today') {
+                                cardStyle = "bg-red-50 border-red-200 hover:border-red-300";
+                            } else if (urgency.level === 'soon') {
+                                cardStyle = "bg-orange-50 border-orange-200 hover:border-orange-300";
+                            }
+                        }
+
                         return (
                             <Link
                                 key={purchase.id}
                                 to={`/purchases/${purchase.id}`}
-                                className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:border-teal-500/30 transition-colors flex items-center justify-between group"
+                                className={`${cardStyle} p-4 rounded-2xl shadow-sm border transition-colors flex items-center justify-between group`}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold text-lg">
