@@ -22,8 +22,7 @@ logs/
 # Cache
 cache/
 
-# Old HTML prototype
-/index.html
+# Old HTML prototype (legacy files - not the React build)
 /styles.css
 /app.js
 /utils.js
