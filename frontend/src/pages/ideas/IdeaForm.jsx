@@ -103,6 +103,47 @@ export default function IdeaForm() {
                     />
                 </div>
 
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Status
+                    </label>
+                    <div className="flex gap-4">
+                        <label className={`flex-1 p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.status === 'draft' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-100 hover:border-gray-200'}`}>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="radio"
+                                    name="status"
+                                    value="draft"
+                                    checked={formData.status === 'draft'}
+                                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                    className="hidden"
+                                />
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.status === 'draft' ? 'border-purple-500' : 'border-gray-300'}`}>
+                                    {formData.status === 'draft' && <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />}
+                                </div>
+                                <span className="font-bold">Do zrobienia</span>
+                            </div>
+                        </label>
+
+                        <label className={`flex-1 p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.status === 'recorded' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-100 hover:border-gray-200'}`}>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="radio"
+                                    name="status"
+                                    value="recorded"
+                                    checked={formData.status === 'recorded'}
+                                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                    className="hidden"
+                                />
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${formData.status === 'recorded' ? 'border-green-500' : 'border-gray-300'}`}>
+                                    {formData.status === 'recorded' && <div className="w-2.5 h-2.5 rounded-full bg-green-500" />}
+                                </div>
+                                <span className="font-bold">Nagrane</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
                 <div className="pt-4 flex items-center justify-end gap-3">
                     <Link
                         to="/ideas"
