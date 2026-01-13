@@ -117,6 +117,39 @@ export default function PurchaseEdit() {
                                     className="w-full px-4 py-2 rounded-xl border border-gray-200"
                                 />
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Data zakupu</label>
+                                    <input
+                                        type="date"
+                                        name="purchase_date"
+                                        value={formData.purchase_date}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Dni na zwrot</label>
+                                    <input
+                                        type="number"
+                                        name="return_days"
+                                        value={formData.return_days}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Kwota zakupu (zł)</label>
+                                <input
+                                    type="number"
+                                    name="amount"
+                                    value={formData.amount}
+                                    onChange={handleChange}
+                                    step="0.01"
+                                    className="w-full px-4 py-2 rounded-xl border border-gray-200"
+                                />
+                            </div>
                         </>
                     )}
 
