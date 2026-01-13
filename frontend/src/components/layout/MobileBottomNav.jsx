@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Briefcase, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Briefcase, BarChart2, Lightbulb } from 'lucide-react';
 import './BottomNav.css';
 
 export default function MobileBottomNav() {
@@ -9,6 +9,7 @@ export default function MobileBottomNav() {
         { path: '/dashboard', label: 'Start', icon: LayoutDashboard },
         { path: '/collaborations', label: 'Współprace', icon: Briefcase },
         { path: '/purchases', label: 'Zakupy', icon: ShoppingBag },
+        { path: '/ideas', label: 'Pomysły', icon: Lightbulb },
         { path: '/statistics', label: 'Statystyki', icon: BarChart2 },
     ];
 

@@ -20,6 +20,11 @@ import PurchaseNew from './pages/purchases/PurchaseNew';
 import PurchaseEdit from './pages/purchases/PurchaseEdit';
 import PurchaseView from './pages/purchases/PurchaseView';
 
+// Ideas Pages
+import IdeaList from './pages/ideas/IdeaList';
+import IdeaForm from './pages/ideas/IdeaForm';
+import IdeaView from './pages/ideas/IdeaView';
+
 // Global styles
 import './App.css';
 
@@ -104,6 +109,36 @@ function App() {
             <ProtectedRoute>
               <AppLayout>
                 <PurchaseEdit />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
+
+          {/* Ideas Routes */}
+          <Route path="/ideas" element={
+            <ProtectedRoute>
+              <AppLayout>
+                <IdeaList />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/ideas/new" element={
+            <ProtectedRoute>
+              <AppLayout>
+                <IdeaForm />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/ideas/:id" element={
+            <ProtectedRoute>
+              <AppLayout>
+                <IdeaView />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/ideas/:id/edit" element={
+            <ProtectedRoute>
+              <AppLayout>
+                <IdeaForm />
               </AppLayout>
             </ProtectedRoute>
           } />

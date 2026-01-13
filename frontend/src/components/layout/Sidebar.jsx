@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, ShoppingBag, Briefcase, BarChart2, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Briefcase, BarChart2, LogOut, User, Lightbulb } from 'lucide-react';
 
 
 export default function Sidebar() {
@@ -11,6 +11,7 @@ export default function Sidebar() {
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/collaborations', label: 'Współprace', icon: Briefcase },
         { path: '/purchases', label: 'Zakupy', icon: ShoppingBag },
+        { path: '/ideas', label: 'Pomysły', icon: Lightbulb },
         { path: '/statistics', label: 'Statystyki', icon: BarChart2 },
     ];
 
