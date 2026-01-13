@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ArrowLeft, Edit2, ShoppingBag, Calendar, ExternalLink, RotateCcw, Clock } from 'lucide-react';
+import { ArrowLeft, Edit2, ShoppingBag, Calendar, ExternalLink, RotateCcw, Clock, Trash2 } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { formatCurrency, formatDate } from '../../utils/format';
 
@@ -52,11 +52,25 @@ export default function PurchaseView() {
                     )}
                     <Link
                         to={`/purchases/${id}/edit`}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-colors"
+                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                     >
-                        <Edit2 size={16} />
-                        Edytuj
+                        <Edit2 size={24} />
                     </Link>
+                    <button
+                        onClick={async () => {
+                            if (window.confirm('Czy na pewno chcesz usunąć ten zakup?')) {
+                                try {
+                                    await apiRequest(`/purchases/delete.php?id=${id}`, 'DELETE', null, token);
+                                    navigate('/purchases');
+                                } catch (err) {
+                                    alert(err.message || 'Błąd usuwania');
+                                }
+                            }
+                        }}
+                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                        <Trash2 size={24} />
+                    </button>
                 </div>
             </header>
 
