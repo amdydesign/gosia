@@ -17,6 +17,20 @@ export const statsService = {
      */
     async getMonthly() {
         return await api.get('/stats/monthly.php');
+    },
+
+    /**
+     * Get current social stats
+     */
+    async getSocialCurrent() {
+        return await api.get('/stats/social/current.php');
+    },
+
+    /**
+     * Update social stats
+     */
+    async updateSocialStats(platform, count) {
+        return await api.post('/stats/social/update.php', { platform, count });
     }
 };
 
