@@ -103,17 +103,28 @@ export default function Dashboard() {
 
             {/* Urgent Purchases Alert */}
             {stats?.urgent_purchases?.length > 0 && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-4 animate-pulse-slow">
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4">
                     <div className="flex items-start gap-3">
                         <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
-                        <div>
-                            <h3 className="font-bold text-red-700 text-sm mb-2">Pilne zwroty!</h3>
+                        <div className="flex-1">
+                            <h3 className="font-bold text-red-700 text-sm mb-3">Pilne zwroty!</h3>
                             <div className="space-y-2">
                                 {stats.urgent_purchases.map(purchase => (
-                                    <div key={purchase.id} className="text-sm text-red-600 bg-white/50 p-2 rounded-lg flex justify-between items-center">
-                                        <span className="font-medium">{purchase.store}</span>
-                                        <span className="text-xs font-bold">{getReturnUrgency(purchase.days_remaining).message}</span>
-                                    </div>
+                                    <Link
+                                        key={purchase.id}
+                                        to={`/purchases/${purchase.id}`}
+                                        className="block text-sm bg-white p-3 rounded-lg hover:shadow-md transition-shadow"
+                                    >
+                                        <div className="flex justify-between items-start gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-semibold text-red-700 truncate">{purchase.store}</div>
+                                                <div className="text-xs text-red-600 mt-0.5">{purchase.items}</div>
+                                            </div>
+                                            <div className="flex-shrink-0 text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded whitespace-nowrap">
+                                                {getReturnUrgency(purchase.days_remaining).message}
+                                            </div>
+                                        </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
