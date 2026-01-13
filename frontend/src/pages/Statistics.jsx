@@ -16,19 +16,36 @@ export default function Statistics() {
         loadStats();
     }, []);
 
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        loadStats();
+    }, []);
+
     const loadStats = async () => {
         try {
             setLoading(true);
-            const [dashRes, monthRes, socialRes] = await Promise.all([
-                statsService.getDashboard(),
-                statsService.getMonthly(),
-                statsService.getSocialCurrent()
-            ]);
-            if (dashRes.success) setDashboardStats(dashRes.data);
-            if (monthRes.success) setMonthlyStats(monthRes.data);
-            if (socialRes.success) setSocialStats(socialRes.data);
+            setError(null);
+
+            // Load independent parts
+            try {
+                const dashRes = await statsService.getDashboard();
+                if (dashRes.success) setDashboardStats(dashRes.data);
+            } catch (e) { console.error('Dashboard stats error', e); }
+
+            try {
+                const monthRes = await statsService.getMonthly();
+                if (monthRes.success) setMonthlyStats(monthRes.data);
+            } catch (e) { console.error('Monthly stats error', e); }
+
+            try {
+                const socialRes = await statsService.getSocialCurrent();
+                if (socialRes.success) setSocialStats(socialRes.data);
+            } catch (e) { console.error('Social stats error', e); }
+
         } catch (err) {
             console.error('Error loading stats:', err);
+            setError('Wystąpił błąd podczas ładowania danych. Spróbuj odświeżyć stronę.');
         } finally {
             setLoading(false);
         }
@@ -117,6 +134,17 @@ export default function Statistics() {
     const totalAmount = monthlyStats?.by_type?.reduce((sum, t) => sum + parseFloat(t.total || 0), 0) || 1;
 
     if (loading) return <div className="loading">Ładowanie...</div>;
+
+    if (error) return (
+        <div className="p-8 text-center">
+            <div className="text-red-500 mb-4 text-xl">⚠️</div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Błąd aplikacji</h3>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <button onClick={() => window.location.reload()} className="bg-primary text-white px-6 py-2 rounded-xl">
+                Odśwież stronę
+            </button>
+        </div>
+    );
 
     return (
         <div className="space-y-8">
