@@ -81,13 +81,13 @@ export default function Statistics() {
             return;
         }
 
-        // OAuth for others (future)
+        // OAuth for TikTok and others
         try {
             const res = await statsService.getSocialAuthUrl(platform);
             if (res.success && res.data.url) {
                 window.location.href = res.data.url;
             } else {
-                alert('Funkcja nie jest jeszcze skonfigurowana dla tej platformy.');
+                alert('Funkcja nie jest jeszcze skonfigurowana. Sprawdź api/config/social_credentials.php');
             }
         } catch (e) {
             console.error(e);
@@ -202,10 +202,8 @@ export default function Statistics() {
                         const isEditing = editingPlatform === platform.id;
                         const isConnected = connectedPlatforms?.[platform.id];
 
-                        // Can automate only if supported (currently only known for YouTube in backend)
-                        // But let's show connect button for all if logic exists, or hide if not supported.
-                        // Implemented: YouTube.
-                        const canConnect = platform.id === 'youtube';
+                        // Implemented: YouTube (API Key), TikTok (OAuth)
+                        const canConnect = platform.id === 'youtube' || platform.id === 'tiktok';
 
                         return (
                             <div key={platform.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-full relative overflow-hidden">

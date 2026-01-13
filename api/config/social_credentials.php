@@ -7,5 +7,10 @@ return [
     ],
     'instagram' => [
         // Instagram still requires OAuth or RapidAPI usually, but we'll deal with it later
+    ],
+    'tiktok' => [
+        'client_key' => 'sbawlp0dkocuzeoueq',
+        'client_secret' => 'hpA0SL7aA19rEhOrIvdSKmCcGl8xRQma',
+        'redirect_uri' => 'https://panel.malgorzatamordarska.pl/auth/callback/tiktok'
     ]
 ];
