@@ -81,40 +81,47 @@ export default function IdeaList() {
                 </div>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {ideas.map(idea => (
-                        <Link
-                            key={idea.id}
-                            to={`/ideas/${idea.id}`}
-                            className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:border-purple-300 hover:shadow-md transition-all group flex flex-col h-full"
-                        >
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-100 transition-colors">
-                                    <Lightbulb size={20} />
+                    {ideas.map(idea => {
+                        const isRecorded = idea.status === 'recorded';
+                        return (
+                            <Link
+                                key={idea.id}
+                                to={`/ideas/${idea.id}`}
+                                className={`bg-white p-5 rounded-2xl shadow-sm border transition-all group flex flex-col h-full
+                                    ${isRecorded
+                                        ? 'border-gray-100 opacity-60 hover:opacity-100 hover:shadow-sm'
+                                        : 'border-gray-100 hover:border-purple-300 hover:shadow-md'
+                                    }`}
+                            >
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className={`p-2 rounded-lg transition-colors ${isRecorded ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 group-hover:bg-purple-100'}`}>
+                                        <Lightbulb size={20} />
+                                    </div>
+                                    {isRecorded ? (
+                                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md flex items-center gap-1">
+                                            <CheckCircle size={10} /> Nagrane
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-md flex items-center gap-1">
+                                            <Clock size={10} /> Do zrobienia
+                                        </span>
+                                    )}
                                 </div>
-                                {idea.status === 'recorded' ? (
-                                    <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md flex items-center gap-1">
-                                        <CheckCircle size={10} /> Nagrane
-                                    </span>
-                                ) : (
-                                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-md flex items-center gap-1">
-                                        <Clock size={10} /> Do zrobienia
-                                    </span>
-                                )}
-                            </div>
 
-                            <h3 className="font-bold text-lg text-gray-900 mb-2 group-hover:text-purple-700 transition-colors line-clamp-2">
-                                {idea.title}
-                            </h3>
+                                <h3 className={`font-bold text-lg mb-2 transition-colors line-clamp-2 ${isRecorded ? 'text-gray-500' : 'text-gray-900 group-hover:text-purple-700'}`}>
+                                    {idea.title}
+                                </h3>
 
-                            <p className="text-gray-500 text-sm line-clamp-3 mb-4 flex-grow">
-                                {idea.content || <span className="italic opacity-50">Brak treści scenariusza...</span>}
-                            </p>
+                                <p className={`text-sm line-clamp-3 mb-4 flex-grow ${isRecorded ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {idea.content || <span className="italic opacity-50">Brak treści scenariusza...</span>}
+                                </p>
 
-                            <div className="text-xs text-gray-400 pt-4 border-t border-gray-50 mt-auto">
-                                Utworzono: {new Date(idea.created_at).toLocaleDateString()}
-                            </div>
-                        </Link>
-                    ))}
+                                <div className="text-xs text-gray-400 pt-4 border-t border-gray-50 mt-auto">
+                                    Utworzono: {new Date(idea.created_at).toLocaleDateString()}
+                                </div>
+                            </Link>
+                        );
+                    })}
                 </div>
             )}
         </div>

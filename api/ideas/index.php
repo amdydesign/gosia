@@ -33,7 +33,8 @@ try {
         $params['status'] = $status;
     }
 
-    $query .= " ORDER BY created_at DESC";
+    // Sort: Drafts first, then Recorded. Within groups, newest first.
+    $query .= " ORDER BY CASE WHEN status = 'draft' THEN 1 ELSE 2 END ASC, created_at DESC";
 
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
