@@ -1,47 +1,14 @@
-# Gosia 2.0 - Apache Configuration
-# This file should be placed in the public_html directory
-
 RewriteEngine On
 RewriteBase /
 
-# ========================================
-# API Routing - forward /api/ to api folder
-# ========================================
-RewriteCond %{REQUEST_URI} ^/api/
-RewriteRule ^api/(.*)$ api/$1 [L,QSA]
-
-# ========================================
-# React App Routing
-# ========================================
-
-# If requested file exists in frontend/dist, serve it directly
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{DOCUMENT_ROOT}/frontend/dist%{REQUEST_URI} -f
+# Serve static assets from frontend/dist
+RewriteCond %{REQUEST_URI} \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$
 RewriteRule ^(.*)$ frontend/dist/$1 [L]
 
-# If requested directory exists in frontend/dist, serve it
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{DOCUMENT_ROOT}/frontend/dist%{REQUEST_URI} -d
-RewriteRule ^(.*)$ frontend/dist/$1 [L]
+# API - pass through
+RewriteRule ^api/(.*)$ api/$1 [L]
 
-# For React Router - all other requests go to index.html
-# BUT skip if it's an API request
-RewriteCond %{REQUEST_URI} !^/api/
+# All other requests go to React index.html
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ frontend/dist/index.html [L]
-
-# ========================================
-# Security & Performance
-# ========================================
-
-# Prevent access to .env files
-<FilesMatch "^\.env">
-    Order allow,deny
-    Deny from all
-</FilesMatch>
-
-# Enable GZIP compression
-<IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
-</IfModule>
+RewriteRule ^.*$ frontend/dist/index.html [L]
