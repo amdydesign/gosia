@@ -8,9 +8,12 @@ import { formatCurrency, getCollabTypeLabel } from '../utils/format';
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 export default function Statistics() {
+    const [dashboardStats, setDashboardStats] = useState(null);
+    const [monthlyStats, setMonthlyStats] = useState(null);
     const [socialStats, setSocialStats] = useState(null);
     const [editingPlatform, setEditingPlatform] = useState(null);
     const [editValue, setEditValue] = useState('');
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         loadStats();
