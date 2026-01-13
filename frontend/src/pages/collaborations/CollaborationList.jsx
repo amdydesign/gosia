@@ -20,9 +20,11 @@ export default function CollaborationList() {
         try {
             setLoading(true);
             const data = await apiRequest('/collaborations/index.php', 'GET', null, token);
-            setCollabs(data);
+            // Ensure we always have an array, even if API returns error/null
+            setCollabs(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(err.message || 'Błąd ładowania');
+            setCollabs([]); // Reset to empty array on error
         } finally {
             setLoading(false);
         }

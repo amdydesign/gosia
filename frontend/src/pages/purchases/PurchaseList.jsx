@@ -19,11 +19,12 @@ export default function PurchaseList() {
     const loadPurchases = async () => {
         try {
             setLoading(true);
-            setLoading(true);
             const data = await apiRequest('/purchases/index.php', 'GET', null, token);
-            setPurchases(data);
+            // Ensure we always have an array, even if API returns error/null
+            setPurchases(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(err.message || 'Błąd ładowania');
+            setPurchases([]); // Reset to empty array on error
         } finally {
             setLoading(false);
         }
