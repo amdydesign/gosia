@@ -1,13 +1,47 @@
+# Gosia 2.0 - Apache Configuration
+# This file should be placed in the public_html directory
+
 RewriteEngine On
+RewriteBase /
 
-# Force HTTPS
-RewriteCond %{HTTPS} off
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# ========================================
+# API Routing - forward /api/ to api folder
+# ========================================
+RewriteCond %{REQUEST_URI} ^/api/
+RewriteRule ^api/(.*)$ api/$1 [L,QSA]
 
-# API Routes - forward to PHP files
-RewriteRule ^api/(.*)$ api/$1 [L]
+# ========================================
+# React App Routing
+# ========================================
 
-# React Router - serve index.html for all other routes
+# If requested file exists in frontend/dist, serve it directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}/frontend/dist%{REQUEST_URI} -f
+RewriteRule ^(.*)$ frontend/dist/$1 [L]
+
+# If requested directory exists in frontend/dist, serve it
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/frontend/dist%{REQUEST_URI} -d
+RewriteRule ^(.*)$ frontend/dist/$1 [L]
+
+# For React Router - all other requests go to index.html
+# BUT skip if it's an API request
+RewriteCond %{REQUEST_URI} !^/api/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.html [L]
+RewriteRule ^(.*)$ frontend/dist/index.html [L]
+
+# ========================================
+# Security & Performance
+# ========================================
+
+# Prevent access to .env files
+<FilesMatch "^\.env">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Enable GZIP compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
