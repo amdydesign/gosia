@@ -73,6 +73,25 @@ CREATE TABLE IF NOT EXISTS social_stats (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
+-- TABELA: social_connections (OAuth tokens)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS social_connections (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    provider ENUM('facebook', 'instagram', 'tiktok', 'youtube') NOT NULL,
+    provider_user_id VARCHAR(255),
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    expires_at DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY idx_user_provider (user_id, provider)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
 -- TABELA: purchases (dawniej returns)
 -- =====================================================
 

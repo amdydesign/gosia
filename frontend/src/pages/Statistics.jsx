@@ -11,14 +11,11 @@ export default function Statistics() {
     const [dashboardStats, setDashboardStats] = useState(null);
     const [monthlyStats, setMonthlyStats] = useState(null);
     const [socialStats, setSocialStats] = useState(null);
+    const [connectedPlatforms, setConnectedPlatforms] = useState({});
+
     const [editingPlatform, setEditingPlatform] = useState(null);
     const [editValue, setEditValue] = useState('');
     const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        loadStats();
-    }, []);
-
     const [error, setError] = useState(null);
 
     useEffect(() => {
@@ -46,6 +43,11 @@ export default function Statistics() {
                 if (socialRes.success) setSocialStats(socialRes.data);
             } catch (e) { console.error('Social stats error', e); }
 
+            try {
+                const statusRes = await statsService.getSocialStatus();
+                if (statusRes.success) setConnectedPlatforms(statusRes.data);
+            } catch (e) { console.error('Social status error', e); }
+
         } catch (err) {
             console.error('Error loading stats:', err);
             setError('Wystąpił błąd podczas ładowania danych. Spróbuj odświeżyć stronę.');
@@ -57,6 +59,40 @@ export default function Statistics() {
     const handleEditSocial = (platform, currentCount) => {
         setEditingPlatform(platform);
         setEditValue(currentCount.toString());
+    };
+
+    const handleConnectSocial = async (platform) => {
+        if (platform === 'youtube') {
+            const channelId = prompt("Wprowadź ID swojego kanału YouTube (np. UC...):");
+            if (!channelId) return;
+
+            try {
+                const res = await statsService.connectYouTubePublic(channelId);
+                if (res.success) {
+                    alert(`✅ Sukces! ${res.data.message}\nSubskrypcje: ${res.data.count}`);
+                    loadStats();
+                } else {
+                    alert('Błąd: ' + res.message);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Błąd połączenia z serwerem.');
+            }
+            return;
+        }
+
+        // OAuth for others (future)
+        try {
+            const res = await statsService.getSocialAuthUrl(platform);
+            if (res.success && res.data.url) {
+                window.location.href = res.data.url;
+            } else {
+                alert('Funkcja nie jest jeszcze skonfigurowana dla tej platformy.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Wystąpił błąd podczas inicjowania połączenia.');
+        }
     };
 
     const handleSaveSocial = async () => {
@@ -84,7 +120,6 @@ export default function Statistics() {
         { id: 'facebook', label: 'Facebook', color: 'bg-blue-600', icon: '👍' },
         { id: 'youtube', label: 'YouTube', color: 'bg-red-600', icon: '▶️' }
     ];
-
 
     const chartData = {
         labels: monthlyStats?.monthly?.map(m => m.label) || [],
@@ -165,22 +200,42 @@ export default function Statistics() {
                     {socialPlatforms.map(platform => {
                         const data = socialStats?.[platform.id] || { count: 0 };
                         const isEditing = editingPlatform === platform.id;
+                        const isConnected = connectedPlatforms?.[platform.id];
+
+                        // Can automate only if supported (currently only known for YouTube in backend)
+                        // But let's show connect button for all if logic exists, or hide if not supported.
+                        // Implemented: YouTube.
+                        const canConnect = platform.id === 'youtube';
 
                         return (
-                            <div key={platform.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-full">
-                                <div className="flex items-start justify-between mb-3">
+                            <div key={platform.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-full relative overflow-hidden">
+                                {isConnected && (
+                                    <div className="absolute top-0 right-0 p-1">
+                                        <div className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                                            AUTO
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex items-start justify-between mb-3 z-10">
                                     <div className={`w-10 h-10 rounded-xl ${platform.color} flex items-center justify-center text-white text-xl shadow-md`}>
                                         {platform.icon}
                                     </div>
-                                    <button
-                                        onClick={() => handleEditSocial(platform.id, data.count)}
-                                        className="text-gray-400 hover:text-primary transition-colors text-xs font-semibold uppercase tracking-wider"
-                                    >
-                                        Edytuj
-                                    </button>
+
+                                    <div className="flex gap-1">
+                                        {canConnect && (
+                                            <button
+                                                onClick={() => handleConnectSocial(platform.id)}
+                                                className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors ${isConnected ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'text-white bg-black/80 hover:bg-black'}`}
+                                                title={isConnected ? "Zmień ID kanału" : "Połącz konto"}
+                                            >
+                                                {isConnected ? 'Zmień' : 'Połącz'}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div>
+                                <div className="z-10">
                                     <div className="text-gray-500 text-xs font-medium mb-1">{platform.label}</div>
                                     {isEditing ? (
                                         <div className="flex gap-2">

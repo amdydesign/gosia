@@ -31,6 +31,22 @@ export const statsService = {
      */
     async updateSocialStats(platform, count) {
         return await api.post('/stats/social/update.php', { platform, count });
+    },
+
+    async getSocialStatus() {
+        return await api.get('/stats/social/status.php');
+    },
+
+    async getSocialAuthUrl(platform) {
+        return await api.get(`/auth/${platform}/get_auth_url.php`);
+    },
+
+    async exchangeSocialCode(platform, code) {
+        return await api.post(`/auth/${platform}/exchange.php`, { code });
+    },
+
+    async connectYouTubePublic(channelId) {
+        return await api.post('/stats/social/fetch_youtube_public.php', { channel_id: channelId });
     }
 };
 

@@ -8,6 +8,7 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Statistics from './pages/Statistics';
+import SocialCallback from './pages/SocialCallback';
 
 // Collaborations Pages
 import CollaborationList from './pages/collaborations/CollaborationList';
@@ -151,6 +152,14 @@ function App() {
                 <AppLayout>
                   <Statistics />
                 </AppLayout>
+              </ProtectedRoute>
+            } />
+
+            {/* Social Auth Callback */}
+            <Route path="/auth/callback/:platform" element={
+              <ProtectedRoute>
+                {/* No layout, just clean generic callback page */}
+                <SocialCallback />
               </ProtectedRoute>
             } />
 
