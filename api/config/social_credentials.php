@@ -12,5 +12,15 @@ return [
         'client_key' => 'sbawlp0dkocuzeoueq',
         'client_secret' => 'hpA0SL7aA19rEhOrIvdSKmCcGl8xRQma',
         'redirect_uri' => 'https://panel.malgorzatamordarska.pl/auth/callback/tiktok'
+    ],
+    'facebook' => [
+        'app_id' => '770922815351899',
+        'app_secret' => '4d87d1098cfe2a1eed87417f255200f0',
+        'redirect_uri' => 'https://panel.malgorzatamordarska.pl/auth/callback/facebook'
+    ],
+    'instagram' => [
+        'app_id' => 'YOUR_FACEBOOK_APP_ID',
+        'app_secret' => 'YOUR_FACEBOOK_APP_SECRET',
+        'redirect_uri' => 'https://panel.malgorzatamordarska.pl/auth/callback/instagram'
     ]
 ];

@@ -47,6 +47,10 @@ export const statsService = {
 
     async connectYouTubePublic(channelId) {
         return await api.post('/stats/social/fetch_youtube_public.php', { channel_id: channelId });
+    },
+
+    async refreshSocialStats() {
+        return await api.post('/stats/social/refresh.php');
     }
 };
 
