@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Search, Calendar, CheckCircle, Clock, Download } from 'lucide-react';
+import { Plus, Search, Calendar, CheckCircle, Clock } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { formatCurrency, formatDate } from '../../utils/format';
-import ExportModal from './ExportModal';
 
 export default function CollaborationList() {
     const { token } = useAuth();
@@ -12,7 +11,6 @@ export default function CollaborationList() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [filter, setFilter] = useState('all'); // all, unpaid
-    const [isExportOpen, setIsExportOpen] = useState(false);
 
     useEffect(() => {
         loadCollabs();
@@ -45,13 +43,6 @@ export default function CollaborationList() {
                     <p className="text-gray-500">Zarządzaj swoimi zleceniami</p>
                 </div>
                 <div className="flex gap-3">
-                    <button
-                        onClick={() => setIsExportOpen(true)}
-                        className="bg-white text-gray-700 border border-gray-200 px-4 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors"
-                    >
-                        <Download size={20} />
-                        <span className="hidden sm:inline">Eksport</span>
-                    </button>
                     <Link
                         to="/collaborations/new"
                         className="bg-primary text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-purple-200 hover:shadow-xl hover:scale-105 transition-all"
@@ -132,11 +123,6 @@ export default function CollaborationList() {
                     ))}
                 </div>
             )}
-
-            <ExportModal
-                isOpen={isExportOpen}
-                onClose={() => setIsExportOpen(false)}
-            />
         </div>
     );
 }
