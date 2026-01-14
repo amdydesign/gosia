@@ -5,9 +5,6 @@ return [
         // Channel ID can be hardcoded here OR stored in database via frontend
         // We will store it in database for flexibility
     ],
-    'instagram' => [
-        // Instagram still requires OAuth or RapidAPI usually, but we'll deal with it later
-    ],
     'tiktok' => [
         'client_key' => 'sbawlp0dkocuzeoueq',
         'client_secret' => 'hpA0SL7aA19rEhOrIvdSKmCcGl8xRQma',
@@ -22,5 +19,10 @@ return [
         'app_id' => 'YOUR_FACEBOOK_APP_ID',
         'app_secret' => 'YOUR_FACEBOOK_APP_SECRET',
         'redirect_uri' => 'https://panel.malgorzatamordarska.pl/auth/callback/instagram'
+    ],
+    'rapidapi' => [
+        'key' => 'YOUR_RAPIDAPI_KEY', // To be filled by user
+        'host' => 'instagram-scraper-api2.p.rapidapi.com',
+        'username' => 'malgorzata.mordarska' // Target profile
     ]
 ];

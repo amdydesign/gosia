@@ -3,7 +3,7 @@ import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import statsService from '../services/stats';
 import { formatCurrency, getCollabTypeLabel } from '../utils/format';
-import { Wallet, Building2, Lock, Download } from 'lucide-react';
+import { Wallet, Building2, Lock, Download, RefreshCw } from 'lucide-react';
 import ExportModal from './collaborations/ExportModal';
 
 // Register Chart.js components
@@ -104,6 +104,29 @@ export default function Statistics() {
             alert('Wystąpił błąd podczas inicjowania połączenia.');
         }
     };
+
+    const handleScrapeInstagram = async () => {
+        try {
+            setLoading(true); // Or local loading state for just this button
+            const res = await statsService.scrapeInstagram();
+            if (res.success) {
+                // Update stats locally
+                setSocialStats(prev => ({
+                    ...prev,
+                    instagram: { ...prev.instagram, count: res.followers }
+                }));
+                alert(`✅ Zaktualizowano! Followersów: ${res.followers}`);
+            } else {
+                alert('Błąd: ' + (res.data?.error || res.error || 'Nieznany błąd'));
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Wystąpił błąd podczas pobierania danych z Instagrama. Sprawdź limit RapidAPI.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const handleSaveSocial = async () => {
         try {
@@ -280,6 +303,17 @@ export default function Statistics() {
                                         title="Połącz konto"
                                     >
                                         Połącz
+                                    </button>
+                                )}
+
+                                {/* Specific Refresh Button for Instagram (RapidAPI) */}
+                                {platform.id === 'instagram' && (
+                                    <button
+                                        onClick={handleScrapeInstagram}
+                                        className="ml-2 p-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors"
+                                        title="Odśwież (RapidAPI)"
+                                    >
+                                        <RefreshCw size={14} />
                                     </button>
                                 )}
                             </div>
