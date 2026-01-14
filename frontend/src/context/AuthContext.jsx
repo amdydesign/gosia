@@ -9,6 +9,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
+    const [token, setToken] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -16,10 +17,11 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         const checkAuth = async () => {
             const storedUser = authService.getCurrentUser();
-            const token = authService.getToken();
+            const storedToken = authService.getToken();
 
-            if (token && storedUser) {
+            if (storedToken && storedUser) {
                 setUser(storedUser);
+                setToken(storedToken);
                 setIsAuthenticated(true);
             }
             setLoading(false);
@@ -32,6 +34,7 @@ export function AuthProvider({ children }) {
     const login = async (username, password, rememberMe = false) => {
         const data = await authService.login(username, password, rememberMe);
         setUser(data.user);
+        setToken(data.token);
         setIsAuthenticated(true);
         return data;
     };
@@ -40,11 +43,13 @@ export function AuthProvider({ children }) {
     const logout = () => {
         authService.logout();
         setUser(null);
+        setToken(null);
         setIsAuthenticated(false);
     };
 
     const value = {
         user,
+        token,
         loading,
         isAuthenticated,
         login,
