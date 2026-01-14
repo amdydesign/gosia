@@ -39,7 +39,7 @@ export const authService = {
      * Check if user is authenticated
      */
     isAuthenticated() {
-        return !!localStorage.getItem('token');
+        return !!(localStorage.getItem('token') || sessionStorage.getItem('token'));
     },
 
     /**
