@@ -79,24 +79,32 @@ export default function Login() {
                         />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            id="rememberMe"
-                            checked={rememberMe}
-                            onChange={(e) => setRememberMe(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                        />
-                        <label htmlFor="rememberMe" className="text-sm text-gray-600">Nie wylogowuj mnie</label>
-                    </div>
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="rememberMe"
+                                    checked={rememberMe}
+                                    onChange={(e) => setRememberMe(e.target.checked)}
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                <label htmlFor="rememberMe" className="text-sm text-gray-600">Nie wylogowuj mnie</label>
+                            </div>
 
-                    <button
-                        type="submit"
-                        className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white rounded-xl font-semibold text-base transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                        disabled={loading}
-                    >
-                        {loading ? 'Logowanie...' : 'Zaloguj się'}
-                    </button>
+                            <a href="/forgot-password" className="text-sm font-medium text-purple-600 hover:text-purple-700 transition-colors">
+                                Nie pamiętam hasła
+                            </a>
+                        </div>
+
+                        <button
+                            type="submit"
+                            className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white rounded-xl font-semibold text-base transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                            disabled={loading}
+                        >
+                            {loading ? 'Logowanie...' : 'Zaloguj się'}
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

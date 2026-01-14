@@ -6,6 +6,7 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Pages
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Statistics from './pages/Statistics';
 import SocialCallback from './pages/SocialCallback';
@@ -38,6 +39,7 @@ function App() {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
 
             {/* Protected routes with layout */}
             <Route path="/" element={
