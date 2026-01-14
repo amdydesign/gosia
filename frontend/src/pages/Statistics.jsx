@@ -236,34 +236,23 @@ export default function Statistics() {
 
                         return (
                             <div key={platform.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-full relative overflow-hidden">
-                                {isConnected && (
-                                    <div className="absolute top-0 right-0 p-1">
-                                        <div className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                                            AUTO
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex items-start justify-between mb-3 z-10">
+                                <div className="flex items-center justify-between mb-3 z-10">
                                     <div className={`w-10 h-10 rounded-xl ${platform.color} flex items-center justify-center text-white shadow-md`}>
                                         {SocialIcons[platform.id]}
                                     </div>
 
-                                    <div className="flex gap-1">
-                                        {canConnect && (
-                                            <button
-                                                onClick={() => handleConnectSocial(platform.id)}
-                                                className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors ${isConnected ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'text-white bg-black/80 hover:bg-black'}`}
-                                                title={isConnected ? "Zmień ID kanału" : "Połącz konto"}
-                                            >
-                                                {isConnected ? 'Zmień' : 'Połącz'}
-                                            </button>
-                                        )}
-                                    </div>
+                                    {canConnect && !isConnected && (
+                                        <button
+                                            onClick={() => handleConnectSocial(platform.id)}
+                                            className="px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors text-white bg-black/80 hover:bg-black"
+                                            title="Połącz konto"
+                                        >
+                                            Połącz
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="z-10">
-                                    <div className="text-gray-500 text-xs font-medium mb-1">{platform.label}</div>
                                     {isEditing ? (
                                         <div className="flex gap-2">
                                             <input
