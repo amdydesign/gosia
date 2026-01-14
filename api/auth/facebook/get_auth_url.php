@@ -23,7 +23,7 @@ if (!$fb || empty($fb['app_id'])) {
 $params = [
     'client_id' => $fb['app_id'],
     'redirect_uri' => $fb['redirect_uri'],
-    'scope' => 'public_profile,pages_show_list,pages_read_engagement',
+    'scope' => 'public_profile',
     'response_type' => 'code',
     'state' => bin2hex(random_bytes(16))
 ];
