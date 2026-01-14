@@ -31,12 +31,33 @@ export default function CollaborationNew() {
         setFormData(prev => {
             const newData = { ...prev, [name]: val };
 
+            // Special Logic: Umowa o Pracę (Automation)
+            if (name === 'type' && value === 'umowa-praca') {
+                const dateObj = new Date(newData.date || Date.now());
+                const monthName = dateObj.toLocaleString('pl-PL', { month: 'long' });
+                const year = dateObj.getFullYear();
+
+                // Auto-fill Brand and Billing Type
+                newData.brand = `Wypłata ${monthName} ${year}`;
+                newData.collab_type = 'umowa_praca';
+                newData.fiscal_tracking = true;
+            }
+
+            // If date changes while in "umowa-praca" mode, update the brand label
+            if (name === 'date' && prev.type === 'umowa-praca') {
+                const dateObj = new Date(value);
+                const monthName = dateObj.toLocaleString('pl-PL', { month: 'long' });
+                const year = dateObj.getFullYear();
+                newData.brand = `Wypłata ${monthName} ${year}`;
+            }
+
             // Auto-set fiscal_tracking logic
             if (name === 'collab_type') {
                 if (value === 'gotowka') {
                     newData.fiscal_tracking = false;
-                    // Reset payment status for cash if needed, or default to received?
-                    newData.payment_status = 'paid'; // Usually cash is paid on spot? Or use 'pending' as default. User said 'Otrzymana, Oczekująca' buttons.
+                    newData.payment_status = 'paid';
+                } else if (value === 'umowa_praca') {
+                    newData.fiscal_tracking = true;
                 } else {
                     newData.fiscal_tracking = true;
                     newData.payment_status = 'pending';
@@ -125,7 +146,8 @@ export default function CollaborationNew() {
                                 name="brand"
                                 value={formData.brand}
                                 onChange={handleChange}
-                                className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                disabled={formData.type === 'umowa-praca'}
+                                className={`w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 ${formData.type === 'umowa-praca' ? 'bg-gray-100 text-gray-500' : ''}`}
                                 required
                             />
                         </div>
@@ -144,6 +166,7 @@ export default function CollaborationNew() {
                                 <option value="sesja">Sesja zdjęciowa</option>
                                 <option value="event">Event</option>
                                 <option value="konsultacja">Konsultacja</option>
+                                <option value="umowa-praca">Umowa o pracę (Wypłata)</option>
                                 <option value="inne">Inne</option>
                             </select>
                         </div>
@@ -176,7 +199,8 @@ export default function CollaborationNew() {
                                 name="collab_type"
                                 value={formData.collab_type}
                                 onChange={handleChange}
-                                className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                disabled={formData.type === 'umowa-praca'}
+                                className={`w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 ${formData.type === 'umowa-praca' ? 'bg-gray-100 text-gray-500' : ''}`}
                             >
                                 {Object.entries(BILLING_TYPES).map(([key, config]) => (
                                     <option key={key} value={key}>
