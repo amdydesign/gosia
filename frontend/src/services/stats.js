@@ -55,6 +55,10 @@ export const statsService = {
 
     async scrapeInstagram() {
         return await api.post('/social/scrape_instagram.php');
+    },
+
+    async scrapeFacebook() {
+        return await api.post('/social/scrape_facebook.php');
     }
 };
 

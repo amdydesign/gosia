@@ -26,37 +26,38 @@ export default function Statistics() {
 
     useEffect(() => {
         loadStats();
-        // Trigger auto-refresh on mount
-        handleAutoRefresh();
     }, []);
 
     // Auto-refresh function that runs quietly
-    const handleAutoRefresh = async () => {
-        try {
-            // Instagram
+    const handleAutoRefresh = async (currentStats) => {
+        const today = new Date().toISOString().slice(0, 10);
+
+        // 1. Check Instagram
+        if (currentStats?.instagram?.date !== today) {
+            console.log('Auto-refreshing Instagram...');
             statsService.scrapeInstagram().then(res => {
                 if (res.success) {
                     setSocialStats(prev => ({
-                        ...prev,
-                        instagram: { ...prev.instagram, count: res.followers }
+                        ...(prev || {}),
+                        instagram: { ...(prev?.instagram || { count: 0 }), count: res.followers, date: today }
                     }));
                     showToast(`Instagram zaktualizowany: ${res.followers}`, 'success');
                 }
             }).catch(e => console.error('Auto-Instagram Error:', e));
+        }
 
-            // Facebook
+        // 2. Check Facebook
+        if (currentStats?.facebook?.date !== today) {
+            console.log('Auto-refreshing Facebook...');
             statsService.scrapeFacebook().then(res => {
                 if (res.success) {
                     setSocialStats(prev => ({
-                        ...prev,
-                        facebook: { ...prev.facebook, count: res.followers }
+                        ...(prev || {}),
+                        facebook: { ...(prev?.facebook || { count: 0 }), count: res.followers, date: today }
                     }));
                     showToast(`Facebook zaktualizowany: ${res.followers}`, 'success');
                 }
             }).catch(e => console.error('Auto-Facebook Error:', e));
-
-        } catch (e) {
-            console.error('Auto-refresh failed', e);
         }
     };
 
@@ -69,6 +70,8 @@ export default function Statistics() {
         try {
             setLoading(true);
             setError(null);
+
+            let currentSocial = null;
 
             // Load independent parts
             try {
@@ -83,13 +86,21 @@ export default function Statistics() {
 
             try {
                 const socialRes = await statsService.getSocialCurrent();
-                if (socialRes.success) setSocialStats(socialRes.data);
+                if (socialRes.success) {
+                    setSocialStats(socialRes.data);
+                    currentSocial = socialRes.data;
+                }
             } catch (e) { console.error('Social stats error', e); }
 
             try {
                 const statusRes = await statsService.getSocialStatus();
                 if (statusRes.success) setConnectedPlatforms(statusRes.data);
             } catch (e) { console.error('Social status error', e); }
+
+            // Trigger background refresh if data is stale
+            if (currentSocial) {
+                handleAutoRefresh(currentSocial);
+            }
 
         } catch (err) {
             console.error('Error loading stats:', err);
