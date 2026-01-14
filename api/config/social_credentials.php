@@ -21,8 +21,8 @@ return [
         'redirect_uri' => 'https://panel.malgorzatamordarska.pl/auth/callback/instagram'
     ],
     'rapidapi' => [
-        'key' => 'YOUR_RAPIDAPI_KEY', // To be filled by user
-        'host' => 'instagram-scraper-api2.p.rapidapi.com',
-        'username' => 'malgorzata.mordarska' // Target profile
+        'key' => 'e895b43fd6mshad615eb9a25a5c0p13b340jsn697e00c6bcbe', // To be filled by user
+        'host' => 'instagram-scraper-stable-api.p.rapidapi.com',
+        'username' => 'gosia_mordarska' // Target profile
     ]
 ];
