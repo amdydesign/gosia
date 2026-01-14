@@ -118,12 +118,44 @@ I zaktualizuj w tabeli `users`.
 
 ## 📱 Funkcje
 
-- ✅ Dashboard z podsumowaniem
-- ✅ Zarządzanie współpracami (CRUD)
-- ✅ Śledzenie zwrotów z alertami
-- ✅ Statystyki i wykresy
+### Dashboard
+- ✅ Podsumowanie współprac i zarobków
+- ✅ Nadchodzące terminy zwrotów z alertami
+- ✅ Szybki podgląd statystyk
+
+### Współprace
+- ✅ Pełne zarządzanie współpracami (CRUD)
+- ✅ Typy: barter, płatny, ambasadorski, eventy
+- ✅ Śledzenie statusów i terminów
+- ✅ Filtrowanie i wyszukiwanie
+
+### Zwroty
+- ✅ Zarządzanie zwrotami produktów
+- ✅ Automatyczne alerty przed terminem
+- ✅ Historia i statusy
+
+### Zakupy
+- ✅ Rejestr zakupów odzieży
+- ✅ Śledzenie zwrotów do sklepów
+- ✅ Kategorie i wartości
+
+### Statystyki Social Media
+- ✅ Integracja YouTube (API Key + Channel ID)
+- ✅ Integracja TikTok (OAuth)
+- ✅ Integracja Facebook (OAuth)
+- ✅ Automatyczne odświeżanie przy wejściu
+- ✅ Ikony SVG platform
+
+### Wykresy i Raporty
+- ✅ Zarobki miesięczne (wykres)
+- ✅ Podział według typu współpracy
+- ✅ Łączne statystyki
+
+### Techniczne
 - ✅ Bezpieczne logowanie (JWT)
 - ✅ Mobile-first design
+- ✅ SPA z React Router
+- ✅ Responsywny layout
 
 ## 📝 License
 
