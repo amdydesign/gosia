@@ -31,7 +31,7 @@ try {
 
     // 1. Get current hash
     $stmt = $conn->prepare("SELECT password_hash FROM users WHERE id = :id");
-    $stmt->execute(['id' => $user['id']]);
+    $stmt->execute(['id' => $user['sub']]);
     $currentUser = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$currentUser) {
@@ -50,7 +50,7 @@ try {
     $update = $conn->prepare("UPDATE users SET password_hash = :hash WHERE id = :id");
     $update->execute([
         'hash' => $newHash,
-        'id' => $user['id']
+        'id' => $user['sub']
     ]);
 
     Response::success(null, 'Hasło zostało pomyślnie zmienione.');
