@@ -15,7 +15,10 @@ export default function ExportModal({ isOpen, onClose }) {
         setError('');
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/collaborations/export.php?mode=${mode}`, {
+            // Append token to URL as fallback for servers that strip Auth headers on file downloads
+            const downloadUrl = `${import.meta.env.VITE_API_URL || '/api'}/collaborations/export.php?mode=${mode}&token=${token}`;
+
+            const response = await fetch(downloadUrl, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -28,7 +31,7 @@ export default function ExportModal({ isOpen, onClose }) {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `wspolprace_2026_${mode}.csv`;
+            a.download = `wspolprace_${new Date().getFullYear()}_${mode}.csv`; // Dynamic filename
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);

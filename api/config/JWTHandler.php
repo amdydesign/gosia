@@ -92,6 +92,11 @@ class JWTHandler
             return $matches[1];
         }
 
+        // Fallback: Check for token in URL query string (for file downloads or when headers are stripped)
+        if (isset($_GET['token']) && !empty($_GET['token'])) {
+            return $_GET['token'];
+        }
+
         return null;
     }
 }
