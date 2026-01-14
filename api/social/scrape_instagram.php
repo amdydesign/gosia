@@ -41,11 +41,17 @@ curl_setopt_array($curl, [
 
 $response = curl_exec($curl);
 $err = curl_error($curl);
+$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 
 curl_close($curl);
 
 if ($err) {
     echo json_encode(['success' => false, 'error' => "cURL Error: " . $err]);
+    exit;
+}
+
+if ($httpCode === 429) {
+    echo json_encode(['success' => false, 'error' => "Limit zapytań RapidAPI (Instagram) został wyczerpany. Spróbuj jutro lub zmień plan."]);
     exit;
 }
 

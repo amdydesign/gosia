@@ -56,13 +56,22 @@ $followers = 0;
 if (isset($data['followers'])) {
     $followers = $data['followers'];
 } elseif (isset($data['likes'])) {
-    $followers = $data['likes']; // Fallback to likes if followers missing
+    $followers = $data['likes'];
+} elseif (isset($data['results'])) {
+    // RapidAPI facebook-scraper3 often wraps data in 'results'
+    if (isset($data['results']['followers'])) {
+        $followers = $data['results']['followers'];
+    } elseif (isset($data['results']['likes'])) {
+        $followers = $data['results']['likes'];
+    } elseif (isset($data['results'][0]['followers'])) {
+        $followers = $data['results'][0]['followers'];
+    }
 }
 
 // Fallback search if structure changes
 if ($followers == 0) {
     array_walk_recursive($data, function ($item, $key) use (&$followers) {
-        if ($key === 'followers' && is_numeric($item) && $item > 0) {
+        if (($key === 'followers' || $key === 'likes' || $key === 'follower_count') && is_numeric($item) && $item > 0) {
             $followers = $item;
         }
     });
