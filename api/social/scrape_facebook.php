@@ -12,21 +12,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/../config/Database.php';
 $credentials = require __DIR__ . '/../config/social_credentials.php';
 
-// Check if RapidAPI key is configured
-if (empty($credentials['rapidapi']['key']) || $credentials['rapidapi']['key'] === 'YOUR_RAPIDAPI_KEY') {
-    echo json_encode(['success' => false, 'error' => 'Brak klucza RapidAPI na serwerze (zaktualizuj social_credentials.php).']);
+// Check if Facebook RapidAPI key is configured
+if (empty($credentials['facebook_rapidapi']['key'])) {
+    echo json_encode(['success' => false, 'error' => 'Brak klucza Facebook RapidAPI na serwerze (zaktualizuj social_credentials.php).']);
     exit;
 }
 
-$apiKey = $credentials['rapidapi']['key'];
-$apiHost = $credentials['rapidapi']['host'];
-$username = $credentials['rapidapi']['username'];
+$apiKey = $credentials['facebook_rapidapi']['key'];
+$apiHost = $credentials['facebook_rapidapi']['host'];
+$targetUrl = $credentials['facebook_rapidapi']['url'];
 
 // 1. Initialize CURL
 $curl = curl_init();
 
 curl_setopt_array($curl, [
-    CURLOPT_URL => "https://{$apiHost}/ig_get_fb_profile_hover.php?username_or_url=" . urlencode($username),
+    CURLOPT_URL => "https://{$apiHost}/page/details?url=" . urlencode($targetUrl),
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_ENCODING => "",
     CURLOPT_MAXREDIRS => 10,
@@ -51,31 +51,18 @@ if ($err) {
 
 // 2. Parse Response
 $data = json_decode($response, true);
-
-// Debug logging (optional, can be removed)
-// file_put_contents(__DIR__ . '/debug_response.json', $response);
-
 $followers = 0;
 
-// Parsing logic for different API structures (including fb_profile_hover)
-if (isset($data['user_data']['follower_count'])) {
-    $followers = $data['user_data']['follower_count'];
-} elseif (isset($data['edge_followed_by']['count'])) {
-    $followers = $data['edge_followed_by']['count'];
-} elseif (isset($data['data']['user']['edge_followed_by']['count'])) {
-    $followers = $data['data']['user']['edge_followed_by']['count'];
-} elseif (isset($data['follower_count'])) {
-    $followers = $data['follower_count'];
-} elseif (isset($data['graphql']['user']['edge_followed_by']['count'])) {
-    $followers = $data['graphql']['user']['edge_followed_by']['count'];
+if (isset($data['followers'])) {
+    $followers = $data['followers'];
+} elseif (isset($data['likes'])) {
+    $followers = $data['likes']; // Fallback to likes if followers missing
 }
 
-// Fallback search in array if structure is complex
+// Fallback search if structure changes
 if ($followers == 0) {
     array_walk_recursive($data, function ($item, $key) use (&$followers) {
-        if (($key === 'edge_followed_by' || $key === 'follower_count') && is_array($item) && isset($item['count'])) {
-            $followers = $item['count'];
-        } elseif ($key === 'follower_count' && is_numeric($item)) {
+        if ($key === 'followers' && is_numeric($item) && $item > 0) {
             $followers = $item;
         }
     });
@@ -86,8 +73,8 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
-    $userId = 1; // Default Admin User for now
-    $platform = 'instagram';
+    $userId = 1;
+    $platform = 'facebook';
     $date = date('Y-m-d');
 
     $sql = "INSERT INTO social_stats (user_id, platform, followers_count, date) 
@@ -104,9 +91,9 @@ try {
     if ($stmt->execute()) {
         echo json_encode([
             'success' => true,
-            'message' => 'Zaktualizowano Instagram',
+            'message' => 'Zaktualizowano Facebook',
             'followers' => $followers,
-            'platform' => 'instagram'
+            'platform' => 'facebook'
         ]);
     } else {
         throw new Exception("Błąd zapisu do bazy.");

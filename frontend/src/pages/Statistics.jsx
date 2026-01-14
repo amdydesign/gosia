@@ -15,6 +15,9 @@ export default function Statistics() {
     const [socialStats, setSocialStats] = useState(null);
     const [connectedPlatforms, setConnectedPlatforms] = useState({});
 
+    // Toast State for "Green Bubble"
+    const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'error' }
+
     const [editingPlatform, setEditingPlatform] = useState(null);
     const [editValue, setEditValue] = useState('');
     const [loading, setLoading] = useState(true);
@@ -23,19 +26,49 @@ export default function Statistics() {
 
     useEffect(() => {
         loadStats();
+        // Trigger auto-refresh on mount
+        handleAutoRefresh();
     }, []);
+
+    // Auto-refresh function that runs quietly
+    const handleAutoRefresh = async () => {
+        try {
+            // Instagram
+            statsService.scrapeInstagram().then(res => {
+                if (res.success) {
+                    setSocialStats(prev => ({
+                        ...prev,
+                        instagram: { ...prev.instagram, count: res.followers }
+                    }));
+                    showToast(`Instagram zaktualizowany: ${res.followers}`, 'success');
+                }
+            }).catch(e => console.error('Auto-Instagram Error:', e));
+
+            // Facebook
+            statsService.scrapeFacebook().then(res => {
+                if (res.success) {
+                    setSocialStats(prev => ({
+                        ...prev,
+                        facebook: { ...prev.facebook, count: res.followers }
+                    }));
+                    showToast(`Facebook zaktualizowany: ${res.followers}`, 'success');
+                }
+            }).catch(e => console.error('Auto-Facebook Error:', e));
+
+        } catch (e) {
+            console.error('Auto-refresh failed', e);
+        }
+    };
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000); // Disappear after 3s
+    };
 
     const loadStats = async () => {
         try {
             setLoading(true);
             setError(null);
-
-            // Auto-refresh social stats from APIs on page load
-            try {
-                await statsService.refreshSocialStats();
-            } catch (e) {
-                console.error('Social refresh error', e);
-            }
 
             // Load independent parts
             try {
@@ -79,7 +112,7 @@ export default function Statistics() {
             try {
                 const res = await statsService.connectYouTubePublic(channelId);
                 if (res.success) {
-                    alert(`✅ Sukces! ${res.data.message}\nSubskrypcje: ${res.data.count}`);
+                    showToast(`✅ Sukces! ${res.data.message}`, 'success');
                     loadStats();
                 } else {
                     alert('Błąd: ' + res.message);
@@ -107,23 +140,37 @@ export default function Statistics() {
 
     const handleScrapeInstagram = async () => {
         try {
-            setLoading(true); // Or local loading state for just this button
             const res = await statsService.scrapeInstagram();
             if (res.success) {
-                // Update stats locally
                 setSocialStats(prev => ({
                     ...prev,
                     instagram: { ...prev.instagram, count: res.followers }
                 }));
-                alert(`✅ Zaktualizowano! Followersów: ${res.followers}`);
+                showToast(`✅ Zaktualizowano! Followersów: ${res.followers}`, 'success');
             } else {
                 alert('Błąd: ' + (res.data?.error || res.error || 'Nieznany błąd'));
             }
         } catch (e) {
             console.error(e);
-            alert('Wystąpił błąd podczas pobierania danych z Instagrama. Sprawdź limit RapidAPI.');
-        } finally {
-            setLoading(false);
+            alert('Wystąpił błąd podczas pobierania danych z Instagrama.');
+        }
+    };
+
+    const handleScrapeFacebook = async () => {
+        try {
+            const res = await statsService.scrapeFacebook();
+            if (res.success) {
+                setSocialStats(prev => ({
+                    ...prev,
+                    facebook: { ...prev.facebook, count: res.followers }
+                }));
+                showToast(`✅ Zaktualizowano! Followersów: ${res.followers}`, 'success');
+            } else {
+                alert('Błąd: ' + (res.data?.error || res.error || 'Nieznany błąd'));
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Wystąpił błąd podczas pobierania danych z Facebooka.');
         }
     };
 
@@ -243,7 +290,19 @@ export default function Statistics() {
     );
 
     return (
-        <div className="space-y-8 pb-20">
+        <div className="space-y-8 pb-20 relative">
+            {/* TOAST / BUBBLE NOTIFICATION */}
+            {toast && (
+                <div
+                    className={`fixed top-24 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-xl z-50 transition-all duration-300 animate-fade-in-down
+                        ${toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}
+                        flex items-center gap-2 font-medium`}
+                >
+                    <span>{toast.type === 'success' ? '✅' : '⚠️'}</span>
+                    {toast.message}
+                </div>
+            )}
+
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Statystyki</h1>
@@ -296,24 +355,27 @@ export default function Statistics() {
                                     )}
                                 </div>
 
-                                {canConnect && !isConnected && (
+                                {/* Refresh Button for Instagram & Facebook (RapidAPI) */}
+                                {(platform.id === 'instagram' || platform.id === 'facebook') && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            platform.id === 'instagram' ? handleScrapeInstagram() : handleScrapeFacebook();
+                                        }}
+                                        className="ml-2 p-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors"
+                                        title="Odśwież (RapidAPI)"
+                                    >
+                                        <RefreshCw size={14} />
+                                    </button>
+                                )}
+
+                                {canConnect && !isConnected && (platform.id !== 'instagram' && platform.id !== 'facebook') && (
                                     <button
                                         onClick={() => handleConnectSocial(platform.id)}
                                         className="px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors text-white bg-black/80 hover:bg-black"
                                         title="Połącz konto"
                                     >
                                         Połącz
-                                    </button>
-                                )}
-
-                                {/* Specific Refresh Button for Instagram (RapidAPI) */}
-                                {platform.id === 'instagram' && (
-                                    <button
-                                        onClick={handleScrapeInstagram}
-                                        className="ml-2 p-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors"
-                                        title="Odśwież (RapidAPI)"
-                                    >
-                                        <RefreshCw size={14} />
                                     </button>
                                 )}
                             </div>
