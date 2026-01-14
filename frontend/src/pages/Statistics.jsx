@@ -235,42 +235,38 @@ export default function Statistics() {
                         const canConnect = platform.id === 'youtube' || platform.id === 'tiktok' || platform.id === 'facebook';
 
                         return (
-                            <div key={platform.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-full relative overflow-hidden">
-                                <div className="flex items-center justify-between mb-3 z-10">
-                                    <div className={`w-10 h-10 rounded-xl ${platform.color} flex items-center justify-center text-white shadow-md`}>
-                                        {SocialIcons[platform.id]}
-                                    </div>
-
-                                    {canConnect && !isConnected && (
-                                        <button
-                                            onClick={() => handleConnectSocial(platform.id)}
-                                            className="px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors text-white bg-black/80 hover:bg-black"
-                                            title="Połącz konto"
-                                        >
-                                            Połącz
-                                        </button>
-                                    )}
+                            <div key={platform.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3 relative overflow-hidden">
+                                <div className={`w-10 h-10 rounded-xl ${platform.color} flex items-center justify-center text-white shadow-md flex-shrink-0`}>
+                                    {SocialIcons[platform.id]}
                                 </div>
 
-                                <div className="z-10">
+                                <div className="flex-1">
                                     {isEditing ? (
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="number"
-                                                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-bold focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                                                value={editValue}
-                                                onChange={(e) => setEditValue(e.target.value)}
-                                                autoFocus
-                                                onBlur={() => setEditingPlatform(null)}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleSaveSocial()}
-                                            />
-                                        </div>
+                                        <input
+                                            type="number"
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-bold focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                            value={editValue}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            autoFocus
+                                            onBlur={() => setEditingPlatform(null)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSaveSocial()}
+                                        />
                                     ) : (
-                                        <div className="text-2xl font-bold text-gray-900 group-hover:text-primary transition-colors">
+                                        <div className="text-2xl font-bold text-gray-900">
                                             {data.count.toLocaleString()}
                                         </div>
                                     )}
                                 </div>
+
+                                {canConnect && !isConnected && (
+                                    <button
+                                        onClick={() => handleConnectSocial(platform.id)}
+                                        className="px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors text-white bg-black/80 hover:bg-black"
+                                        title="Połącz konto"
+                                    >
+                                        Połącz
+                                    </button>
+                                )}
                             </div>
                         );
                     })}
