@@ -1,5 +1,6 @@
+import { useState } from 'react';
+import { X, Lock, Save } from 'lucide-react';
 import api from '../../services/api';
-// ...
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
     // ...
