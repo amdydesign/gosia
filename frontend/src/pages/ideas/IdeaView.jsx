@@ -141,7 +141,7 @@ export default function IdeaView() {
             </div>
 
             {/* Actions Bar (Sticky Bottom on Mobile) */}
-            <div className="fixed bottom-16 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-gray-200 md:static md:bg-transparent md:border-0 md:backdrop-blur-none flex flex-row gap-3 z-10 safe-area-bottom">
+            <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t border-gray-200 md:static md:bg-transparent md:border-0 flex flex-row gap-3 z-10 safe-area-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                 <button
                     onClick={() => setPrompterMode(true)}
                     className="flex-1 bg-black text-white px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-gray-900 hover:scale-[1.02] transition-all text-lg"
@@ -162,7 +162,7 @@ export default function IdeaView() {
                 )}
             </div>
             {/* Spacer for sticky bottom on mobile */}
-            <div className="h-24 md:h-0" />
+            <div className="h-40 md:h-0" />
         </div>
     );
 }
