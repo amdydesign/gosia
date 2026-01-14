@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ArrowLeft, Edit2, User, Calendar, DollarSign, CheckCircle, Clock, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit2, User, Calendar, DollarSign, CheckCircle, Clock, Trash2, Wallet, Lock, Building2 } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
-import { formatCurrency, formatDate, getCollabTypeLabel } from '../../utils/format';
+import { formatCurrency, formatDate, getCollabTypeLabel, BILLING_TYPES, calculateNetAmount } from '../../utils/format';
 
 export default function CollaborationView() {
     const { id } = useParams();
@@ -33,8 +33,11 @@ export default function CollaborationView() {
     if (error) return <div className="error">{error}</div>;
     if (!collab) return null;
 
+    const billingInfo = BILLING_TYPES[collab.collab_type] || {};
+    const netToHand = calculateNetAmount(collab.amount_gross || collab.amount_net, collab.collab_type);
+
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-2xl mx-auto space-y-6 pb-20">
             {/* Header */}
             <header className="flex items-center justify-between">
                 <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -71,9 +74,16 @@ export default function CollaborationView() {
 
                 <div className="relative z-10">
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">{collab.brand}</h1>
-                    <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium mb-6">
-                        {getCollabTypeLabel(collab.type)}
-                    </span>
+                    <div className="flex flex-wrap justify-center gap-2 mb-6">
+                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium">
+                            {getCollabTypeLabel(collab.type)}
+                        </span>
+                        {billingInfo.label && (
+                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                                {billingInfo.label}
+                            </span>
+                        )}
+                    </div>
 
                     <div className="flex justify-center gap-8 text-gray-600 mb-8">
                         <div className="flex flex-col items-center gap-1">
@@ -90,7 +100,7 @@ export default function CollaborationView() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
+                    <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto mb-4">
                         <div className="bg-gray-50 p-4 rounded-2xl">
                             <div className="text-gray-500 text-xs uppercase font-semibold mb-1">Netto</div>
                             <div className="text-xl font-bold text-gray-900">{formatCurrency(collab.amount_net)}</div>
@@ -99,6 +109,34 @@ export default function CollaborationView() {
                             <div className="text-gray-500 text-xs uppercase font-semibold mb-1">Brutto</div>
                             <div className="text-xl font-bold text-gray-900">{formatCurrency(collab.amount_gross)}</div>
                         </div>
+                    </div>
+
+                    {/* Na rękę highlighting */}
+                    {billingInfo.label && (
+                        <div className="max-w-sm mx-auto bg-green-50 rounded-xl p-3 border border-green-100 flex justify-between items-center">
+                            <div className="flex items-center gap-2 text-green-700 font-medium text-sm">
+                                <Wallet size={16} />
+                                {collab.collab_type === 'gotowka' ? 'Otrzymujesz:' : 'Na rękę (szacunkowo):'}
+                            </div>
+                            <div className="text-lg font-bold text-green-800">
+                                {formatCurrency(netToHand)}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Fiscal status */}
+                    <div className="mt-4 flex justify-center">
+                        {collab.fiscal_tracking ? (
+                            <div className="flex items-center gap-2 text-xs text-purple-600 px-3 py-1 bg-purple-50 rounded-full border border-purple-100">
+                                <Building2 size={12} />
+                                Wliczane do PIT (Oficjalne)
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 text-xs text-gray-500 px-3 py-1 bg-gray-50 rounded-full border border-gray-200">
+                                <Lock size={12} />
+                                Transakcja prywatna (Poza PIT)
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -119,6 +157,11 @@ export default function CollaborationView() {
                                     </div>
                                     <div>
                                         <div className="font-medium text-gray-900">{member.name}</div>
+                                        {member.is_paid && (
+                                            <div className="text-[10px] text-green-600 flex items-center gap-1 font-bold uppercase tracking-wide">
+                                                <CheckCircle size={10} /> Opłacono
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="font-mono text-gray-600">

@@ -51,6 +51,7 @@ class JWTHandler
     public function validateToken($token)
     {
         try {
+            JWT::$leeway = 60; // 60 seconds leeway
             $decoded = JWT::decode($token, new Key($this->secret, 'HS256'));
             return [
                 'success' => true,

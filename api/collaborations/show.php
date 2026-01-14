@@ -25,7 +25,7 @@ try {
 
     // Get Collab
     $stmt = $conn->prepare("
-        SELECT id, brand, type, amount_net, amount_gross, date, payment_status, notes, created_at
+        SELECT id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes, created_at
         FROM collaborations 
         WHERE id = :id AND user_id = :user_id
     ");
@@ -37,7 +37,7 @@ try {
 
     // Get Team
     $stmtTeam = $conn->prepare("
-        SELECT id, name, amount 
+        SELECT id, name, amount, is_paid
         FROM collaboration_team 
         WHERE collaboration_id = :collab_id
     ");

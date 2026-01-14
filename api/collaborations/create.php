@@ -63,8 +63,8 @@ try {
     // Insert team members
     if (!empty($team) && is_array($team)) {
         $stmtTeam = $conn->prepare("
-            INSERT INTO collaboration_team (collaboration_id, name, amount)
-            VALUES (:collab_id, :name, :amount)
+            INSERT INTO collaboration_team (collaboration_id, name, amount, is_paid)
+            VALUES (:collab_id, :name, :amount, :is_paid)
         ");
 
         foreach ($team as $member) {
@@ -72,7 +72,8 @@ try {
                 $stmtTeam->execute([
                     'collab_id' => $collabId,
                     'name' => $member['name'],
-                    'amount' => floatval($member['amount'] ?? 0)
+                    'amount' => floatval($member['amount'] ?? 0),
+                    'is_paid' => !empty($member['is_paid']) ? 1 : 0
                 ]);
             }
         }
