@@ -25,87 +25,56 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
-    // 1. Official Financials (Yearly) - Fiscal Tracking = TRUE
-    // We fetch all paid official collaborations for current year to calculate exact tax stats
-    $stmt = $conn->prepare("
-        SELECT amount_net, collab_type
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND payment_status = 'paid'
-        AND fiscal_tracking = TRUE
-        AND YEAR(date) = YEAR(CURDATE())
-    ");
-    $stmt->execute(['user_id' => $userId]);
-    $officialCollabs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $officialRevenue = 0;
-    $officialCosts = 0; // KUP + Use.me commissions
-    $officialIncome = 0; // Dochód (Revenue - Costs)
-
-    foreach ($officialCollabs as $collab) {
-        $gross = floatval($collab['amount_net']); // Assuming amount_net is the base for calculation
-        $breakdown = TaxCalculator::getBreakdown($gross, $collab['collab_type']);
-
-        $officialRevenue += $gross;
-        $officialCosts += ($breakdown['kup'] + $breakdown['commission']);
-    }
-
-    $officialIncome = $officialRevenue - $officialCosts;
-    $taxThreshold = 120000;
-    $taxThresholdProgress = min(100, ($officialIncome / $taxThreshold) * 100);
-
-    // 2. Private Cash (Yearly) - Fiscal Tracking = FALSE
-    $stmt = $conn->prepare("
-        SELECT COALESCE(SUM(amount_net), 0) as total
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND payment_status = 'paid'
-        AND fiscal_tracking = FALSE
-        AND YEAR(date) = YEAR(CURDATE())
-    ");
-    $stmt->execute(['user_id' => $userId]);
-    $privateRevenue = floatval($stmt->fetch()['total']);
-
-    // 3. Monthly Earnings (Official + Private split)
+    // 1. Yearly Financials (Total Gross & Net)
+    // Sum of ALL paid collaborations for current year (Official + Private)
     $stmt = $conn->prepare("
         SELECT 
-            COALESCE(SUM(CASE WHEN fiscal_tracking = TRUE THEN amount_net ELSE 0 END), 0) as official,
-            COALESCE(SUM(CASE WHEN fiscal_tracking = FALSE THEN amount_net ELSE 0 END), 0) as private
+            COALESCE(SUM(amount_gross), 0) as yearly_gross,
+            COALESCE(SUM(amount_net), 0) as yearly_net
         FROM collaborations 
         WHERE user_id = :user_id 
         AND payment_status = 'paid'
-        AND YEAR(date) = YEAR(CURDATE()) 
-        AND MONTH(date) = MONTH(CURDATE())
+        AND YEAR(date) = YEAR(CURDATE())
     ");
     $stmt->execute(['user_id' => $userId]);
-    $monthlyStats = $stmt->fetch(PDO::FETCH_ASSOC);
+    $yearlyStats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 4. Pending Payments (Total)
+    // 2. Pending Payments (Gross & Net)
+    // Sum of pending/overdue collaborations (All time)
     $stmt = $conn->prepare("
-        SELECT COALESCE(SUM(amount_net), 0) as total
+        SELECT 
+            COALESCE(SUM(amount_gross), 0) as pending_gross,
+            COALESCE(SUM(amount_net), 0) as pending_net
         FROM collaborations 
         WHERE user_id = :user_id 
         AND payment_status IN ('pending', 'overdue')
     ");
     $stmt->execute(['user_id' => $userId]);
-    $pendingPayments = floatval($stmt->fetch()['total']);
+    $pendingStats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 5. Active items counts
+    // 3. Yearly Counts
+    // Collaborations Count (Yearly)
     $stmt = $conn->prepare("
-        SELECT COUNT(*) as count FROM collaborations 
-        WHERE user_id = :user_id AND payment_status != 'paid'
+        SELECT COUNT(*) as count 
+        FROM collaborations 
+        WHERE user_id = :user_id 
+        AND YEAR(date) = YEAR(CURDATE())
     ");
     $stmt->execute(['user_id' => $userId]);
-    $activeCollabs = intval($stmt->fetch()['count']);
+    $collabsYearCount = intval($stmt->fetch()['count']);
 
+    // Purchases Count (Yearly, Kept/Partial)
     $stmt = $conn->prepare("
-        SELECT COUNT(*) as count FROM purchases 
-        WHERE user_id = :user_id AND status IN ('kept', 'partial')
+        SELECT COUNT(*) as count 
+        FROM purchases 
+        WHERE user_id = :user_id 
+        AND status IN ('kept', 'partial')
+        AND YEAR(purchase_date) = YEAR(CURDATE())
     ");
     $stmt->execute(['user_id' => $userId]);
-    $activePurchases = intval($stmt->fetch()['count']);
+    $purchasesYearCount = intval($stmt->fetch()['count']);
 
-    // 6. Urgent Purchases (<= 3 days)
+    // 4. Urgent Purchases (<= 3 days)
     $stmt = $conn->prepare("
         SELECT id, store, items, purchase_date, return_days,
                DATE_ADD(purchase_date, INTERVAL return_days DAY) as return_deadline,
@@ -120,7 +89,7 @@ try {
     $stmt->execute(['user_id' => $userId]);
     $urgentPurchases = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 7. Badge count (<= 7 days)
+    // 5. Urgent Returns Badge Count (<= 7 days)
     $stmt = $conn->prepare("
         SELECT COUNT(*) as count FROM purchases 
         WHERE user_id = :user_id 
@@ -130,7 +99,7 @@ try {
     $stmt->execute(['user_id' => $userId]);
     $urgentReturnsCount = intval($stmt->fetch()['count']);
 
-    // 8. Upcoming items (Collaborations & Purchases)
+    // 6. Upcoming items (limit 5)
     $stmt = $conn->prepare("
         SELECT id, brand, type, amount_net as amount, date, payment_status, fiscal_tracking
         FROM collaborations 
@@ -158,42 +127,50 @@ try {
     $stmt->execute(['user_id' => $userId]);
     $upcomingPurchases = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 9. Total Earnings (All time)
+    // 7. Old Financials (Legacy support / Split View calculation if needed later)
+    // Keeping logic simple for now as requested:
+    // "official" stats are now part of Statistics page, but we can return basic year/month data if frontend needs it.
+    // For now, we focus on the NEW structure.
+
     $stmt = $conn->prepare("
         SELECT 
-            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN amount_net ELSE 0 END), 0) as total_earnings,
-            COUNT(*) as total_collaborations
+            COALESCE(SUM(CASE WHEN fiscal_tracking = TRUE THEN amount_net ELSE 0 END), 0) as official_income,
+            COALESCE(SUM(CASE WHEN fiscal_tracking = FALSE THEN amount_net ELSE 0 END), 0) as private_revenue
         FROM collaborations 
-        WHERE user_id = :user_id
+        WHERE user_id = :user_id 
+        AND payment_status = 'paid'
+        AND YEAR(date) = YEAR(CURDATE())
     ");
     $stmt->execute(['user_id' => $userId]);
-    $totals = $stmt->fetch(PDO::FETCH_ASSOC);
+    $splitStats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Calculate tax threshold purely for metadata if needed
+    $taxThreshold = 120000;
+    // Costs are complex to calculate per transaction here without loop, so we approximate or omit if not used on dashboard anymore.
+    // Since Dashboard removed the "Official (PIT)" card, we don't need exact tax/costs here.
 
     Response::success([
         'financials' => [
             'year' => date('Y'),
+            'yearly_gross' => floatval($yearlyStats['yearly_gross']), // NEW
+            'yearly_net' => floatval($yearlyStats['yearly_net']),     // NEW
+            'pending' => [
+                'gross' => floatval($pendingStats['pending_gross']),
+                'net' => floatval($pendingStats['pending_net'])
+            ],
+            // Legacy/Extra fields for completeness
             'official' => [
-                'revenue' => $officialRevenue,
-                'costs' => $officialCosts,
-                'income' => $officialIncome,
-                'tax_threshold_progress' => $taxThresholdProgress,
-                'tax_threshold' => $taxThreshold
+                'income' => floatval($splitStats['official_income']), // Crude net approximation
+                'tax_threshold_progress' => 0, // Not calculated to save perf
+                'tax_threshold' => 120000
             ],
             'private' => [
-                'revenue' => $privateRevenue,
-                'count' => 0 // Calculated on frontend or separate query if needed
-            ],
-            'monthly' => [
-                'official' => floatval($monthlyStats['official']),
-                'private' => floatval($monthlyStats['private']),
-                'total' => floatval($monthlyStats['official']) + floatval($monthlyStats['private'])
-            ],
-            'pending' => $pendingPayments,
-            'total_all_time' => floatval($totals['total_earnings'])
+                'revenue' => floatval($splitStats['private_revenue'])
+            ]
         ],
-        'active_counts' => [
-            'collaborations' => $activeCollabs,
-            'purchases' => $activePurchases,
+        'counts' => [
+            'collabs_year' => $collabsYearCount,      // NEW
+            'purchases_year' => $purchasesYearCount,  // NEW
             'urgent_returns_badge' => $urgentReturnsCount
         ],
         'urgent_purchases' => $urgentPurchases,
