@@ -27,7 +27,15 @@ try {
     $conn = $db->getConnection();
 
     // Prepare query based on mode
-    $query = "SELECT * FROM collaborations WHERE user_id = :user_id";
+    // We select specific columns to be safe, including the new ones
+    $query = "
+        SELECT 
+            date, brand, collab_type, type, 
+            amount_gross, amount_net, 
+            payment_status, fiscal_tracking 
+        FROM collaborations 
+        WHERE user_id = :user_id
+    ";
     $params = ['user_id' => $userId];
 
     if ($mode === 'official') {
@@ -62,9 +70,16 @@ try {
         'gotowka' => 'Gotówka prywatna'
     ];
 
-    $totalSum = 0;
+    // Helper to get GROSS amount safely (fallback to net if gross is missing/zero on old records)
+    $getGross = function ($row) {
+        $g = floatval($row['amount_gross']);
+        if ($g <= 0) {
+            return floatval($row['amount_net']);
+        }
+        return $g;
+    };
 
-    // Logic for "Full" mode (Separate sections)
+    // New Logic for "Full" mode (Separate sections)
     if ($mode === 'full') {
         $officialRows = [];
         $privateRows = [];
@@ -82,14 +97,19 @@ try {
 
         $officialTotal = 0;
         foreach ($officialRows as $row) {
-            $gross = floatval($row['amount_net']);
-            $net = TaxCalculator::calculateNet($gross, $row['collab_type'] ?? 'umowa_50');
+            $gross = $getGross($row);
+            // Use collab_type, fallback to 'umowa_50' (Standard) or map from old 'type' if needed
+            $cType = $row['collab_type'];
+            if (!$cType || $cType === 'other')
+                $cType = 'umowa_50';
+
+            $net = TaxCalculator::calculateNet($gross, $cType);
             $officialTotal += $net;
 
             fputcsv($output, [
                 $row['date'],
                 $row['brand'],
-                $typeLabels[$row['collab_type'] ?? 'umowa_50'] ?? $row['collab_type'],
+                $typeLabels[$cType] ?? $cType,
                 number_format($gross, 2, ',', ' ') . ' zł',
                 number_format($net, 2, ',', ' ') . ' zł',
                 $row['payment_status']
@@ -104,7 +124,8 @@ try {
 
         $privateTotal = 0;
         foreach ($privateRows as $row) {
-            $gross = floatval($row['amount_net']);
+            $gross = $getGross($row);
+            // Private is always 'gotowka' logic for calc
             $net = TaxCalculator::calculateNet($gross, 'gotowka');
             $privateTotal += $net;
 
@@ -126,14 +147,24 @@ try {
         $headers = ['Data', 'Marka', 'Typ', 'Brutto', 'Na rękę', 'Status'];
         fputcsv($output, $headers);
 
+        $totalSum = 0;
         foreach ($rows as $row) {
-            $gross = floatval($row['amount_net']);
-            $collabType = $row['collab_type'] ?? 'umowa_50';
+            $gross = $getGross($row);
 
-            // For private mode, override type label if needed, but 'gotowka' label is fine
-            $label = $typeLabels[$collabType] ?? $collabType;
+            $cType = $row['collab_type'];
+            // If private mode, force 'gotowka' logic regardless of DB type if it was somehow mislabeled? 
+            // Better to rely on TaxCalculator with the actual type if it exists.
+            if ($mode === 'private') {
+                $cType = 'gotowka';
+            } elseif (!$cType || $cType === 'other') {
+                $cType = 'umowa_50';
+            }
 
-            $net = TaxCalculator::calculateNet($gross, $collabType);
+            $label = $typeLabels[$cType] ?? $cType;
+            if ($mode === 'private')
+                $label = 'Gotówka prywatna';
+
+            $net = TaxCalculator::calculateNet($gross, $cType);
             $totalSum += $net;
 
             fputcsv($output, [
