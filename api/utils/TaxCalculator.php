@@ -7,56 +7,6 @@
 class TaxCalculator
 {
 
-    /**
-     * Calculate net amount based on collaboration type
-     * 
-     * @param float $gross Gross amount (brutto)
-     * @param string $type Collaboration type
-     * @return float Net amount after all deductions
-     */
-    public static function calculateNet($gross, $type)
-    {
-        switch ($type) {
-            case 'umowa_50':
-                // 50% KUP, 12% tax on income
-                $kup = $gross * 0.50;
-                $income = $gross - $kup;
-                $tax = $income * 0.12;
-                return $gross - $tax;
-
-            case 'umowa_20':
-                // 20% KUP, 12% tax on income
-                $kup = $gross * 0.20;
-                $income = $gross - $kup;
-                $tax = $income * 0.12;
-                return $gross - $tax;
-
-            case 'useme_50':
-                // Use.me commission (7.8%, min 29zł) + 50% KUP + 12% tax
-                $commission = max(29, $gross * 0.078);
-                $afterCommission = $gross - $commission;
-                $kup = $gross * 0.50;
-                $income = $gross - $kup;
-                $tax = $income * 0.12;
-                return $afterCommission - $tax;
-
-            case 'useme_20':
-                // Use.me commission (7.8%, min 29zł) + 20% KUP + 12% tax
-                $commission = max(29, $gross * 0.078);
-                $afterCommission = $gross - $commission;
-                $kup = $gross * 0.20;
-                $income = $gross - $kup;
-                $tax = $income * 0.12;
-                return $afterCommission - $tax;
-
-            case 'gotowka':
-                // No deductions
-                return $gross;
-
-            default:
-                return $gross;
-        }
-    }
 
     /**
      * Get breakdown of all deductions
@@ -72,6 +22,8 @@ class TaxCalculator
             'commission' => 0,
             'kup' => 0,
             'tax' => 0,
+            'zus' => 0,      // Added for UoP
+            'health' => 0,   // Added for UoP
             'net' => 0
         ];
 
@@ -95,11 +47,46 @@ class TaxCalculator
                 $breakdown['net'] = $gross - $breakdown['commission'] - $breakdown['tax'];
                 break;
 
+            case 'umowa_praca':
+                // Standard Employment Contract (Simplified)
+                // 1. Social Security (ZUS): 13.71%
+                $breakdown['zus'] = $gross * 0.1371;
+
+                // 2. Health Insurance Base
+                $healthBase = $gross - $breakdown['zus'];
+
+                // 3. Health Insurance (9%)
+                $breakdown['health'] = $healthBase * 0.09;
+
+                // 4. KUP (Standard 250 PLN)
+                $breakdown['kup'] = 250;
+
+                // 5. Tax Base
+                $taxBase = max(0, $gross - $breakdown['zus'] - $breakdown['kup']);
+
+                // 6. Tax (12% minus 300 PLN free amount)
+                $taxCalculated = ($taxBase * 0.12) - 300;
+                $breakdown['tax'] = max(0, $taxCalculated);
+
+                // 7. Net
+                $breakdown['net'] = $gross - $breakdown['zus'] - $breakdown['health'] - $breakdown['tax'];
+                break;
+
             case 'gotowka':
                 $breakdown['net'] = $gross;
                 break;
         }
 
         return $breakdown;
+    }
+
+    /**
+     * Calculate net amount based on collaboration type
+     * Wrapper for getBreakdown
+     */
+    public static function calculateNet($gross, $type)
+    {
+        $breakdown = self::getBreakdown($gross, $type);
+        return $breakdown['net'];
     }
 }

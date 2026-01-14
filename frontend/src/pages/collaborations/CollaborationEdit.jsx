@@ -127,6 +127,7 @@ export default function CollaborationEdit() {
 
     const isUseme = formData.collab_type && formData.collab_type.startsWith('useme');
     const isCash = formData.collab_type === 'gotowka';
+    const isUoP = formData.collab_type === 'umowa_praca';
 
     if (loading) return <div className="loading">Ładowanie...</div>;
 
@@ -256,8 +257,8 @@ export default function CollaborationEdit() {
                                 </div>
                             )}
 
-                            {/* STANDARD VIEW (Umowa) */}
-                            {!isCash && !isUseme && (
+                            {/* STANDARD VIEW (Umowa o dzieło) */}
+                            {!isCash && !isUseme && !isUoP && (
                                 <div className="p-4 space-y-2">
                                     <div className="flex justify-between text-sm text-gray-500">
                                         <span>Kwota brutto:</span>
@@ -325,6 +326,33 @@ export default function CollaborationEdit() {
                                     {/* Final */}
                                     <div className="flex justify-between items-center">
                                         <span className="text-green-700 font-bold text-lg">💵 Na rękę:</span>
+                                        <span className="text-green-700 font-bold text-xl">{formatCurrency(breakdown.net)}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* UoP VIEW (Umowa o Pracę) */}
+                            {isUoP && (
+                                <div className="p-4 space-y-2">
+                                    <div className="flex justify-between text-sm text-gray-500">
+                                        <span>Kwota brutto:</span>
+                                        <span>{formatCurrency(breakdown.gross)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-gray-400">
+                                        <span>Składki ZUS (13.71%):</span>
+                                        <span>-{formatCurrency(breakdown.details.zus)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-gray-400">
+                                        <span>Składka Zdrowotna (9%):</span>
+                                        <span>-{formatCurrency(breakdown.details.health)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-gray-400">
+                                        <span>Zaliczka na PIT (12%):</span>
+                                        <span>-{formatCurrency(breakdown.details.tax)}</span>
+                                    </div>
+                                    <hr className="border-gray-200 my-2" />
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-green-700 font-bold text-lg">💵 Na rękę (Szacowane):</span>
                                         <span className="text-green-700 font-bold text-xl">{formatCurrency(breakdown.net)}</span>
                                     </div>
                                 </div>
