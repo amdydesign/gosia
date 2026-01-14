@@ -84,6 +84,7 @@ export const BILLING_TYPES = {
     umowa_20: { label: 'Umowa o Dzieło (20% KUP)', kup: 0.20, tax: 0.12 },
     useme_50: { label: 'Use.me (50% KUP)', kup: 0.50, useme: true },
     useme_20: { label: 'Use.me (20% KUP)', kup: 0.20, useme: true },
+    umowa_praca: { label: 'Umowa o pracę', tax: 0.12, private: false },
     gotowka: { label: 'Gotówka prywatna (nieformalna)', private: true }
 };
 
@@ -109,7 +110,9 @@ export function getTaxBreakdown(grossInput, type) {
             afterCommission: gross,
             kup: 0,
             taxBase: 0,
-            tax: 0
+            tax: 0,
+            zus: 0,      // Added for UoP
+            health: 0    // Added for UoP
         }
     };
 
@@ -118,6 +121,36 @@ export function getTaxBreakdown(grossInput, type) {
 
     // Gotowka (Private) - No deductions
     if (config.private) {
+        return result;
+    }
+
+    // Special Case: Umowa o Pracę
+    if (type === 'umowa_praca') {
+        // 1. ZUS (13.71%)
+        const zus = gross * 0.1371;
+        result.details.zus = zus;
+
+        // 2. Health Basis
+        const healthBase = gross - zus;
+
+        // 3. Health (9%)
+        const health = healthBase * 0.09;
+        result.details.health = health;
+
+        // 4. KUP (Standard 250)
+        const kup = 250;
+        result.details.kup = kup;
+
+        // 5. Tax Basis
+        const taxBase = Math.max(0, gross - zus - kup);
+        result.details.taxBase = taxBase;
+
+        // 6. Tax (12% - 300 free amount)
+        const taxVal = Math.max(0, (taxBase * 0.12) - 300);
+        result.details.tax = taxVal;
+
+        // 7. Net
+        result.net = gross - zus - health - taxVal;
         return result;
     }
 
@@ -149,9 +182,7 @@ export function getTaxBreakdown(grossInput, type) {
     result.details.kup = kupAmount;
 
     // 3. Tax Base (Podstawa opodatkowania)
-    const taxBase = Math.round(currentAmount - kupAmount); // Tax base is usually rounded to integer in PL? Or strict math?
-    // Let's keep strict float for UI display accuracy, or rounded? User example: 691.50 -> Base 691.50. 
-    // In PL tax base is rounded to whole Złotys usually, but for "estimate" we can keep decimals or standard round.
+    const taxBase = Math.round(currentAmount - kupAmount); // Tax base is usually rounded to integer in PL?
     // Let's use exact for now to match User examples (691.50).
     result.details.taxBase = currentAmount - kupAmount;
 
