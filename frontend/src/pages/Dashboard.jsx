@@ -182,7 +182,7 @@ export default function Dashboard() {
                 <div className="divide-y divide-gray-50">
                     {(!upcoming?.collaborations?.length && !upcoming?.purchases?.length) ? (
                         <div className="p-8 text-center text-gray-400">
-                            <div className="mb-2 text-purple-300">
+                            <div className="mb-2 text-purple-300 flex justify-center">
                                 <Sparkles size={48} strokeWidth={1.5} />
                             </div>
                             <p>Brak nadchodzących terminów</p>
