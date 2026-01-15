@@ -26,7 +26,7 @@ $username = $credentials['rapidapi']['username'];
 $curl = curl_init();
 
 curl_setopt_array($curl, [
-    CURLOPT_URL => "https://{$apiHost}/ig_get_fb_profile_hover.php?username_or_url=" . urlencode($username),
+    CURLOPT_URL => "https://{$apiHost}/web-profile?username=" . urlencode($username),
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_ENCODING => "",
     CURLOPT_MAXREDIRS => 10,

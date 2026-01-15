@@ -22,7 +22,7 @@ return [
     ],
     'rapidapi' => [
         'key' => 'e895b43fd6mshad615eb9a25a5c0p13b340jsn697e00c6bcbe', // To be filled by user
-        'host' => 'instagram-scraper-stable-api.p.rapidapi.com',
+        'host' => 'instagram-looter2.p.rapidapi.com',
         'username' => 'gosia_mordarska' // Target profile
     ],
     'facebook_rapidapi' => [
