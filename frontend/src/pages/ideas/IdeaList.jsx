@@ -69,7 +69,9 @@ export default function IdeaList() {
                 <div className="loading">Ładowanie...</div>
             ) : ideas.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-3xl border border-gray-100">
-                    <div className="text-4xl mb-4">💡</div>
+                    <div className="mb-4 text-purple-400 flex justify-center">
+                        <Lightbulb size={48} strokeWidth={1.5} />
+                    </div>
                     <h3 className="text-lg font-semibold text-gray-900">Brak pomysłów</h3>
                     <p className="text-gray-500 mb-6">Dodaj swój pierwszy scenariusz na rolkę.</p>
                     <Link

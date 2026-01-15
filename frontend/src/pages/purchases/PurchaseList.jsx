@@ -82,7 +82,9 @@ export default function PurchaseList() {
                 <div className="loading">Ładowanie...</div>
             ) : filteredPurchases.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-3xl border border-gray-100">
-                    <div className="text-4xl mb-4">🛍️</div>
+                    <div className="mb-4 text-teal-500 flex justify-center">
+                        <ShoppingBag size={48} strokeWidth={1.5} />
+                    </div>
                     <h3 className="text-lg font-semibold text-gray-900">Brak zakupów</h3>
                     <p className="text-gray-500 mb-6">Dodaj swój pierwszy zakup, aby kontrolować zwroty.</p>
                 </div>
