@@ -25,8 +25,18 @@ $targetUrl = $credentials['facebook_rapidapi']['url'];
 // 1. Initialize CURL
 $curl = curl_init();
 
+$params = [
+    'link' => $targetUrl,
+    'exact_followers_count' => 'true',
+    'show_verified_badge' => 'false',
+    'proxy_country' => 'us',
+    'page_section' => 'default'
+];
+$query = http_build_query($params);
+$requestUrl = "https://{$apiHost}/get_facebook_pages_details_from_link?" . $query;
+
 curl_setopt_array($curl, [
-    CURLOPT_URL => "https://{$apiHost}/page/details?url=" . urlencode($targetUrl),
+    CURLOPT_URL => $requestUrl,
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_ENCODING => "",
     CURLOPT_MAXREDIRS => 10,
@@ -53,25 +63,16 @@ if ($err) {
 $data = json_decode($response, true);
 $followers = 0;
 
-if (isset($data['followers'])) {
-    $followers = $data['followers'];
-} elseif (isset($data['likes'])) {
-    $followers = $data['likes'];
-} elseif (isset($data['results'])) {
-    // RapidAPI facebook-scraper3 often wraps data in 'results'
-    if (isset($data['results']['followers'])) {
-        $followers = $data['results']['followers'];
-    } elseif (isset($data['results']['likes'])) {
-        $followers = $data['results']['likes'];
-    } elseif (isset($data['results'][0]['followers'])) {
-        $followers = $data['results'][0]['followers'];
-    }
+if (isset($data['body']['followers_count'])) {
+    $followers = $data['body']['followers_count'];
+} elseif (isset($data['followers_count'])) {
+    $followers = $data['followers_count'];
 }
 
-// Fallback search if structure changes
+// Fallback search
 if ($followers == 0) {
     array_walk_recursive($data, function ($item, $key) use (&$followers) {
-        if (($key === 'followers' || $key === 'likes' || $key === 'follower_count') && is_numeric($item) && $item > 0) {
+        if (($key === 'followers_count') && is_numeric($item) && $item > 0) {
             $followers = $item;
         }
     });

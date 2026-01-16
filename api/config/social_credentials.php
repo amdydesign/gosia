@@ -27,7 +27,7 @@ return [
     ],
     'facebook_rapidapi' => [
         'key' => 'e895b43fd6mshad615eb9a25a5c0p13b340jsn697e00c6bcbe',
-        'host' => 'facebook-scraper3.p.rapidapi.com',
+        'host' => 'facebook-scraper-api4.p.rapidapi.com',
         'url' => 'https://www.facebook.com/profile.php?id=61577001039304'
     ]
 ];
