@@ -31,3 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Set JSON content type for all responses
 header('Content-Type: application/json; charset=utf-8');
+
+// Security headers
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+
