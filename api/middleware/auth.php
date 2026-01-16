@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../config/JWTHandler.php';
 require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../config/Database.php';
 
 class AuthMiddleware
 {
@@ -34,7 +35,35 @@ class AuthMiddleware
             Response::unauthorized($result['message']);
         }
 
-        return $result['data'];
+        $payload = $result['data'];
+
+        // Check token version against DB
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+
+            $stmt = $conn->prepare("SELECT token_version FROM users WHERE id = :id");
+            $stmt->execute(['id' => $payload['sub']]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                Response::unauthorized('User not found');
+            }
+
+            // If token has no version (old token) or versions don't match -> Unauthorized
+            // We treat null DB version as 1.
+            $dbVersion = $user['token_version'] ?? 1;
+            $tokenVersion = $payload['token_version'] ?? 0; // Old tokens won't have this field
+
+            if ($tokenVersion != $dbVersion) {
+                Response::unauthorized('Session expired, please login again');
+            }
+
+        } catch (Exception $e) {
+            Response::error('Authentication error', 500);
+        }
+
+        return $payload;
     }
 
     /**

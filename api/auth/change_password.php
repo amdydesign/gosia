@@ -46,8 +46,8 @@ try {
     // 3. Hash new password
     $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
 
-    // 4. Update DB
-    $update = $conn->prepare("UPDATE users SET password_hash = :hash WHERE id = :id");
+    // 4. Update DB (password_hash and increment token_version)
+    $update = $conn->prepare("UPDATE users SET password_hash = :hash, token_version = token_version + 1 WHERE id = :id");
     $update->execute([
         'hash' => $newHash,
         'id' => $user['sub']

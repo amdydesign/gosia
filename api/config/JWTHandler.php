@@ -29,7 +29,7 @@ class JWTHandler
     /**
      * Generate JWT token for user
      */
-    public function generateToken($userId, $username)
+    public function generateToken($userId, $username, $tokenVersion)
     {
         $issuedAt = time();
         $expiresAt = $issuedAt + ($this->expiry_hours * 3600);
@@ -39,7 +39,8 @@ class JWTHandler
             'iat' => $issuedAt,              // Issued at
             'exp' => $expiresAt,             // Expiration
             'sub' => $userId,                // Subject (user ID)
-            'username' => $username          // Custom claim
+            'username' => $username,         // Custom claim
+            'token_version' => $tokenVersion // Token Version for invalidation
         ];
 
         return JWT::encode($payload, $this->secret, 'HS256');

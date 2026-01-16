@@ -37,7 +37,7 @@ try {
     $conn = $db->getConnection();
 
     // Find user by username
-    $stmt = $conn->prepare("SELECT id, username, password_hash, email FROM users WHERE username = :username LIMIT 1");
+    $stmt = $conn->prepare("SELECT id, username, password_hash, email, token_version FROM users WHERE username = :username LIMIT 1");
     $stmt->execute(['username' => $username]);
     $user = $stmt->fetch();
 
@@ -57,7 +57,9 @@ try {
 
     // Generate JWT token
     $jwtHandler = new JWTHandler();
-    $token = $jwtHandler->generateToken($user['id'], $user['username']);
+    // Default to 1 if token_version is null
+    $tokenVersion = $user['token_version'] ?? 1;
+    $token = $jwtHandler->generateToken($user['id'], $user['username'], $tokenVersion);
 
     // Prepare user data (without password)
     $userData = [
