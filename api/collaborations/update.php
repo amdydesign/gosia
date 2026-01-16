@@ -64,6 +64,14 @@ try {
         $fields[] = "notes = :notes";
         $params['notes'] = $input['notes'];
     }
+    if (isset($input['collab_type'])) {
+        $fields[] = "collab_type = :collab_type";
+        $params['collab_type'] = $input['collab_type'];
+    }
+    if (isset($input['fiscal_tracking'])) {
+        $fields[] = "fiscal_tracking = :fiscal_tracking";
+        $params['fiscal_tracking'] = $input['fiscal_tracking'] ? 1 : 0;
+    }
 
     if (!empty($fields)) {
         $sql = "UPDATE collaborations SET " . implode(', ', $fields) . " WHERE id = :id";
