@@ -1,3 +1,9 @@
+# Block access to dotfiles (like .env, .git)
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
 RewriteEngine On
 RewriteBase /
 
