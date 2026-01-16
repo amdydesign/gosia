@@ -202,11 +202,17 @@ export default function CollaborationNew() {
                                 disabled={formData.type === 'umowa-praca'}
                                 className={`w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 ${formData.type === 'umowa-praca' ? 'bg-gray-100 text-gray-500' : ''}`}
                             >
-                                {Object.entries(BILLING_TYPES).map(([key, config]) => (
-                                    <option key={key} value={key}>
-                                        {config.label}
-                                    </option>
-                                ))}
+                                {Object.entries(BILLING_TYPES)
+                                    .filter(([key]) => {
+                                        // Hide 'umowa_praca' unless type is 'umowa-praca'
+                                        if (key === 'umowa_praca' && formData.type !== 'umowa-praca') return false;
+                                        return true;
+                                    })
+                                    .map(([key, config]) => (
+                                        <option key={key} value={key}>
+                                            {config.label}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
 
