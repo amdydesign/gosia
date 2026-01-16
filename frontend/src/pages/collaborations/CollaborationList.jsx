@@ -114,6 +114,10 @@ export default function CollaborationList() {
                                         <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                                             <CheckCircle size={10} /> Opłacone
                                         </span>
+                                    ) : collab.payment_status === 'overdue' ? (
+                                        <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                            <Clock size={10} /> Zaległa
+                                        </span>
                                     ) : (
                                         <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                                             <Clock size={10} /> Oczekuje

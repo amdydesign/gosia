@@ -93,10 +93,14 @@ export default function CollaborationView() {
                         <div className="flex flex-col items-center gap-1">
                             {collab.payment_status === 'paid' ? (
                                 <CheckCircle size={20} className="text-green-500" />
+                            ) : collab.payment_status === 'overdue' ? (
+                                <Clock size={20} className="text-red-500" />
                             ) : (
                                 <Clock size={20} className="text-orange-500" />
                             )}
-                            <span className="font-medium capitalize">{collab.payment_status === 'paid' ? 'Opłacone' : 'Oczekujące'}</span>
+                            <span className={`font-medium capitalize ${collab.payment_status === 'overdue' ? 'text-red-600' : ''}`}>
+                                {collab.payment_status === 'paid' ? 'Opłacone' : collab.payment_status === 'overdue' ? 'Zaległa' : 'Oczekujące'}
+                            </span>
                         </div>
                     </div>
 
