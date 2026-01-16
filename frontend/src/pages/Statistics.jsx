@@ -157,13 +157,14 @@ export default function Statistics() {
                     ...prev,
                     instagram: { ...prev.instagram, count: res.followers }
                 }));
-                showToast(`✅ Zaktualizowano! Followersów: ${res.followers}`, 'success');
+                return res.followers;
             } else {
-                alert('Błąd: ' + (res.data?.error || res.error || 'Nieznany błąd'));
+                console.error('Instagram Error:', res.error);
+                return null;
             }
         } catch (e) {
             console.error(e);
-            alert('Wystąpił błąd podczas pobierania danych z Instagrama.');
+            return null;
         }
     };
 
@@ -175,14 +176,29 @@ export default function Statistics() {
                     ...prev,
                     facebook: { ...prev.facebook, count: res.followers }
                 }));
-                showToast(`✅ Zaktualizowano! Followersów: ${res.followers}`, 'success');
+                return res.followers;
             } else {
-                alert('Błąd: ' + (res.data?.error || res.error || 'Nieznany błąd'));
+                console.error('Facebook Error:', res.error);
+                return null;
             }
         } catch (e) {
             console.error(e);
-            alert('Wystąpił błąd podczas pobierania danych z Facebooka.');
+            return null;
         }
+    };
+
+    const handleRefreshAll = async () => {
+        setLoading(true);
+        const [ig, fb] = await Promise.all([handleScrapeInstagram(), handleScrapeFacebook()]);
+
+        let msg = '';
+        if (ig) msg += `IG: ${ig} `;
+        if (fb) msg += `FB: ${fb}`;
+
+        if (msg) showToast(`Zaktualizowano! ${msg}`, 'success');
+        else showToast('Nie udało się pobrać nowych danych (sprawdź konsolę)', 'error');
+
+        setLoading(false);
     };
 
 
@@ -330,9 +346,20 @@ export default function Statistics() {
 
             {/* Social Media Stats - MOVED TO TOP */}
             <section className="mb-8">
-                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <span>📱</span> Social Media
-                </h3>
+                <div className="flex items-center gap-4 mb-4">
+                    <h3 className="font-semibold text-gray-800">
+                        Social Media
+                    </h3>
+                    <button
+                        onClick={handleRefreshAll}
+                        className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors flex items-center gap-2 text-sm font-medium"
+                        title="Odśwież wszystkie statystyki"
+                        disabled={loading}
+                    >
+                        <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                        <span>Odśwież</span>
+                    </button>
+                </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {socialPlatforms.map(platform => {
                         const data = socialStats?.[platform.id] || { count: 0 };
@@ -366,19 +393,7 @@ export default function Statistics() {
                                     )}
                                 </div>
 
-                                {/* Refresh Button for Instagram & Facebook (RapidAPI) */}
-                                {(platform.id === 'instagram' || platform.id === 'facebook') && (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            platform.id === 'instagram' ? handleScrapeInstagram() : handleScrapeFacebook();
-                                        }}
-                                        className="ml-2 p-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors"
-                                        title="Odśwież (RapidAPI)"
-                                    >
-                                        <RefreshCw size={14} />
-                                    </button>
-                                )}
+
 
                                 {canConnect && !isConnected && (platform.id !== 'instagram' && platform.id !== 'facebook') && (
                                     <button
