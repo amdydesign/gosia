@@ -10,6 +10,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/../config/Database.php';
+
+// Instantiate Database to load .env
+$db = new Database();
+
 $credentials = require __DIR__ . '/../config/social_credentials.php';
 
 // Check if Facebook RapidAPI key is configured
@@ -80,7 +84,7 @@ if ($followers == 0) {
 
 // 3. Save to Database
 try {
-    $db = new Database();
+    // Database already instantiated at top of file
     $conn = $db->getConnection();
 
     $userId = 1;
