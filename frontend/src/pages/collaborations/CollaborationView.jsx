@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ArrowLeft, Edit2, User, Calendar, DollarSign, CheckCircle, Clock, Trash2, Wallet, Lock, Building2 } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { formatCurrency, formatDate, getCollabTypeLabel, BILLING_TYPES, calculateNetAmount } from '../../utils/format';
+import Attachments from '../../components/common/Attachments';
 
 export default function CollaborationView() {
     const { id } = useParams();
@@ -184,6 +185,9 @@ export default function CollaborationView() {
                     <p className="text-gray-600 whitespace-pre-line">{collab.notes}</p>
                 </div>
             )}
+
+            {/* Attachments (umowy, faktury, screeny) */}
+            <Attachments entityType="collaboration" entityId={id} />
         </div>
     );
 }

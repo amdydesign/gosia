@@ -151,11 +151,46 @@ I zaktualizuj w tabeli `users`.
 - ✅ Podział według typu współpracy
 - ✅ Łączne statystyki
 
+### Załączniki
+- ✅ Pliki przy współpracach (umowy, faktury) i zakupach (paragony)
+- ✅ Upload do 10 MB (zdjęcia, PDF, dokumenty)
+- ✅ Pliki serwowane tylko po autoryzacji (poza publicznym URL)
+
+### PWA i Powiadomienia Push
+- ✅ Aplikacja instalowalna na telefonie (manifest + service worker)
+- ✅ Działa offline (cache aplikacji)
+- ✅ Powiadomienia push: przypomnienia o terminach zwrotów i zaległych płatnościach
+- ✅ Włączanie/wyłączanie dzwonkiem w nagłówku aplikacji
+
 ### Techniczne
 - ✅ Bezpieczne logowanie (JWT)
 - ✅ Mobile-first design
 - ✅ SPA z React Router
 - ✅ Responsywny layout
+
+## 🔔 Konfiguracja Powiadomień Push
+
+1. **Wygeneruj klucze VAPID** (raz, lokalnie lub na serwerze):
+   ```bash
+   php api/utils/generate_vapid_keys.php
+   ```
+   Skopiuj wypisane linie do `api/.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` z własnym e-mailem).
+
+2. **Utwórz tabele** (nowa instalacja ma je w `schema.sql`; istniejąca baza):
+   ```bash
+   php api/migrations/add_push_and_attachments.php
+   ```
+
+3. **Ustaw dzienny cron** na dHosting (panel → Harmonogram zadań), np. o 9:00:
+   ```
+   php /ścieżka/do/public_html/api/cron/send_reminders.php
+   ```
+   Alternatywnie cron przez URL — ustaw `CRON_SECRET` w `api/.env` i wywołuj:
+   `https://twoja-domena.pl/api/cron/send_reminders.php?secret=TWÓJ_SEKRET`
+
+4. W aplikacji kliknij **dzwonek** w nagłówku i zaakceptuj zgodę na powiadomienia. Od razu przyjdzie powiadomienie testowe.
+
+Wysyłka push nie wymaga żadnych bibliotek composera — implementacja VAPID (RFC 8292) i szyfrowania aes128gcm (RFC 8291) jest w `api/config/WebPush.php` i korzysta tylko z rozszerzeń `openssl` + `curl`.
 
 ## 📝 License
 
