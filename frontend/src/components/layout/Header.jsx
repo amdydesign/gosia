@@ -1,9 +1,10 @@
 import { useAuth } from '../../context/AuthContext';
 import { LogOut } from 'lucide-react';
+import PushToggle from '../common/PushToggle';
 import './Header.css';
 
 export default function Header({ title, subtitle }) {
-    const { user, logout } = useAuth();
+    const { logout } = useAuth();
 
     return (
         <header className="header">
@@ -15,9 +16,12 @@ export default function Header({ title, subtitle }) {
                     <h1 className="header-title">{title}</h1>
                     {subtitle && <p className="header-subtitle">{subtitle}</p>}
                 </div>
-                <button className="header-logout" onClick={logout} title="Wyloguj">
-                    <LogOut size={20} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <PushToggle />
+                    <button className="header-logout" onClick={logout} title="Wyloguj">
+                        <LogOut size={20} />
+                    </button>
+                </div>
             </div>
         </header>
     );

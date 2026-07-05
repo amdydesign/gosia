@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ArrowLeft, Edit2, ShoppingBag, Calendar, ExternalLink, RotateCcw, Clock, Trash2 } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { formatCurrency, formatDate } from '../../utils/format';
+import Attachments from '../../components/common/Attachments';
 
 export default function PurchaseView() {
     const { id } = useParams();
@@ -156,6 +157,9 @@ export default function PurchaseView() {
                     </div>
                 </div>
             )}
+
+            {/* Attachments (paragony, potwierdzenia zwrotu) */}
+            <Attachments entityType="purchase" entityId={id} />
         </div>
     );
 }

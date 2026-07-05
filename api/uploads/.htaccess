@@ -1,0 +1,9 @@
+# Attachments are served only through api/attachments/download.php (with auth).
+# Never allow direct access to uploaded files.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

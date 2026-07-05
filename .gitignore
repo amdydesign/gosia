@@ -1,40 +1,14 @@
 # Dependencies
 /node_modules/
 
-# Frontend build output
-
-
 # Environment
 .env
 
-# IDE  
-.idea/
-.vscode/
+# Uploaded attachments (served via api/attachments/download.php)
+/api/uploads/*
+!/api/uploads/.htaccess
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Cache
-cache/
-
-# Old HTML prototype (legacy files - not the React build)
-/styles.css
-/app.js
-# Dependencies
-/node_modules/
-
-# Frontend build output
-
-
-# Environment
-.env
-
-# IDE  
+# IDE
 .idea/
 .vscode/
 
