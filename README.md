@@ -13,24 +13,33 @@
 
 ```
 gosia/
-├── frontend/          # React app (Vite)
+├── index.html         # Zbudowany frontend (artefakt deployu — nie edytuj ręcznie)
+├── assets/            # Zbudowane bundle JS/CSS (artefakt deployu)
+├── sw.js, manifest.json, icons/   # PWA (artefakty deployu)
+├── frontend/          # React app (Vite) — ŹRÓDŁA
 │   ├── src/
 │   │   ├── components/    # Reusable components
 │   │   ├── context/       # Auth context
 │   │   ├── pages/         # Page components
 │   │   ├── services/      # API services
 │   │   └── utils/         # Helper functions
-│   └── dist/              # Production build
+│   └── scripts/sync-root.mjs  # kopiuje build do rootu (npm run deploy)
+├── build/             # Wyjście Vite (ignorowane przez git)
 ├── api/               # PHP Backend
-│   ├── auth/              # Login/logout endpoints
-│   ├── collaborations/    # CRUD endpoints
-│   ├── returns/           # CRUD endpoints
-│   ├── stats/             # Dashboard stats
-│   ├── config/            # DB, JWT, CORS config
+│   ├── auth/              # Login/hasła + OAuth (FB/TikTok/YT)
+│   ├── collaborations/    # CRUD współprac
+│   ├── purchases/         # CRUD zakupów
+│   ├── ideas/             # CRUD pomysłów
+│   ├── stats/             # Dashboard + social stats
+│   ├── attachments/       # Załączniki
+│   ├── push/              # Web Push
+│   ├── config/            # DB, JWT, CORS, OAuthState
 │   ├── middleware/        # Auth middleware
 │   ├── database/          # SQL schema
+│   ├── migrations/        # Migracje (tylko CLI)
 │   ├── .env               # Environment variables (not in git)
 │   └── composer.json
+├── deploy.bat         # Build + commit + push (Windows)
 └── README.md
 ```
 
@@ -64,44 +73,20 @@ Otwórz: http://localhost:5173
 
 ## 🌐 Deployment na dHosting
 
-### 1. Build Frontend
+Serwer robi `git pull` w `public_html`, a aplikacja jest serwowana z rootu repo
+przez commitowany `.htaccess`. Pełna instrukcja: **[DEPLOY.md](DEPLOY.md)**.
+
+W skrócie, po zmianach w kodzie:
+
 ```bash
 cd frontend
-npm run build
+npm run deploy      # build Vite + kopiowanie artefaktów do rootu repo
+cd ..
+git add . && git commit -m "Opis zmian" && git push
+# na serwerze: cd ~/public_html && git pull origin main
 ```
 
-### 2. Upload przez FTP
-
-Wgraj następujące elementy do `public_html/`:
-
-```
-public_html/
-├── index.html          # z frontend/dist/
-├── assets/             # z frontend/dist/assets/
-├── api/                # cały folder api/
-│   ├── (wszystkie pliki PHP)
-│   ├── vendor/         # ważne!
-│   └── .env            # uzupełnij prawidłowe dane
-└── .htaccess           # routing
-```
-
-### 3. Plik .htaccess
-
-```apache
-RewriteEngine On
-
-# HTTPS redirect
-RewriteCond %{HTTPS} off
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-# API routes - przekaż do PHP
-RewriteRule ^api/(.*)$ api/$1 [L]
-
-# React SPA - wszystko inne do index.html
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.html [L]
-```
+Na Windows wystarczy uruchomić `deploy.bat`.
 
 ## 🔐 Logowanie
 

@@ -1,28 +1,38 @@
-# Wdrożenie na serwer - OSTATECZNA WERSJA
+# Wdrożenie na serwer (dHosting)
 
-## Problem rozwiązany
-Document root w dHosting jest na `public_html` i nie można tego zmienić. Dodałem plik `.htaccess`, który automatycznie przekierowuje ruch.
+## Jak to działa
 
-## Co robi .htaccess?
-- Gdy wchodzisz na `panel.malgorzatamordarska.pl` → pokazuje aplikację React z `frontend/dist`
-- Gdy aplikacja wywołuje `/api/...` → kieruje do folderu `api`
+Document root na dHosting to `public_html` i nie da się tego zmienić.
+Aplikacja jest więc serwowana **z katalogu głównego repo**:
 
-## Deploy - Krok po kroku
+- `index.html` + `assets/` + `sw.js` + `manifest.json` + `icons/` — zbudowany frontend (artefakty commitowane do git),
+- `api/` — backend PHP,
+- `.htaccess` — kieruje `/api/*` do PHP, wszystko inne do `index.html` (React Router).
+
+Źródłem frontendu jest `frontend/src`. Build Vite trafia do `build/`
+(katalog **ignorowany** przez git), a skrypt `npm run deploy` kopiuje go do rootu.
+Do repo commitujemy tylko kopie w root — jedno źródło prawdy.
+
+## Deploy — krok po kroku
 
 ### 1. Pierwsza konfiguracja na serwerze (TYLKO RAZ)
+
 ```bash
 cd ~/public_html
 git init
 git remote add origin https://github.com/amdydesign/gosia.git
 git fetch --all
 git reset --hard origin/main
+cp api/.env.example api/.env   # i uzupełnij wartości (DB, JWT_SECRET, ...)
 ```
 
-### 2. Po zmianach w kodzie (codziennie)
-**Na komputerze:**
+### 2. Po zmianach w kodzie
+
+**Na komputerze** — uruchom `deploy.bat` (Windows) albo ręcznie:
+
 ```bash
-cd c:\gosia\frontend
-npm run build
+cd frontend
+npm run deploy        # build + synchronizacja do rootu repo
 cd ..
 git add .
 git commit -m "Opis zmian"
@@ -30,12 +40,19 @@ git push
 ```
 
 **Na serwerze:**
+
 ```bash
 cd ~/public_html
 git pull origin main
 ```
 
-### 3. Sprawdź czy działa
-Otwórz przeglądarkę (incognito): `https://panel.malgorzatamordarska.pl`
+Jeśli w opisie zmian są nowe migracje — uruchom je z CLI:
 
-Powinienś zobaczyć **Gosia 2.0** 🎉
+```bash
+php api/migrations/<nazwa_migracji>.php
+```
+
+### 3. Sprawdź, czy działa
+
+Otwórz w trybie incognito: `https://panel.malgorzatamordarska.pl`
+(incognito omija stary cache; service worker sam dociągnie nową wersję przy nawigacji).
