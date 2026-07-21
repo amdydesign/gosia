@@ -4,14 +4,9 @@
  * POST /api/auth/youtube/exchange.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
+requireMethod('POST');
 
 // Load credentials
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
@@ -25,9 +20,14 @@ try {
     $userId = getCurrentUserId(); // Authenticated via JWT
     $input = json_decode(file_get_contents('php://input'), true);
     $code = $input['code'] ?? null;
+    $state = $input['state'] ?? null;
 
     if (!$code) {
         Response::error('No code provided', 400);
+    }
+
+    if (!$state || !OAuthState::validate($state, $userId, 'youtube')) {
+        Response::error('Nieprawidłowy lub wygasły parametr state — spróbuj połączyć konto ponownie', 400);
     }
 
     // Exchange code for tokens
@@ -77,9 +77,7 @@ try {
     $channelTitle = $channel['snippet']['title']; // Store this? Maybe in future.
     $followers = $channel['statistics']['subscriberCount'];
 
-    // Database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Store Connection
     // If refresh token is missing (re-auth), keep old one if exists? 
@@ -101,10 +99,8 @@ try {
     $params = [
         'uid' => $userId,
         'puid' => $providerUserId,
-        'at' => $accessToken,
-        'rt' => $refreshToken, // Might be null, but we handled SQL conditionally above? 
-        // Actually PDO parameters binding doesn't work with conditional SQL string easily if param is missing.
-        // Simpler: Just update it if it's not null.
+        'at' => Crypto::encrypt($accessToken),
+        'rt' => Crypto::encrypt($refreshToken), // null pozostaje null
         'exp' => $expiresAt
     ];
 
@@ -153,7 +149,7 @@ try {
     Response::success(['message' => 'Connected to YouTube', 'channel' => $channelTitle]);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Exchange failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to connect YouTube', 500);

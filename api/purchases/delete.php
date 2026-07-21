@@ -4,14 +4,8 @@
  * DELETE /api/purchases/delete.php?id=X
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('DELETE');
 
 try {
     $userId = getCurrentUserId();
@@ -21,8 +15,7 @@ try {
         Response::error('Missing purchase ID', 400);
     }
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $stmt = $conn->prepare("DELETE FROM purchases WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
@@ -34,7 +27,7 @@ try {
     }
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Delete failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to delete purchase', 500);

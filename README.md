@@ -13,24 +13,33 @@
 
 ```
 gosia/
-├── frontend/          # React app (Vite)
+├── index.html         # Zbudowany frontend (artefakt deployu — nie edytuj ręcznie)
+├── assets/            # Zbudowane bundle JS/CSS (artefakt deployu)
+├── sw.js, manifest.json, icons/   # PWA (artefakty deployu)
+├── frontend/          # React app (Vite) — ŹRÓDŁA
 │   ├── src/
 │   │   ├── components/    # Reusable components
 │   │   ├── context/       # Auth context
 │   │   ├── pages/         # Page components
 │   │   ├── services/      # API services
 │   │   └── utils/         # Helper functions
-│   └── dist/              # Production build
+│   └── scripts/sync-root.mjs  # kopiuje build do rootu (npm run deploy)
+├── build/             # Wyjście Vite (ignorowane przez git)
 ├── api/               # PHP Backend
-│   ├── auth/              # Login/logout endpoints
-│   ├── collaborations/    # CRUD endpoints
-│   ├── returns/           # CRUD endpoints
-│   ├── stats/             # Dashboard stats
-│   ├── config/            # DB, JWT, CORS config
+│   ├── auth/              # Login/hasła + OAuth (FB/TikTok/YT)
+│   ├── collaborations/    # CRUD współprac
+│   ├── purchases/         # CRUD zakupów
+│   ├── ideas/             # CRUD pomysłów
+│   ├── stats/             # Dashboard + social stats
+│   ├── attachments/       # Załączniki
+│   ├── push/              # Web Push
+│   ├── config/            # DB, JWT, CORS, OAuthState
 │   ├── middleware/        # Auth middleware
 │   ├── database/          # SQL schema
+│   ├── migrations/        # Migracje (tylko CLI)
 │   ├── .env               # Environment variables (not in git)
 │   └── composer.json
+├── deploy.bat         # Build + commit + push (Windows)
 └── README.md
 ```
 
@@ -59,62 +68,57 @@ Otwórz: http://localhost:5173
 ## 🗄️ Setup Bazy Danych
 
 1. Utwórz bazę MySQL
-2. Wykonaj skrypt `api/database/schema.sql` 
+2. Wykonaj skrypt `api/database/schema.sql` (jedyne źródło prawdy dla świeżej instalacji)
 3. Ustaw dane dostępowe w `api/.env`
+
+Zmiany schematu na istniejącej bazie: numerowane migracje — `php api/migrations/run.php`
+(szczegóły w `DATABASE_SETUP.md`).
+
+### Typy współpracy — model danych
+
+- `type` — kategoria merytoryczna (post-instagram, story, reel, sesja, konsultacja, event, umowa-praca, inne),
+- `collab_type` — sposób rozliczenia (`umowa_50`, `umowa_20`, `useme_50`, `useme_20`, `umowa_praca`, `gotowka`, `barter`, `other`).
+
+Jedyne źródło prawdy dla dozwolonych wartości: `api/config/Validator.php`
+(musi być zgodne z `api/utils/TaxCalculator.php` i `frontend/src/utils/format.js`).
 
 ## 🌐 Deployment na dHosting
 
-### 1. Build Frontend
+Serwer robi `git pull` w `public_html`, a aplikacja jest serwowana z rootu repo
+przez commitowany `.htaccess`. Pełna instrukcja: **[DEPLOY.md](DEPLOY.md)**.
+
+W skrócie, po zmianach w kodzie:
+
 ```bash
 cd frontend
-npm run build
+npm run deploy      # build Vite + kopiowanie artefaktów do rootu repo
+cd ..
+git add . && git commit -m "Opis zmian" && git push
+# na serwerze: cd ~/public_html && git pull origin main
 ```
 
-### 2. Upload przez FTP
-
-Wgraj następujące elementy do `public_html/`:
-
-```
-public_html/
-├── index.html          # z frontend/dist/
-├── assets/             # z frontend/dist/assets/
-├── api/                # cały folder api/
-│   ├── (wszystkie pliki PHP)
-│   ├── vendor/         # ważne!
-│   └── .env            # uzupełnij prawidłowe dane
-└── .htaccess           # routing
-```
-
-### 3. Plik .htaccess
-
-```apache
-RewriteEngine On
-
-# HTTPS redirect
-RewriteCond %{HTTPS} off
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-# API routes - przekaż do PHP
-RewriteRule ^api/(.*)$ api/$1 [L]
-
-# React SPA - wszystko inne do index.html
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.html [L]
-```
+Na Windows wystarczy uruchomić `deploy.bat`.
 
 ## 🔐 Logowanie
 
-**Domyślne dane:**
-- Login: `admin`
-- Hasło: `password` (zmień w produkcji!)
+Ze względów bezpieczeństwa schemat bazy **nie zawiera** domyślnego użytkownika. Po utworzeniu bazy wygeneruj hash własnego hasła:
 
-Aby zmienić hasło, wygeneruj nowy hash:
-```php
-echo password_hash('nowe_haslo', PASSWORD_BCRYPT);
+```bash
+php -r "echo password_hash('TWOJE_HASLO', PASSWORD_DEFAULT), PHP_EOL;"
 ```
 
-I zaktualizuj w tabeli `users`.
+i utwórz użytkownika:
+
+```sql
+INSERT INTO users (username, password_hash, email)
+VALUES ('admin', '<WYGENEROWANY_HASH>', 'twoj-email@example.com');
+```
+
+Logowanie ma limit prób (5 nieudanych na login+IP w ciągu 15 minut — wymaga tabeli `login_attempts`, dla istniejącej bazy uruchom `php api/migrations/add_login_attempts.php`).
+
+**Wymagane zmienne w `api/.env`:** m.in. `JWT_SECRET` (bez niego API odrzuci logowanie) — pełna lista w `api/.env.example`.
+
+> Skrypty w `api/migrations/` można uruchamiać wyłącznie z linii poleceń (CLI) — dostęp przez HTTP jest zablokowany.
 
 ## 📱 Funkcje
 

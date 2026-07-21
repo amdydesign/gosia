@@ -4,14 +4,8 @@
  * PUT /api/ideas/update.php?id=1
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('PUT');
 
 try {
     $userId = getCurrentUserId();
@@ -22,8 +16,7 @@ try {
         Response::error('ID is required', 400);
     }
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Verify ownership
     $checkQuery = "SELECT id FROM ideas WHERE id = :id AND user_id = :user_id";
@@ -65,7 +58,7 @@ try {
     Response::success(['message' => 'Idea updated successfully']);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Update failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to update idea', 500);

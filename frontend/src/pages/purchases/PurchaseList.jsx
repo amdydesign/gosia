@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Plus, ShoppingBag, Calendar, Clock, RotateCcw } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
-import { formatCurrency, formatDate, getReturnUrgency } from '../../utils/format';
+import { formatCurrency, getReturnUrgency } from '../../utils/format';
 
 export default function PurchaseList() {
     const { token } = useAuth();
@@ -76,6 +76,10 @@ export default function PurchaseList() {
                     Wszystkie
                 </button>
             </div>
+
+            {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2 mb-4">{error}</div>
+            )}
 
             {/* List */}
             {loading ? (

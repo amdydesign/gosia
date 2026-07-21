@@ -7,15 +7,8 @@
  * Response: { "success": true, "data": { "token": "...", "user": {...} } }
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/JWTHandler.php';
-require_once __DIR__ . '/../config/Response.php';
-
-// Only allow POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('POST');
 
 // Get POST data
 $input = json_decode(file_get_contents('php://input'), true);
@@ -32,9 +25,40 @@ if (empty($username) || empty($password)) {
 }
 
 try {
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
+
+    // Rate limiting: max 5 nieudanych prob na login+IP w ciagu 15 minut.
+    // try/catch, zeby brak tabeli (niewykonana migracja) nie blokowal logowania.
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $rateLimitAvailable = true;
+    try {
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) AS cnt FROM login_attempts
+             WHERE username = :username AND ip_address = :ip
+               AND attempted_at > (NOW() - INTERVAL 15 MINUTE)"
+        );
+        $stmt->execute(['username' => $username, 'ip' => $ip]);
+        $attempts = (int) $stmt->fetch()['cnt'];
+
+        if ($attempts >= 5) {
+            Response::error('Zbyt wiele nieudanych prób logowania. Spróbuj ponownie za 15 minut.', 429);
+        }
+    } catch (PDOException $e) {
+        $rateLimitAvailable = false;
+    }
+
+    $recordFailedAttempt = function () use ($conn, $username, $ip, $rateLimitAvailable) {
+        if (!$rateLimitAvailable) {
+            return;
+        }
+        try {
+            $stmt = $conn->prepare("INSERT INTO login_attempts (username, ip_address) VALUES (:username, :ip)");
+            $stmt->execute(['username' => $username, 'ip' => $ip]);
+            $conn->exec("DELETE FROM login_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)");
+        } catch (PDOException $e) {
+            // Rate limiting nie moze zablokowac odpowiedzi logowania
+        }
+    };
 
     // Find user by username
     $stmt = $conn->prepare("SELECT id, username, password_hash, email, token_version FROM users WHERE username = :username LIMIT 1");
@@ -43,12 +67,24 @@ try {
 
     // Check if user exists
     if (!$user) {
+        $recordFailedAttempt();
         Response::error('Invalid username or password', 401);
     }
 
     // Verify password
     if (!password_verify($password, $user['password_hash'])) {
+        $recordFailedAttempt();
         Response::error('Invalid username or password', 401);
+    }
+
+    // Successful login clears the failure counter for this login+IP
+    if ($rateLimitAvailable) {
+        try {
+            $stmt = $conn->prepare("DELETE FROM login_attempts WHERE username = :username AND ip_address = :ip");
+            $stmt->execute(['username' => $username, 'ip' => $ip]);
+        } catch (PDOException $e) {
+            // ignoruj
+        }
     }
 
     // Update last login
@@ -75,7 +111,7 @@ try {
     ], 'Login successful');
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Login failed: ' . $e->getMessage(), 500);
     }
     Response::error('Login failed', 500);

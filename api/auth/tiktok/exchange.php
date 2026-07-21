@@ -4,14 +4,9 @@
  * POST /api/auth/tiktok/exchange.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
+requireMethod('POST');
 
 // Load credentials
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
@@ -29,9 +24,14 @@ try {
     $userId = getCurrentUserId();
     $input = json_decode(file_get_contents('php://input'), true);
     $code = $input['code'] ?? null;
+    $state = $input['state'] ?? null;
 
     if (!$code) {
         Response::error('Brak kodu autoryzacji', 400);
+    }
+
+    if (!$state || !OAuthState::validate($state, $userId, 'tiktok')) {
+        Response::error('Nieprawidłowy lub wygasły parametr state — spróbuj połączyć konto ponownie', 400);
     }
 
     // Exchange code for access token
@@ -53,7 +53,6 @@ try {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/x-www-form-urlencoded'
     ]);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -80,7 +79,6 @@ try {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         "Authorization: Bearer $accessToken"
     ]);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
     $userResponse = curl_exec($ch);
     curl_close($ch);
@@ -96,8 +94,7 @@ try {
     $followerCount = $user['follower_count'] ?? 0;
 
     // Save to DB
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Save connection
     $stmt = $conn->prepare("
@@ -112,8 +109,8 @@ try {
     $stmt->execute([
         'uid' => $userId,
         'puid' => $openId,
-        'at' => $accessToken,
-        'rt' => $refreshToken,
+        'at' => Crypto::encrypt($accessToken),
+        'rt' => Crypto::encrypt($refreshToken),
         'exp' => $expiresAt
     ]);
 
@@ -139,5 +136,8 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Błąd: ' . $e->getMessage(), 500);
+    }
+    Response::error('Nie udało się połączyć z TikTok', 500);
 }

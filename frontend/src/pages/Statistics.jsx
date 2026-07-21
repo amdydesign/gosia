@@ -21,8 +21,11 @@ export default function Statistics() {
     const [editingPlatform, setEditingPlatform] = useState(null);
     const [editValue, setEditValue] = useState('');
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
     const [isExportOpen, setIsExportOpen] = useState(false);
+    const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
+    const [youtubeChannelId, setYoutubeChannelId] = useState('');
 
     useEffect(() => {
         loadStats();
@@ -34,7 +37,6 @@ export default function Statistics() {
 
         // 1. Check Instagram
         if (currentStats?.instagram?.date !== today) {
-            console.log('Auto-refreshing Instagram...');
             statsService.scrapeInstagram().then(res => {
                 if (res.success) {
                     setSocialStats(prev => ({
@@ -43,12 +45,11 @@ export default function Statistics() {
                     }));
                     showToast(`Instagram zaktualizowany: ${res.followers}`, 'success');
                 }
-            }).catch(e => console.error('Auto-Instagram Error:', e));
+            }).catch(() => { /* auto-refresh cichy — błąd pomijamy */ });
         }
 
         // 2. Check Facebook
         if (currentStats?.facebook?.date !== today) {
-            console.log('Auto-refreshing Facebook...');
             statsService.scrapeFacebook().then(res => {
                 if (res.success) {
                     setSocialStats(prev => ({
@@ -57,7 +58,7 @@ export default function Statistics() {
                     }));
                     showToast(`Facebook zaktualizowany: ${res.followers}`, 'success');
                 }
-            }).catch(e => console.error('Auto-Facebook Error:', e));
+            }).catch(() => { /* auto-refresh cichy — błąd pomijamy */ });
         }
     };
 
@@ -73,16 +74,16 @@ export default function Statistics() {
 
             let currentSocial = null;
 
-            // Load independent parts
+            // Load independent parts — częściowy błąd nie blokuje reszty
             try {
                 const dashRes = await statsService.getDashboard();
                 if (dashRes.success) setDashboardStats(dashRes.data);
-            } catch (e) { console.error('Dashboard stats error', e); }
+            } catch { /* pomijamy — sekcja pozostanie pusta */ }
 
             try {
                 const monthRes = await statsService.getMonthly();
                 if (monthRes.success) setMonthlyStats(monthRes.data);
-            } catch (e) { console.error('Monthly stats error', e); }
+            } catch { /* pomijamy */ }
 
             try {
                 const socialRes = await statsService.getSocialCurrent();
@@ -90,20 +91,19 @@ export default function Statistics() {
                     setSocialStats(socialRes.data);
                     currentSocial = socialRes.data;
                 }
-            } catch (e) { console.error('Social stats error', e); }
+            } catch { /* pomijamy */ }
 
             try {
                 const statusRes = await statsService.getSocialStatus();
                 if (statusRes.success) setConnectedPlatforms(statusRes.data);
-            } catch (e) { console.error('Social status error', e); }
+            } catch { /* pomijamy */ }
 
             // Trigger background refresh if data is stale
             if (currentSocial) {
                 handleAutoRefresh(currentSocial);
             }
 
-        } catch (err) {
-            console.error('Error loading stats:', err);
+        } catch {
             setError('Wystąpił błąd podczas ładowania danych. Spróbuj odświeżyć stronę.');
         } finally {
             setLoading(false);
@@ -117,21 +117,8 @@ export default function Statistics() {
 
     const handleConnectSocial = async (platform) => {
         if (platform === 'youtube') {
-            const channelId = prompt("Wprowadź ID swojego kanału YouTube (np. UC...):");
-            if (!channelId) return;
-
-            try {
-                const res = await statsService.connectYouTubePublic(channelId);
-                if (res.success) {
-                    showToast(`✅ Sukces! ${res.data.message}`, 'success');
-                    loadStats();
-                } else {
-                    alert('Błąd: ' + res.message);
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Błąd połączenia z serwerem.');
-            }
+            setYoutubeChannelId('');
+            setYoutubeModalOpen(true);
             return;
         }
 
@@ -141,11 +128,27 @@ export default function Statistics() {
             if (res.success && res.data.url) {
                 window.location.href = res.data.url;
             } else {
-                alert('Funkcja nie jest jeszcze skonfigurowana. Sprawdź api/config/social_credentials.php');
+                showToast('Funkcja nie jest jeszcze skonfigurowana (api/config/social_credentials.php).', 'error');
+            }
+        } catch {
+            showToast('Wystąpił błąd podczas inicjowania połączenia.', 'error');
+        }
+    };
+
+    const handleConnectYoutube = async () => {
+        const channelId = youtubeChannelId.trim();
+        if (!channelId) return;
+        try {
+            const res = await statsService.connectYouTubePublic(channelId);
+            if (res.success) {
+                showToast(`Połączono z kanałem: ${res.data.message}`, 'success');
+                setYoutubeModalOpen(false);
+                loadStats();
+            } else {
+                showToast(res.message || 'Nie udało się połączyć kanału', 'error');
             }
         } catch (e) {
-            console.error(e);
-            alert('Wystąpił błąd podczas inicjowania połączenia.');
+            showToast(e.message || 'Błąd połączenia z serwerem.', 'error');
         }
     };
 
@@ -158,12 +161,9 @@ export default function Statistics() {
                     instagram: { ...prev.instagram, count: res.followers }
                 }));
                 return res.followers;
-            } else {
-                console.error('Instagram Error:', res.error);
-                return null;
             }
-        } catch (e) {
-            console.error(e);
+            return null;
+        } catch {
             return null;
         }
     };
@@ -177,18 +177,15 @@ export default function Statistics() {
                     facebook: { ...prev.facebook, count: res.followers }
                 }));
                 return res.followers;
-            } else {
-                console.error('Facebook Error:', res.error);
-                return null;
             }
-        } catch (e) {
-            console.error(e);
+            return null;
+        } catch {
             return null;
         }
     };
 
     const handleRefreshAll = async () => {
-        setLoading(true);
+        setRefreshing(true);
         const [ig, fb] = await Promise.all([handleScrapeInstagram(), handleScrapeFacebook()]);
 
         let msg = '';
@@ -196,9 +193,9 @@ export default function Statistics() {
         if (fb) msg += `FB: ${fb}`;
 
         if (msg) showToast(`Zaktualizowano! ${msg}`, 'success');
-        else showToast('Nie udało się pobrać nowych danych (sprawdź konsolę)', 'error');
+        else showToast('Nie udało się pobrać nowych danych', 'error');
 
-        setLoading(false);
+        setRefreshing(false);
     };
 
 
@@ -215,8 +212,8 @@ export default function Statistics() {
                 }));
                 setEditingPlatform(null);
             }
-        } catch (err) {
-            console.error('Failed to update social stats', err);
+        } catch {
+            showToast('Nie udało się zapisać statystyki', 'error');
         }
     };
 
@@ -258,11 +255,11 @@ export default function Statistics() {
             {
                 label: 'Zarobki (PLN)',
                 data: monthlyStats?.monthly?.map(m => m.value) || [],
-                backgroundColor: 'rgba(124, 58, 237, 0.6)', // Primary purple
-                borderColor: 'rgba(124, 58, 237, 1)',
+                backgroundColor: 'rgba(192, 132, 160, 0.6)', // primary (#c084a0)
+                borderColor: 'rgba(192, 132, 160, 1)',
                 borderWidth: 2,
                 borderRadius: 8,
-                hoverBackgroundColor: 'rgba(124, 58, 237, 0.8)'
+                hoverBackgroundColor: 'rgba(192, 132, 160, 0.8)'
             }
         ]
     };
@@ -352,12 +349,12 @@ export default function Statistics() {
                     </h3>
                     <button
                         onClick={handleRefreshAll}
-                        className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors flex items-center gap-2 text-sm font-medium"
+                        className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-primary transition-colors flex items-center gap-2 text-sm font-medium disabled:opacity-60"
                         title="Odśwież wszystkie statystyki"
-                        disabled={loading}
+                        disabled={refreshing}
                     >
-                        <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-                        <span>Odśwież</span>
+                        <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+                        <span>{refreshing ? 'Odświeżanie…' : 'Odśwież'}</span>
                     </button>
                 </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -387,9 +384,14 @@ export default function Statistics() {
                                             onKeyDown={(e) => e.key === 'Enter' && handleSaveSocial()}
                                         />
                                     ) : (
-                                        <div className="text-2xl font-bold text-gray-900">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleEditSocial(platform.id, data.count)}
+                                            className="text-2xl font-bold text-gray-900 hover:text-primary transition-colors"
+                                            title="Kliknij, aby edytować"
+                                        >
                                             {data.count.toLocaleString()}
-                                        </div>
+                                        </button>
                                     )}
                                 </div>
 
@@ -535,6 +537,33 @@ export default function Statistics() {
                 isOpen={isExportOpen}
                 onClose={() => setIsExportOpen(false)}
             />
+
+            {/* Modal: podłączenie kanału YouTube po Channel ID */}
+            {youtubeModalOpen && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setYoutubeModalOpen(false)}>
+                    <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Połącz kanał YouTube</h3>
+                        <p className="text-sm text-gray-500 mb-4">Wprowadź ID kanału (np. <span className="font-mono">UC…</span>).</p>
+                        <input
+                            type="text"
+                            value={youtubeChannelId}
+                            onChange={(e) => setYoutubeChannelId(e.target.value)}
+                            placeholder="UCxxxxxxxxxxxxxxxxxxxxxx"
+                            autoFocus
+                            onKeyDown={(e) => e.key === 'Enter' && handleConnectYoutube()}
+                            className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 mb-4"
+                        />
+                        <div className="flex gap-2 justify-end">
+                            <button onClick={() => setYoutubeModalOpen(false)} className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
+                                Anuluj
+                            </button>
+                            <button onClick={handleConnectYoutube} disabled={!youtubeChannelId.trim()} className="px-4 py-2 rounded-xl bg-primary text-white hover:bg-purple-700 transition-colors disabled:opacity-50">
+                                Połącz
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

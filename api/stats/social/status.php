@@ -4,19 +4,12 @@
  * GET /api/stats/social/status.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../../bootstrap.php';
+requireMethod('GET');
 
 try {
     $userId = getCurrentUserId();
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $stmt = $conn->prepare("SELECT provider, created_at FROM social_connections WHERE user_id = :uid");
     $stmt->execute(['uid' => $userId]);

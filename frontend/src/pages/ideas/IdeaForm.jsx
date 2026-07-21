@@ -32,7 +32,7 @@ export default function IdeaForm() {
                 content: data.content,
                 status: data.status
             });
-        } catch (err) {
+        } catch {
             setError('Błąd ładowania danych');
         } finally {
             setInitialLoading(false);

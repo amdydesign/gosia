@@ -1,6 +1,10 @@
 # Dependencies
 /node_modules/
 
+# Build artifacts (posrednie wyjscie Vite; zdeployowane kopie sa w root: index.html + assets/)
+/build/
+/public_build/
+
 # Environment
 .env
 

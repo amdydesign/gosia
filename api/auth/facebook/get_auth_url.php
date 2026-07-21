@@ -4,8 +4,9 @@
  * GET /api/auth/facebook/get_auth_url.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
+$userId = getCurrentUserId();
 
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
 if (!file_exists($credsPath)) {
@@ -25,7 +26,7 @@ $params = [
     'redirect_uri' => $fb['redirect_uri'],
     'scope' => 'public_profile',
     'response_type' => 'code',
-    'state' => bin2hex(random_bytes(16))
+    'state' => OAuthState::generate($userId, 'facebook')
 ];
 
 $url = 'https://www.facebook.com/v18.0/dialog/oauth?' . http_build_query($params);

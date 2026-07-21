@@ -1,16 +1,10 @@
 <?php
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
+require_once __DIR__ . '/../bootstrap.php';
 // Authenticate user
 $user = requireAuth();
 
 // Only POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('POST');
 
 $input = json_decode(file_get_contents('php://input'), true);
 $currentPassword = $input['current_password'] ?? '';
@@ -26,8 +20,7 @@ if (strlen($newPassword) < 6) {
 }
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // 1. Get current hash
     $stmt = $conn->prepare("SELECT password_hash FROM users WHERE id = :id");
@@ -56,5 +49,8 @@ try {
     Response::success(null, 'Hasło zostało pomyślnie zmienione.');
 
 } catch (Exception $e) {
-    Response::error('Wystąpił błąd serwera: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Wystąpił błąd serwera: ' . $e->getMessage(), 500);
+    }
+    Response::error('Wystąpił błąd serwera', 500);
 }

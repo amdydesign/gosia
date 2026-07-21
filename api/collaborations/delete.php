@@ -6,15 +6,8 @@
  * Response: { "success": true, "message": "Deleted" }
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-// Only allow DELETE
-if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('DELETE');
 
 try {
     // Authenticate
@@ -26,9 +19,7 @@ try {
         Response::error('Invalid collaboration ID', 400);
     }
 
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Check if collaboration exists and belongs to user
     $stmt = $conn->prepare("SELECT id FROM collaborations WHERE id = :id AND user_id = :user_id LIMIT 1");
@@ -46,7 +37,7 @@ try {
     Response::success(null, 'Collaboration deleted successfully');
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to delete collaboration: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to delete collaboration', 500);

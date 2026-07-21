@@ -91,10 +91,6 @@ export default function Login() {
                                 />
                                 <label htmlFor="rememberMe" className="text-sm text-gray-600">Nie wylogowuj mnie</label>
                             </div>
-
-                            <a href="/forgot-password" className="text-sm font-medium text-purple-600 hover:text-purple-700 transition-colors">
-                                Nie pamiętam hasła
-                            </a>
                         </div>
 
                         <button

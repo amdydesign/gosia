@@ -1,7 +1,20 @@
 -- =====================================================
 -- GOSIA 2.0 STYLIST MANAGER - DATABASE SCHEMA
 -- MySQL Database Initialization Script (UPDATED)
+--
+-- Ten plik jest JEDYNYM źródłem prawdy dla świeżej instalacji.
+-- Zmiany w istniejącej bazie: api/migrations/ (php api/migrations/run.php)
 -- =====================================================
+
+-- =====================================================
+-- TABELA: migrations (rejestr wykonanych migracji)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS migrations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
 -- TABELA: users
@@ -11,10 +24,11 @@ CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    token_version INT NOT NULL DEFAULT 1,
     email VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP NULL,
-    
+
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -26,7 +40,12 @@ CREATE TABLE IF NOT EXISTS collaborations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     brand VARCHAR(100) NOT NULL,
-    type ENUM('post-instagram', 'story', 'reel', 'sesja', 'konsultacja', 'event', 'inne') NOT NULL DEFAULT 'inne',
+    -- type: kategoria merytoryczna wspolpracy
+    type ENUM('post-instagram', 'story', 'reel', 'sesja', 'konsultacja', 'event', 'umowa-praca', 'inne') NOT NULL DEFAULT 'inne',
+    -- collab_type: sposob rozliczenia (dozwolone wartosci: config/Validator.php::COLLAB_BILLING_TYPES)
+    collab_type VARCHAR(50) NOT NULL DEFAULT 'other',
+    -- fiscal_tracking: czy wspolpraca wliczana do rozliczen podatkowych (gotowka = 0)
+    fiscal_tracking BOOLEAN NOT NULL DEFAULT TRUE,
     amount_net DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     amount_gross DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     date DATE NOT NULL,
@@ -34,11 +53,13 @@ CREATE TABLE IF NOT EXISTS collaborations (
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
     INDEX idx_date (date),
-    INDEX idx_payment_status (payment_status)
+    INDEX idx_payment_status (payment_status),
+    INDEX idx_collab_type (collab_type),
+    INDEX idx_fiscal_tracking (fiscal_tracking)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
@@ -108,9 +129,10 @@ CREATE TABLE IF NOT EXISTS purchases (
     purchase_url VARCHAR(255),
     notes TEXT,
     status ENUM('kept', 'returned', 'partial') DEFAULT 'kept',
+    returned_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
     INDEX idx_purchase_date (purchase_date),
@@ -175,11 +197,24 @@ CREATE TABLE IF NOT EXISTS attachments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
--- PIERWSZY UŻYTKOWNIK
--- Login: admin / Hasło: password
--- WAŻNE: Zmień hasło po pierwszym logowaniu!
+-- LIMIT PRÓB LOGOWANIA (rate limiting)
 -- =====================================================
 
-INSERT INTO users (username, password_hash, email) VALUES 
-('admin', '$2y$12$QaVmcvONpCjvZOSMR1Oc2O.3ot1wzzleG2Rz4zBTZwqTAAjJMf5JC', 'gosia@example.com')
-ON DUPLICATE KEY UPDATE username = username;
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_login_attempts (username, ip_address, attempted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- PIERWSZY UŻYTKOWNIK
+-- Ze względów bezpieczeństwa schemat NIE zawiera domyślnego hasła.
+-- Utwórz użytkownika ręcznie, generując hash własnego hasła:
+--   php -r "echo password_hash('TWOJE_HASLO', PASSWORD_DEFAULT), PHP_EOL;"
+-- a następnie:
+--   INSERT INTO users (username, password_hash, email)
+--   VALUES ('admin', '<WYGENEROWANY_HASH>', 'twoj-email@example.com');
+-- =====================================================

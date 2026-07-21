@@ -4,14 +4,8 @@
  * POST /api/stats/social/update.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../../bootstrap.php';
+requireMethod('POST');
 
 try {
     $userId = getCurrentUserId();
@@ -29,8 +23,7 @@ try {
         Response::error('Count cannot be negative', 400);
     }
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Upsert: Insert or Update if exists for today
     $stmt = $conn->prepare("
@@ -50,7 +43,7 @@ try {
     Response::success(['message' => 'Stats updated', 'platform' => $platform, 'count' => $count]);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Update failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to update stats', 500);

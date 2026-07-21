@@ -14,6 +14,7 @@ export default function SocialCallback() {
         if (processed) return;
 
         const code = searchParams.get('code');
+        const state = searchParams.get('state');
         const error = searchParams.get('error');
 
         if (error) {
@@ -35,7 +36,7 @@ export default function SocialCallback() {
                 // Determine platform from URL param or default
                 const targetPlatform = platform || 'youtube';
 
-                const res = await statsService.exchangeSocialCode(targetPlatform, code);
+                const res = await statsService.exchangeSocialCode(targetPlatform, code, state);
                 if (res.success) {
                     setStatus('success');
                     setMessage(`Pomyślnie połączono z ${targetPlatform === 'youtube' ? 'YouTube' : targetPlatform}!\nKonto: ${res.data?.channel || ''}`);
@@ -43,8 +44,7 @@ export default function SocialCallback() {
                     setStatus('error');
                     setMessage(res.message || 'Wystąpił błąd podczas wymiany tokena.');
                 }
-            } catch (err) {
-                console.error(err);
+            } catch {
                 setStatus('error');
                 setMessage('Błąd komunikacji z serwerem.');
             } finally {

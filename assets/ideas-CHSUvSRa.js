@@ -1,0 +1,1 @@
+import{g as t}from"./index-BU7ha5PJ.js";const r={getAll:async(n,e="all")=>t(`/ideas/index.php?status=${e}`,"GET",null),getOne:async(n,e)=>t(`/ideas/show.php?id=${e}`,"GET",null),create:async(n,e)=>t("/ideas/create.php","POST",e),update:async(n,e,a)=>t(`/ideas/update.php?id=${e}`,"PUT",a),delete:async(n,e)=>t(`/ideas/delete.php?id=${e}`,"DELETE",null)};export{r as i};

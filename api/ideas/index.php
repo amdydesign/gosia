@@ -4,21 +4,14 @@
  * GET /api/ideas/index.php
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('GET');
 
 try {
     $userId = getCurrentUserId();
     $status = isset($_GET['status']) ? $_GET['status'] : 'all'; // all, draft, recorded
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $query = "
         SELECT id, title, content, status, created_at, updated_at
@@ -43,7 +36,7 @@ try {
     Response::success($ideas);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Fetch failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to fetch ideas', 500);

@@ -1,56 +1,78 @@
 /**
- * API Service - Base configuration and request handling
+ * Jedyny klient API aplikacji (fetch).
+ *
+ * Kontrakt:
+ *  - metody get/post/put/del/delete zwracają PEŁNĄ kopertę { success, message, data }
+ *  - token pobierany z jednego miejsca (local/session storage)
+ *  - 401 czyści oba magazyny i przekierowuje na /login (jeden punkt obsługi)
+ *  - błąd sieci/serwera rzuca obiekt { success:false, message, errors } — spójny kształt
  */
 
-import axios from 'axios';
-
-// Base URL - empty for same-origin (will use proxy in dev, same domain in prod)
 const API_BASE_URL = '/api';
 
-// Create axios instance
-const api = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
+function getToken() {
+    return localStorage.getItem('token') || sessionStorage.getItem('token');
+}
 
-// Request interceptor - add auth token
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
+function clearSession() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+}
 
-// Response interceptor - handle errors
-api.interceptors.response.use(
-    (response) => response.data,
-    (error) => {
-        if (error.response) {
-            // Server responded with error
-            if (error.response.status === 401) {
-                // Unauthorized - clear token from both storages and redirect to login
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                sessionStorage.removeItem('token');
-                sessionStorage.removeItem('user');
-                window.location.href = '/login';
-            }
-            throw error.response.data;
-        } else if (error.request) {
-            // No response received
-            throw { success: false, message: 'Brak połączenia z serwerem' };
-        } else {
-            throw { success: false, message: error.message };
-        }
+async function request(endpoint, { method = 'GET', body = null } = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = getToken();
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
     }
-);
+
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            method,
+            headers,
+            ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+    } catch {
+        throw { success: false, message: 'Brak połączenia z serwerem' };
+    }
+
+    if (response.status === 401) {
+        clearSession();
+        if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+        }
+        throw { success: false, message: 'Sesja wygasła. Zaloguj się ponownie.' };
+    }
+
+    let data = {};
+    try {
+        data = await response.json();
+    } catch {
+        // odpowiedzi bez ciała zostawiamy jako pustą kopertę
+    }
+
+    if (!response.ok || data.success === false) {
+        throw {
+            success: false,
+            message: data.message || 'Wystąpił błąd serwera',
+            errors: data.errors,
+        };
+    }
+
+    return data;
+}
+
+const api = {
+    get: (endpoint) => request(endpoint, { method: 'GET' }),
+    post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
+    put: (endpoint, body) => request(endpoint, { method: 'PUT', body }),
+    del: (endpoint) => request(endpoint, { method: 'DELETE' }),
+    delete: (endpoint) => request(endpoint, { method: 'DELETE' }),
+    getToken,
+    clearSession,
+};
 
 export default api;

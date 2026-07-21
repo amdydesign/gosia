@@ -5,15 +5,10 @@
  * Fields: file, entity_type (collaboration|purchase), entity_id
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/helpers.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('POST');
 
 try {
     $userId = getCurrentUserId();
@@ -49,8 +44,7 @@ try {
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = $finfo->file($file['tmp_name']) ?: 'application/octet-stream';
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $entityType = attachmentsCheckEntity($conn, $userId, $entityType, $entityId);
 

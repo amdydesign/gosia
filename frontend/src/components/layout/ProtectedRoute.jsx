@@ -3,7 +3,7 @@
  * Redirects to login if not authenticated
  */
 
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ProtectedRoute({ children }) {
@@ -23,5 +23,6 @@ export default function ProtectedRoute({ children }) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    return children;
+    // Wspiera zarówno zagnieżdżone trasy (<Outlet/>), jak i pojedyncze dziecko
+    return children ?? <Outlet />;
 }

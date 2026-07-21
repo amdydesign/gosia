@@ -4,22 +4,18 @@
  * GET /api/purchases/index.php
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('GET');
 
 try {
     $userId = getCurrentUserId();
     $status = isset($_GET['status']) ? $_GET['status'] : 'all'; // all, kept, returned, partial
-    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
+    if ($status !== 'all') {
+        Validator::requireEnum($status, Validator::PURCHASE_STATUSES, 'status');
+    }
+    $limit = isset($_GET['limit']) ? max(1, min(500, intval($_GET['limit']))) : 50;
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $query = "
         SELECT 
@@ -42,18 +38,18 @@ try {
     // Sort: Urgent items first (if kept), otherwise new first
     $query .= " ORDER BY CASE WHEN status = 'kept' THEN days_remaining ELSE 9999 END ASC, created_at DESC LIMIT :limit";
 
-    // Prepare needs to handle LIMIT with bindValue/bindParam for INT (PDO quirk)
-    // Safer to just embed limit if it's sanitized intval
-    $query = str_replace(':limit', $limit, $query);
-
     $stmt = $conn->prepare($query);
-    $stmt->execute($params);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
     $purchases = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     Response::success($purchases);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Fetch failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to fetch purchases', 500);

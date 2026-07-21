@@ -7,23 +7,14 @@
  * Response: { "success": true, "data": [...] }
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-// Only allow GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('GET');
 
 try {
     // Authenticate
     $userId = getCurrentUserId();
 
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Build query with optional filter
     $sql = "SELECT * FROM collaborations WHERE user_id = :user_id";
@@ -45,7 +36,7 @@ try {
     Response::success($collaborations);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to fetch collaborations: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to fetch collaborations', 500);
