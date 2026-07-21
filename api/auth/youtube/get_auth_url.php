@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../../config/cors.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
 require_once __DIR__ . '/../../middleware/auth.php';
 
 // Check if credentials file exists
@@ -57,10 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 try {
-    // Just verify auth
-    /* $userId = getCurrentUserId(); This might fail if token not passed in query/header of this direct link. 
-       Actually, if we use the "Frontend handles callback" approach, this current script just returns JSON URL.
-    */
+    $userId = getCurrentUserId();
 
     // Scopes needed
     $scope = 'https://www.googleapis.com/auth/youtube.readonly';
@@ -71,7 +69,8 @@ try {
         'response_type' => 'code',
         'scope' => $scope,
         'access_type' => 'offline', // For refresh token
-        'prompt' => 'consent' // Force prompts to ensure we get refresh token
+        'prompt' => 'consent', // Force prompts to ensure we get refresh token
+        'state' => OAuthState::generate($userId, 'youtube')
     ];
 
     $url = 'https://accounts.google.com/o/oauth2/auth?' . http_build_query($params);
@@ -79,5 +78,8 @@ try {
     Response::success(['url' => $url]);
 
 } catch (Exception $e) {
-    Response::error('Error: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Error: ' . $e->getMessage(), 500);
+    }
+    Response::error('Error', 500);
 }

@@ -50,7 +50,7 @@ try {
     Response::success(['message' => 'Stats updated', 'platform' => $platform, 'count' => $count]);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Update failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to update stats', 500);

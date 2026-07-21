@@ -22,7 +22,10 @@ class JWTHandler
         $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
         $dotenv->safeLoad(); // safeLoad won't throw if already loaded
 
-        $this->secret = $_ENV['JWT_SECRET'];
+        $this->secret = $_ENV['JWT_SECRET'] ?? '';
+        if ($this->secret === '') {
+            throw new Exception('JWT_SECRET is not configured (set it in api/.env)');
+        }
         $this->issuer = $_ENV['APP_URL'] ?? 'gosia-stylist-manager';
     }
 

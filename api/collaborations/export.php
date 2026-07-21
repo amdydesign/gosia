@@ -182,7 +182,7 @@ try {
     fclose($output);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         http_response_code(500);
         echo 'Export failed: ' . $e->getMessage();
     } else {

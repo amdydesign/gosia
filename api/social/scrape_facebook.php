@@ -1,15 +1,10 @@
 <?php
-header("Access-Control-Allow-Origin: *");
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
+require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
+require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../middleware/auth.php';
+
+$currentUserId = getCurrentUserId();
 
 // Instantiate Database to load .env
 $db = new Database();
@@ -87,7 +82,7 @@ try {
     // Database already instantiated at top of file
     $conn = $db->getConnection();
 
-    $userId = 1;
+    $userId = $currentUserId;
     $platform = 'facebook';
     $date = date('Y-m-d');
 
@@ -114,5 +109,9 @@ try {
     }
 
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Błąd zapisu do bazy.']);
+    }
 }

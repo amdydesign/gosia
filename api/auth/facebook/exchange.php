@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../../config/cors.php';
 require_once __DIR__ . '/../../config/Database.php';
 require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
 require_once __DIR__ . '/../../middleware/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -28,9 +29,14 @@ try {
     $userId = getCurrentUserId();
     $input = json_decode(file_get_contents('php://input'), true);
     $code = $input['code'] ?? null;
+    $state = $input['state'] ?? null;
 
     if (!$code) {
         Response::error('Brak kodu autoryzacji', 400);
+    }
+
+    if (!$state || !OAuthState::validate($state, $userId, 'facebook')) {
+        Response::error('Nieprawidłowy lub wygasły parametr state — spróbuj połączyć konto ponownie', 400);
     }
 
     // Exchange code for access token
@@ -44,7 +50,6 @@ try {
 
     $ch = curl_init($tokenUrl . '?' . http_build_query($params));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     $response = curl_exec($ch);
     curl_close($ch);
 
@@ -60,7 +65,6 @@ try {
     $userUrl = "https://graph.facebook.com/v18.0/me?fields=id,name&access_token=$accessToken";
     $ch = curl_init($userUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     $userResponse = curl_exec($ch);
     curl_close($ch);
 
@@ -78,7 +82,6 @@ try {
     $pagesUrl = "https://graph.facebook.com/v18.0/me/accounts?fields=id,name,followers_count&access_token=$accessToken";
     $ch = curl_init($pagesUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     $pagesResponse = curl_exec($ch);
     curl_close($ch);
 
@@ -133,5 +136,8 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Błąd: ' . $e->getMessage(), 500);
+    }
+    Response::error('Nie udało się połączyć z Facebook', 500);
 }

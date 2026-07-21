@@ -95,5 +95,8 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd bazy danych: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Błąd bazy danych: ' . $e->getMessage(), 500);
+    }
+    Response::error('Błąd bazy danych', 500);
 }

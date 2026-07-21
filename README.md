@@ -105,16 +105,24 @@ RewriteRule . /index.html [L]
 
 ## 🔐 Logowanie
 
-**Domyślne dane:**
-- Login: `admin`
-- Hasło: `password` (zmień w produkcji!)
+Ze względów bezpieczeństwa schemat bazy **nie zawiera** domyślnego użytkownika. Po utworzeniu bazy wygeneruj hash własnego hasła:
 
-Aby zmienić hasło, wygeneruj nowy hash:
-```php
-echo password_hash('nowe_haslo', PASSWORD_BCRYPT);
+```bash
+php -r "echo password_hash('TWOJE_HASLO', PASSWORD_DEFAULT), PHP_EOL;"
 ```
 
-I zaktualizuj w tabeli `users`.
+i utwórz użytkownika:
+
+```sql
+INSERT INTO users (username, password_hash, email)
+VALUES ('admin', '<WYGENEROWANY_HASH>', 'twoj-email@example.com');
+```
+
+Logowanie ma limit prób (5 nieudanych na login+IP w ciągu 15 minut — wymaga tabeli `login_attempts`, dla istniejącej bazy uruchom `php api/migrations/add_login_attempts.php`).
+
+**Wymagane zmienne w `api/.env`:** m.in. `JWT_SECRET` (bez niego API odrzuci logowanie) — pełna lista w `api/.env.example`.
+
+> Skrypty w `api/migrations/` można uruchamiać wyłącznie z linii poleceń (CLI) — dostęp przez HTTP jest zablokowany.
 
 ## 📱 Funkcje
 

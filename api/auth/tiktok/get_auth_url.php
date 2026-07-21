@@ -6,6 +6,10 @@
 
 require_once __DIR__ . '/../../config/cors.php';
 require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
+require_once __DIR__ . '/../../middleware/auth.php';
+
+$userId = getCurrentUserId();
 
 // Load credentials
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
@@ -21,7 +25,7 @@ if (!$tiktok || empty($tiktok['client_key'])) {
 
 // TikTok OAuth 2.0 Authorization URL
 // https://developers.tiktok.com/doc/login-kit-web/
-$csrfState = bin2hex(random_bytes(16));
+$csrfState = OAuthState::generate($userId, 'tiktok');
 
 $params = [
     'client_key' => $tiktok['client_key'],

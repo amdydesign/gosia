@@ -88,7 +88,7 @@ try {
     Response::success($return, 'Return created successfully', 201);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to create return: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to create return', 500);

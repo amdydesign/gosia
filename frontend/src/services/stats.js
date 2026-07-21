@@ -41,8 +41,8 @@ export const statsService = {
         return await api.get(`/auth/${platform}/get_auth_url.php`);
     },
 
-    async exchangeSocialCode(platform, code) {
-        return await api.post(`/auth/${platform}/exchange.php`, { code });
+    async exchangeSocialCode(platform, code, state) {
+        return await api.post(`/auth/${platform}/exchange.php`, { code, state });
     },
 
     async connectYouTubePublic(channelId) {

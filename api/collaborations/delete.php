@@ -46,7 +46,7 @@ try {
     Response::success(null, 'Collaboration deleted successfully');
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to delete collaboration: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to delete collaboration', 500);

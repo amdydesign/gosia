@@ -85,7 +85,7 @@ try {
 } catch (Exception $e) {
     if (isset($conn))
         $conn->rollBack();
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to create: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to create collaboration', 500);

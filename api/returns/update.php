@@ -112,7 +112,7 @@ try {
     Response::success($return, 'Return updated successfully');
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to update return: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to update return', 500);

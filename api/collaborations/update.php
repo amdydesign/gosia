@@ -109,5 +109,8 @@ try {
 } catch (Exception $e) {
     if (isset($conn))
         $conn->rollBack();
-    Response::error('Update failed: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Update failed: ' . $e->getMessage(), 500);
+    }
+    Response::error('Update failed', 500);
 }

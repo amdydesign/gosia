@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../../config/cors.php';
 require_once __DIR__ . '/../../config/Database.php';
 require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
 require_once __DIR__ . '/../../middleware/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -25,9 +26,14 @@ try {
     $userId = getCurrentUserId(); // Authenticated via JWT
     $input = json_decode(file_get_contents('php://input'), true);
     $code = $input['code'] ?? null;
+    $state = $input['state'] ?? null;
 
     if (!$code) {
         Response::error('No code provided', 400);
+    }
+
+    if (!$state || !OAuthState::validate($state, $userId, 'youtube')) {
+        Response::error('Nieprawidłowy lub wygasły parametr state — spróbuj połączyć konto ponownie', 400);
     }
 
     // Exchange code for tokens
@@ -153,7 +159,7 @@ try {
     Response::success(['message' => 'Connected to YouTube', 'channel' => $channelTitle]);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Exchange failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to connect YouTube', 500);

@@ -42,7 +42,7 @@ class Database {
                 
                 $this->conn = new PDO($dsn, $this->username, $this->password, $options);
             } catch (PDOException $e) {
-                if ($_ENV['APP_DEBUG'] === 'true') {
+                if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
                     die(json_encode([
                         'success' => false,
                         'message' => 'Database connection failed: ' . $e->getMessage()

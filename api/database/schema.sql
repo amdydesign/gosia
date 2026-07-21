@@ -175,11 +175,24 @@ CREATE TABLE IF NOT EXISTS attachments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
--- PIERWSZY UŻYTKOWNIK
--- Login: admin / Hasło: password
--- WAŻNE: Zmień hasło po pierwszym logowaniu!
+-- LIMIT PRÓB LOGOWANIA (rate limiting)
 -- =====================================================
 
-INSERT INTO users (username, password_hash, email) VALUES 
-('admin', '$2y$12$QaVmcvONpCjvZOSMR1Oc2O.3ot1wzzleG2Rz4zBTZwqTAAjJMf5JC', 'gosia@example.com')
-ON DUPLICATE KEY UPDATE username = username;
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_login_attempts (username, ip_address, attempted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- PIERWSZY UŻYTKOWNIK
+-- Ze względów bezpieczeństwa schemat NIE zawiera domyślnego hasła.
+-- Utwórz użytkownika ręcznie, generując hash własnego hasła:
+--   php -r "echo password_hash('TWOJE_HASLO', PASSWORD_DEFAULT), PHP_EOL;"
+-- a następnie:
+--   INSERT INTO users (username, password_hash, email)
+--   VALUES ('admin', '<WYGENEROWANY_HASH>', 'twoj-email@example.com');
+-- =====================================================

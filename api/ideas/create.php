@@ -42,7 +42,7 @@ try {
     Response::success(['id' => $id, 'message' => 'Idea created successfully'], 201);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Creation failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to create idea', 500);

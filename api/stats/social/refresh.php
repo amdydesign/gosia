@@ -131,7 +131,9 @@ try {
             }
 
         } catch (Exception $e) {
-            $errors[$platform] = $e->getMessage();
+            $errors[$platform] = (($_ENV['APP_DEBUG'] ?? '') === 'true')
+                ? $e->getMessage()
+                : 'Nie udało się odświeżyć statystyk';
         }
     }
 
@@ -142,5 +144,8 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Błąd: ' . $e->getMessage(), 500);
+    }
+    Response::error('Błąd odświeżania statystyk', 500);
 }

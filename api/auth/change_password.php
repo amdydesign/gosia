@@ -56,5 +56,8 @@ try {
     Response::success(null, 'Hasło zostało pomyślnie zmienione.');
 
 } catch (Exception $e) {
-    Response::error('Wystąpił błąd serwera: ' . $e->getMessage(), 500);
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Wystąpił błąd serwera: ' . $e->getMessage(), 500);
+    }
+    Response::error('Wystąpił błąd serwera', 500);
 }

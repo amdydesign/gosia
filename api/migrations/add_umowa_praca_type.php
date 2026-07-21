@@ -1,4 +1,10 @@
 <?php
+// Migracje wolno uruchamiac wylacznie z CLI (php api/migrations/plik.php)
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    exit('Forbidden');
+}
+
 /**
  * Migration: Add 'umowa-praca' to collaborations.type ENUM
  */
