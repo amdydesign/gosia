@@ -1,10 +1,12 @@
-import React from 'react';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import MobileBottomNav from './MobileBottomNav';
+import { UrgentReturnsProvider } from '../../context/UrgentReturnsContext';
 
 export default function AppLayout({ children }) {
     return (
+        <UrgentReturnsProvider>
         <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
             {/* Sidebar for desktop */}
             <Sidebar />
@@ -15,7 +17,7 @@ export default function AppLayout({ children }) {
 
                 <main className="flex-1 p-4 lg:p-8 overflow-x-hidden pb-24 lg:pb-8">
                     <div className="max-w-6xl mx-auto w-full">
-                        {children}
+                        {children ?? <Outlet />}
                     </div>
                 </main>
             </div>
@@ -23,5 +25,6 @@ export default function AppLayout({ children }) {
             {/* Bottom Nav for mobile */}
             <MobileBottomNav />
         </div>
+        </UrgentReturnsProvider>
     );
 }

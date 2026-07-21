@@ -38,9 +38,8 @@ export default function ExportModal({ isOpen, onClose }) {
             document.body.removeChild(a);
 
             onClose();
-        } catch (err) {
+        } catch {
             setError('Nie udało się pobrać pliku. Spróbuj ponownie.');
-            console.error(err);
         } finally {
             setLoading(false);
         }

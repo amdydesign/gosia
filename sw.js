@@ -1,14 +1,21 @@
 /* Service Worker: app-shell cache + Web Push */
 
-const CACHE_NAME = 'gosia-v1';
+const CACHE_NAME = 'gosia-BU7ha5PJ';
 const PRECACHE = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
+    // Nie wołamy skipWaiting() od razu — nowy worker czeka, aż użytkownik
+    // kliknie "Odśwież" (patrz main.jsx), żeby nie podmieniać zasobów w trakcie sesji.
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then((cache) => cache.addAll(PRECACHE))
-            .then(() => self.skipWaiting())
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
     );
+});
+
+// Aktywacja nowej wersji na żądanie z aplikacji (przycisk w prompcie aktualizacji)
+self.addEventListener('message', (event) => {
+    if (event.data === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 self.addEventListener('activate', (event) => {

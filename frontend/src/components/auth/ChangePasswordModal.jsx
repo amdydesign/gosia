@@ -51,7 +51,6 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
             }, 2000);
 
         } catch (err) {
-            console.error(err);
             setError(err.message || 'Wystąpił błąd');
         } finally {
             setLoading(false);

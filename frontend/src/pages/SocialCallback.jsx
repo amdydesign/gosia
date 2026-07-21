@@ -44,8 +44,7 @@ export default function SocialCallback() {
                     setStatus('error');
                     setMessage(res.message || 'Wystąpił błąd podczas wymiany tokena.');
                 }
-            } catch (err) {
-                console.error(err);
+            } catch {
                 setStatus('error');
                 setMessage('Błąd komunikacji z serwerem.');
             } finally {

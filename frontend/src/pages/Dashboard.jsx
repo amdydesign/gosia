@@ -46,7 +46,7 @@ export default function Dashboard() {
         );
     }
 
-    const { financials, counts, upcoming } = stats || {};
+    const { financials, upcoming } = stats || {};
 
     return (
         <div className="space-y-8 pb-20">

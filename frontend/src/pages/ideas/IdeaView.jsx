@@ -11,6 +11,8 @@ export default function IdeaView() {
 
     const [idea, setIdea] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [actionError, setActionError] = useState(null);
     const [prompterMode, setPrompterMode] = useState(false);
     const [fontSize, setFontSize] = useState(36); // Prompter font size
 
@@ -19,37 +21,59 @@ export default function IdeaView() {
     }, [id]);
 
     const loadIdea = async () => {
+        setLoading(true);
+        setError(null);
         try {
             const data = await ideasService.getOne(token, id);
             setIdea(data);
         } catch (err) {
-            navigate('/ideas');
+            // Nie przekierowujemy przy chwilowym błędzie sieci — pokazujemy komunikat
+            setError(err?.message || 'Nie udało się wczytać pomysłu.');
         } finally {
             setLoading(false);
         }
     };
 
     const handleMarkAsRecorded = async () => {
+        setActionError(null);
         try {
             await ideasService.update(token, id, { status: 'recorded' });
             setIdea({ ...idea, status: 'recorded' });
         } catch (err) {
-            console.error(err);
+            setActionError(err?.message || 'Nie udało się zapisać zmiany.');
         }
     };
 
     const handleDelete = async () => {
         if (window.confirm('Czy na pewno chcesz usunąć ten pomysł?')) {
+            setActionError(null);
             try {
                 await ideasService.delete(token, id);
                 navigate('/ideas');
             } catch (err) {
-                console.error(err);
+                setActionError(err?.message || 'Nie udało się usunąć pomysłu.');
             }
         }
     };
 
     if (loading) return <div className="loading">Ładowanie...</div>;
+
+    if (error) {
+        return (
+            <div className="max-w-3xl mx-auto p-8 text-center">
+                <p className="text-red-600 mb-4">{error}</p>
+                <div className="flex gap-3 justify-center">
+                    <button onClick={loadIdea} className="px-6 py-2 rounded-xl bg-primary text-white hover:bg-purple-700 transition-colors">
+                        Spróbuj ponownie
+                    </button>
+                    <button onClick={() => navigate('/ideas')} className="px-6 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+                        Wróć do listy
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!idea) return null;
 
     // --- PROMPTER MODE ---
@@ -132,6 +156,10 @@ export default function IdeaView() {
                     </button>
                 </div>
             </header>
+
+            {actionError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2">{actionError}</p>
+            )}
 
             {/* Main Content Card */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">

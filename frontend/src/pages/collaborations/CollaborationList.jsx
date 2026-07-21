@@ -71,6 +71,10 @@ export default function CollaborationList() {
                 </button>
             </div>
 
+            {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2 mb-4">{error}</div>
+            )}
+
             {/* List */}
             {loading ? (
                 <div className="loading">Ładowanie...</div>
