@@ -6,23 +6,14 @@
  * Returns earnings by month for the last 6 months
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-// Only allow GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('GET');
 
 try {
     // Authenticate
     $userId = getCurrentUserId();
 
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Get earnings by month for last 6 months
     $stmt = $conn->prepare("

@@ -6,24 +6,16 @@
  * Returns aggregated statistics for the dashboard
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
 
-// Only allow GET
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('GET');
 
 try {
     // Authenticate
     $userId = getCurrentUserId();
 
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // 1. Yearly Financials (Total Gross & Net)
     // Sum of ALL paid collaborations for current year (Official + Private)

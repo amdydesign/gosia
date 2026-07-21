@@ -6,9 +6,7 @@
  * Exports collaborations to CSV
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
 
 // Only allow GET
@@ -22,9 +20,7 @@ try {
     $userId = getCurrentUserId();
     $mode = $_GET['mode'] ?? 'official';
 
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Prepare query based on mode
     // We select specific columns to be safe, including the new ones

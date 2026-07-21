@@ -17,9 +17,9 @@ class Database {
     private static $instance = null;
 
     public function __construct() {
-        // Load .env file
+        // Load .env file (safeLoad: no-op jesli juz zaladowane przez bootstrap)
         $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
-        $dotenv->load();
+        $dotenv->safeLoad();
         
         $this->host = $_ENV['DB_HOST'];
         $this->db_name = $_ENV['DB_NAME'];

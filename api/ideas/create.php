@@ -4,14 +4,8 @@
  * POST /api/ideas/create.php
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('POST');
 
 try {
     $userId = getCurrentUserId();
@@ -21,8 +15,7 @@ try {
         Response::error('Title is required', 400);
     }
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $query = "
         INSERT INTO ideas (user_id, title, content, status)

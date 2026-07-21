@@ -4,11 +4,8 @@
  * GET /api/auth/facebook/get_auth_url.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../bootstrap.php';
 require_once __DIR__ . '/../../config/OAuthState.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
 $userId = getCurrentUserId();
 
 $credsPath = __DIR__ . '/../../config/social_credentials.php';

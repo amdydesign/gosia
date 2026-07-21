@@ -1,17 +1,6 @@
 <?php
-// Migracje wolno uruchamiac wylacznie z CLI (php api/migrations/plik.php)
-if (php_sapi_name() !== 'cli') {
-    http_response_code(403);
-    exit('Forbidden');
-}
-
-require_once __DIR__ . '/../config/Database.php';
-
-try {
-    $db = new Database();
-    $conn = $db->getConnection();
-
-    echo "Creating push_subscriptions table...\n";
+// Tabele push_subscriptions i attachments (PWA + załączniki)
+return function (PDO $conn) {
     $conn->exec("
         CREATE TABLE IF NOT EXISTS push_subscriptions (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -27,9 +16,6 @@ try {
             INDEX idx_user_id (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    echo "OK\n";
-
-    echo "Creating attachments table...\n";
     $conn->exec("
         CREATE TABLE IF NOT EXISTS attachments (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -47,11 +33,5 @@ try {
             INDEX idx_user_id (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    echo "OK\n";
-
-    echo "Migration finished.\n";
-
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
-    exit(1);
-}
+    echo "    utworzono tabele push_subscriptions i attachments (jeśli brakowało)\n";
+};

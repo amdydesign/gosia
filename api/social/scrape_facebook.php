@@ -1,13 +1,7 @@
 <?php
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
+require_once __DIR__ . '/../bootstrap.php';
 $currentUserId = getCurrentUserId();
 
-// Instantiate Database to load .env
-$db = new Database();
 
 $credentials = require __DIR__ . '/../config/social_credentials.php';
 
@@ -79,8 +73,7 @@ if ($followers == 0) {
 
 // 3. Save to Database
 try {
-    // Database already instantiated at top of file
-    $conn = $db->getConnection();
+    $conn = db();
 
     $userId = $currentUserId;
     $platform = 'facebook';

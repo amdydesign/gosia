@@ -5,14 +5,9 @@
  * Returns the key the browser needs for pushManager.subscribe()
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../config/WebPush.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('GET');
 
 requireAuth();
 

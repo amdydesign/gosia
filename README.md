@@ -68,8 +68,19 @@ Otwórz: http://localhost:5173
 ## 🗄️ Setup Bazy Danych
 
 1. Utwórz bazę MySQL
-2. Wykonaj skrypt `api/database/schema.sql` 
+2. Wykonaj skrypt `api/database/schema.sql` (jedyne źródło prawdy dla świeżej instalacji)
 3. Ustaw dane dostępowe w `api/.env`
+
+Zmiany schematu na istniejącej bazie: numerowane migracje — `php api/migrations/run.php`
+(szczegóły w `DATABASE_SETUP.md`).
+
+### Typy współpracy — model danych
+
+- `type` — kategoria merytoryczna (post-instagram, story, reel, sesja, konsultacja, event, umowa-praca, inne),
+- `collab_type` — sposób rozliczenia (`umowa_50`, `umowa_20`, `useme_50`, `useme_20`, `umowa_praca`, `gotowka`, `barter`, `other`).
+
+Jedyne źródło prawdy dla dozwolonych wartości: `api/config/Validator.php`
+(musi być zgodne z `api/utils/TaxCalculator.php` i `frontend/src/utils/format.js`).
 
 ## 🌐 Deployment na dHosting
 

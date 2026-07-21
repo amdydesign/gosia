@@ -6,14 +6,8 @@
  * Automatically fetches fresh data from all connected platforms.
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../../bootstrap.php';
+requireMethod('POST');
 
 // Load credentials
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
@@ -24,8 +18,7 @@ $creds = require $credsPath;
 
 try {
     $userId = getCurrentUserId();
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $refreshed = [];
     $errors = [];
@@ -66,7 +59,7 @@ try {
 
             // Facebook - use access token to get page likes
             if ($platform === 'facebook' && $connection['access_token']) {
-                $accessToken = $connection['access_token'];
+                $accessToken = Crypto::decrypt($connection['access_token']);
                 // Get user's pages and their likes
                 $url = "https://graph.facebook.com/v18.0/me/accounts?fields=fan_count&access_token={$accessToken}";
                 $ch = curl_init();
@@ -91,7 +84,7 @@ try {
 
             // TikTok - use access token
             if ($platform === 'tiktok' && $connection['access_token']) {
-                $accessToken = $connection['access_token'];
+                $accessToken = Crypto::decrypt($connection['access_token']);
                 $url = "https://open.tiktokapis.com/v2/user/info/?fields=follower_count";
                 $ch = curl_init();
                 curl_setopt($ch, CURLOPT_URL, $url);

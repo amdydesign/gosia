@@ -4,10 +4,8 @@
  * GET /api/auth/youtube/redirect.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
+require_once __DIR__ . '/../../bootstrap.php';
 require_once __DIR__ . '/../../config/OAuthState.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
 // Check if credentials file exists
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
 if (!file_exists($credsPath)) {
@@ -53,9 +51,7 @@ if (!$youtube || $youtube['client_id'] === 'YOUR_YOUTUBE_CLIENT_ID') {
 
 // So this file is actually "get_auth_url.php"
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('GET');
 
 try {
     $userId = getCurrentUserId();

@@ -4,15 +4,10 @@
  * GET /api/attachments/index.php?entity_type=collaboration|purchase&entity_id=123
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/helpers.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('GET');
 
 try {
     $userId = getCurrentUserId();
@@ -20,8 +15,7 @@ try {
     $entityType = trim($_GET['entity_type'] ?? '');
     $entityId = intval($_GET['entity_id'] ?? 0);
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $entityType = attachmentsCheckEntity($conn, $userId, $entityType, $entityId);
 

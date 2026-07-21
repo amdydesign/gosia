@@ -4,14 +4,8 @@
  * GET /api/collaborations/show.php?id=1
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('GET');
 
 try {
     $userId = getCurrentUserId();
@@ -20,8 +14,7 @@ try {
     if (!$id)
         Response::error('ID required', 400);
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Get Collab
     $stmt = $conn->prepare("

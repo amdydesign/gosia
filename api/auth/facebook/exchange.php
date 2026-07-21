@@ -4,15 +4,9 @@
  * POST /api/auth/facebook/exchange.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../bootstrap.php';
 require_once __DIR__ . '/../../config/OAuthState.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('POST');
 
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
 if (!file_exists($credsPath)) {
@@ -98,8 +92,7 @@ try {
     }
 
     // Save to DB
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $stmt = $conn->prepare("
         INSERT INTO social_connections (user_id, provider, provider_user_id, access_token, expires_at)
@@ -111,7 +104,7 @@ try {
     $stmt->execute([
         'uid' => $userId,
         'puid' => $fbUserId,
-        'at' => $accessToken
+        'at' => Crypto::encrypt($accessToken)
     ]);
 
     // Save stats

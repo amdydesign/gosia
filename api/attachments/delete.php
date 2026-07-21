@@ -4,15 +4,10 @@
  * DELETE /api/attachments/delete.php?id=123
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/helpers.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-    Response::error('Method not allowed', 405);
-}
+requireMethod('DELETE');
 
 try {
     $userId = getCurrentUserId();
@@ -22,8 +17,7 @@ try {
         Response::validationError(['id' => 'Valid id required']);
     }
 
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     $stmt = $conn->prepare("SELECT stored_name FROM attachments WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);

@@ -4,14 +4,8 @@
  * POST /api/stats/social/fetch_youtube_public.php
  */
 
-require_once __DIR__ . '/../../config/cors.php';
-require_once __DIR__ . '/../../config/Database.php';
-require_once __DIR__ . '/../../config/Response.php';
-require_once __DIR__ . '/../../middleware/auth.php';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../../bootstrap.php';
+requireMethod('POST');
 
 // Load credentials
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
@@ -59,8 +53,7 @@ $subscriberCount = $item['statistics']['subscriberCount'];
 // Save to DB
 try {
     $userId = getCurrentUserId();
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // 1. Update/Insert Connection (without tokens)
     // We use NULL for tokens as we use Public API Key

@@ -7,15 +7,8 @@
  * Response: { "success": true, "data": { "token": "...", "user": {...} } }
  */
 
-require_once __DIR__ . '/../config/cors.php';
-require_once __DIR__ . '/../config/Database.php';
-require_once __DIR__ . '/../config/JWTHandler.php';
-require_once __DIR__ . '/../config/Response.php';
-
-// Only allow POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Response::error('Method not allowed', 405);
-}
+require_once __DIR__ . '/../bootstrap.php';
+requireMethod('POST');
 
 // Get POST data
 $input = json_decode(file_get_contents('php://input'), true);
@@ -32,9 +25,7 @@ if (empty($username) || empty($password)) {
 }
 
 try {
-    // Get database connection
-    $db = new Database();
-    $conn = $db->getConnection();
+    $conn = db();
 
     // Rate limiting: max 5 nieudanych prob na login+IP w ciagu 15 minut.
     // try/catch, zeby brak tabeli (niewykonana migracja) nie blokowal logowania.
