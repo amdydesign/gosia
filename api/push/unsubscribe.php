@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
+require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
 
@@ -25,6 +26,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensure($conn, 'push_subscriptions');
 
     $stmt = $conn->prepare("DELETE FROM push_subscriptions WHERE user_id = :user_id AND endpoint_hash = :endpoint_hash");
     $stmt->execute([

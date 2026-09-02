@@ -106,6 +106,9 @@ class WebPush
      */
     public function sendToUser(PDO $conn, $userId, array $payload)
     {
+        require_once __DIR__ . '/Schema.php';
+        Schema::ensure($conn, 'push_subscriptions');
+
         $stmt = $conn->prepare("SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = :user_id");
         $stmt->execute(['user_id' => $userId]);
         $subscriptions = $stmt->fetchAll();
