@@ -24,6 +24,11 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Context files export a Provider component together with its `useX` hook
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowExportNames: ['useAuth', 'useToast', 'useConfirm', 'useDashboard', 'AuthShell'] },
+      ],
     },
   },
 ])

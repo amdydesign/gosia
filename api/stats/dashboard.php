@@ -2,8 +2,8 @@
 /**
  * Dashboard Statistics
  * GET /api/stats/dashboard.php
- * 
- * Returns aggregated statistics for the dashboard
+ *
+ * Returns aggregated statistics for the dashboard + badge counters.
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -12,176 +12,225 @@ require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
 
-// Only allow GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
 }
 
 try {
-    // Authenticate
     $userId = getCurrentUserId();
 
-    // Get database connection
     $db = new Database();
     $conn = $db->getConnection();
+    $p = ['user_id' => $userId];
 
-    // 1. Yearly Financials (Total Gross & Net)
-    // Sum of ALL paid collaborations for current year (Official + Private)
+    // 1. Yearly financials (paid, official + private)
     $stmt = $conn->prepare("
-        SELECT 
-            COALESCE(SUM(amount_gross), 0) as yearly_gross,
-            COALESCE(SUM(amount_net), 0) as yearly_net
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND payment_status = 'paid'
-        AND YEAR(date) = YEAR(CURDATE())
+        SELECT COALESCE(SUM(amount_gross), 0) AS yearly_gross,
+               COALESCE(SUM(amount_net), 0)   AS yearly_net
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status = 'paid' AND YEAR(date) = YEAR(CURDATE())
     ");
-    $stmt->execute(['user_id' => $userId]);
+    $stmt->execute($p);
     $yearlyStats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 2. Pending Payments (Gross & Net)
-    // Sum of pending/overdue collaborations (All time)
+    // 1b. Current month financials (paid)
     $stmt = $conn->prepare("
-        SELECT 
-            COALESCE(SUM(amount_gross), 0) as pending_gross,
-            COALESCE(SUM(amount_net), 0) as pending_net
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND payment_status IN ('pending', 'overdue')
+        SELECT COALESCE(SUM(amount_gross), 0) AS month_gross,
+               COALESCE(SUM(amount_net), 0)   AS month_net,
+               COUNT(*)                        AS month_count
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status = 'paid'
+          AND YEAR(date) = YEAR(CURDATE()) AND MONTH(date) = MONTH(CURDATE())
     ");
-    $stmt->execute(['user_id' => $userId]);
+    $stmt->execute($p);
+    $monthStats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // 2. Pending payments (all time)
+    $stmt = $conn->prepare("
+        SELECT COALESCE(SUM(amount_gross), 0) AS pending_gross,
+               COALESCE(SUM(amount_net), 0)   AS pending_net,
+               COUNT(*)                        AS pending_count,
+               SUM(CASE WHEN payment_status = 'overdue' THEN 1 ELSE 0 END) AS overdue_count
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+    ");
+    $stmt->execute($p);
     $pendingStats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 3. Yearly Counts
-    // Collaborations Count (Yearly)
+    // 2b. Unpaid collaborations list (oldest first)
     $stmt = $conn->prepare("
-        SELECT COUNT(*) as count 
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND YEAR(date) = YEAR(CURDATE())
+        SELECT id, brand, type, collab_type, fiscal_tracking, amount_gross, amount_net, date, payment_status,
+               DATEDIFF(CURDATE(), date) AS days_waiting
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+        ORDER BY FIELD(payment_status, 'overdue', 'pending'), date ASC
+        LIMIT 8
     ");
-    $stmt->execute(['user_id' => $userId]);
-    $collabsYearCount = intval($stmt->fetch()['count']);
+    $stmt->execute($p);
+    $unpaidCollabs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Purchases Count (Yearly, Kept/Partial)
+    // 3. Yearly counts
+    $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM collaborations WHERE user_id = :user_id AND YEAR(date) = YEAR(CURDATE())");
+    $stmt->execute($p);
+    $collabsYearCount = intval($stmt->fetch()['c']);
+
     $stmt = $conn->prepare("
-        SELECT COUNT(*) as count 
-        FROM purchases 
-        WHERE user_id = :user_id 
-        AND status IN ('kept', 'partial')
-        AND YEAR(purchase_date) = YEAR(CURDATE())
+        SELECT COUNT(*) AS c FROM purchases
+        WHERE user_id = :user_id AND status IN ('kept', 'partial') AND YEAR(purchase_date) = YEAR(CURDATE())
     ");
-    $stmt->execute(['user_id' => $userId]);
-    $purchasesYearCount = intval($stmt->fetch()['count']);
+    $stmt->execute($p);
+    $purchasesYearCount = intval($stmt->fetch()['c']);
 
-    // 4. Urgent Purchases (<= 3 days)
+    // 3b. Active returns: money still "in play" (deadline not passed)
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS c, COALESCE(SUM(amount), 0) AS total
+        FROM purchases
+        WHERE user_id = :user_id AND status = 'kept'
+          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) >= 0
+    ");
+    $stmt->execute($p);
+    $activeReturns = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // 4. Urgent purchases (<= 3 days, deadline not passed more than 0 days ago)
     $stmt = $conn->prepare("
         SELECT id, store, items, purchase_date, return_days,
-               DATE_ADD(purchase_date, INTERVAL return_days DAY) as return_deadline,
-               DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) as days_remaining,
+               DATE_ADD(purchase_date, INTERVAL return_days DAY) AS return_deadline,
+               DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) AS days_remaining,
                purchase_url, amount, status
-        FROM purchases 
-        WHERE user_id = :user_id 
-        AND status IN ('kept', 'partial')
-        AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) <= 3
+        FROM purchases
+        WHERE user_id = :user_id AND status = 'kept'
+          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 3
         ORDER BY days_remaining ASC
     ");
-    $stmt->execute(['user_id' => $userId]);
+    $stmt->execute($p);
     $urgentPurchases = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 5. Urgent Returns Badge Count (<= 7 days)
+    // 5. Badge: returns due within 7 days
     $stmt = $conn->prepare("
-        SELECT COUNT(*) as count FROM purchases 
-        WHERE user_id = :user_id 
-        AND status IN ('kept', 'partial')
-        AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 7
+        SELECT COUNT(*) AS c FROM purchases
+        WHERE user_id = :user_id AND status = 'kept'
+          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 7
     ");
-    $stmt->execute(['user_id' => $userId]);
-    $urgentReturnsCount = intval($stmt->fetch()['count']);
+    $stmt->execute($p);
+    $urgentReturnsCount = intval($stmt->fetch()['c']);
 
-    // 6. Upcoming items (limit 5)
+    // 6. Upcoming (next 7 days) unpaid collaborations
     $stmt = $conn->prepare("
-        SELECT id, brand, type, amount_net as amount, date, payment_status, fiscal_tracking
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND payment_status != 'paid'
-        AND DATEDIFF(date, CURDATE()) BETWEEN 0 AND 7
+        SELECT id, brand, type, amount_net AS amount, amount_gross, date, payment_status, fiscal_tracking
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status != 'paid'
+          AND DATEDIFF(date, CURDATE()) BETWEEN 0 AND 7
         ORDER BY date ASC
         LIMIT 5
     ");
-    $stmt->execute(['user_id' => $userId]);
+    $stmt->execute($p);
     $upcomingCollabs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $stmt = $conn->prepare("
         SELECT id, store, items, purchase_date, return_days,
-               DATE_ADD(purchase_date, INTERVAL return_days DAY) as return_deadline,
-               DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) as days_remaining,
+               DATE_ADD(purchase_date, INTERVAL return_days DAY) AS return_deadline,
+               DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) AS days_remaining,
                purchase_url, amount, status
-        FROM purchases 
-        WHERE user_id = :user_id 
-        AND status IN ('kept', 'partial')
-        AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) <= 14
+        FROM purchases
+        WHERE user_id = :user_id AND status = 'kept'
+          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 14
         ORDER BY days_remaining ASC
-        LIMIT 5
+        LIMIT 6
     ");
-    $stmt->execute(['user_id' => $userId]);
+    $stmt->execute($p);
     $upcomingPurchases = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 7. Old Financials (Legacy support / Split View calculation if needed later)
-    // Keeping logic simple for now as requested:
-    // "official" stats are now part of Statistics page, but we can return basic year/month data if frontend needs it.
-    // For now, we focus on the NEW structure.
-
+    // 7. Official vs private split (paid, current year) + tax threshold progress
     $stmt = $conn->prepare("
-        SELECT 
-            COALESCE(SUM(CASE WHEN fiscal_tracking = TRUE THEN amount_net ELSE 0 END), 0) as official_income,
-            COALESCE(SUM(CASE WHEN fiscal_tracking = FALSE THEN amount_net ELSE 0 END), 0) as private_revenue
-        FROM collaborations 
-        WHERE user_id = :user_id 
-        AND payment_status = 'paid'
-        AND YEAR(date) = YEAR(CURDATE())
+        SELECT amount_gross, amount_net, collab_type, fiscal_tracking
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status = 'paid' AND YEAR(date) = YEAR(CURDATE())
     ");
-    $stmt->execute(['user_id' => $userId]);
-    $splitStats = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    // Calculate tax threshold purely for metadata if needed
+    $stmt->execute($p);
+    $officialGross = 0.0;
+    $officialIncome = 0.0; // przychód - KUP (podstawa do progu podatkowego)
+    $officialNet = 0.0;
+    $privateRevenue = 0.0;
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $gross = floatval($row['amount_gross']) > 0 ? floatval($row['amount_gross']) : floatval($row['amount_net']);
+        if ($row['fiscal_tracking']) {
+            $cType = $row['collab_type'];
+            if (!$cType || $cType === 'other') {
+                $cType = 'umowa_50';
+            }
+            $breakdown = TaxCalculator::getBreakdown($gross, $cType);
+            $officialGross += $gross;
+            $officialIncome += max(0, $gross - floatval($breakdown['kup']) - floatval($breakdown['commission']));
+            $officialNet += floatval($row['amount_net']);
+        } else {
+            $privateRevenue += floatval($row['amount_net']) > 0 ? floatval($row['amount_net']) : $gross;
+        }
+    }
     $taxThreshold = 120000;
-    // Costs are complex to calculate per transaction here without loop, so we approximate or omit if not used on dashboard anymore.
-    // Since Dashboard removed the "Official (PIT)" card, we don't need exact tax/costs here.
+
+    // 8. Ideas
+    $ideasDrafts = 0;
+    $nextIdea = null;
+    try {
+        $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM ideas WHERE user_id = :user_id AND status = 'draft'");
+        $stmt->execute($p);
+        $ideasDrafts = intval($stmt->fetch()['c']);
+        $stmt = $conn->prepare("SELECT id, title FROM ideas WHERE user_id = :user_id AND status = 'draft' ORDER BY created_at DESC LIMIT 1");
+        $stmt->execute($p);
+        $nextIdea = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Exception $e) {
+        // ideas table optional on older installs
+    }
 
     Response::success([
         'financials' => [
             'year' => date('Y'),
-            'yearly_gross' => floatval($yearlyStats['yearly_gross']), // NEW
-            'yearly_net' => floatval($yearlyStats['yearly_net']),     // NEW
+            'yearly_gross' => floatval($yearlyStats['yearly_gross']),
+            'yearly_net' => floatval($yearlyStats['yearly_net']),
+            'month' => [
+                'gross' => floatval($monthStats['month_gross']),
+                'net' => floatval($monthStats['month_net']),
+                'count' => intval($monthStats['month_count']),
+            ],
             'pending' => [
                 'gross' => floatval($pendingStats['pending_gross']),
-                'net' => floatval($pendingStats['pending_net'])
+                'net' => floatval($pendingStats['pending_net']),
+                'count' => intval($pendingStats['pending_count']),
+                'overdue_count' => intval($pendingStats['overdue_count']),
             ],
-            // Legacy/Extra fields for completeness
             'official' => [
-                'income' => floatval($splitStats['official_income']), // Crude net approximation
-                'tax_threshold_progress' => 0, // Not calculated to save perf
-                'tax_threshold' => 120000
+                'gross' => round($officialGross, 2),
+                'income' => round($officialIncome, 2),
+                'net' => round($officialNet, 2),
+                'tax_threshold' => $taxThreshold,
+                'tax_threshold_progress' => $taxThreshold > 0 ? round($officialIncome / $taxThreshold * 100, 1) : 0,
             ],
             'private' => [
-                'revenue' => floatval($splitStats['private_revenue'])
-            ]
+                'revenue' => round($privateRevenue, 2),
+            ],
         ],
         'counts' => [
-            'collabs_year' => $collabsYearCount,      // NEW
-            'purchases_year' => $purchasesYearCount,  // NEW
-            'urgent_returns_badge' => $urgentReturnsCount
+            'collabs_year' => $collabsYearCount,
+            'purchases_year' => $purchasesYearCount,
+            'urgent_returns_badge' => $urgentReturnsCount,
+            'overdue_payments' => intval($pendingStats['overdue_count']),
+            'unpaid' => intval($pendingStats['pending_count']),
+            'active_returns' => intval($activeReturns['c']),
+            'active_returns_value' => floatval($activeReturns['total']),
+            'ideas_drafts' => $ideasDrafts,
         ],
+        'urgent_returns_count' => $urgentReturnsCount,
         'urgent_purchases' => $urgentPurchases,
+        'unpaid_collaborations' => $unpaidCollabs,
+        'next_idea' => $nextIdea,
         'upcoming' => [
             'collaborations' => $upcomingCollabs,
-            'purchases' => $upcomingPurchases
-        ]
+            'purchases' => $upcomingPurchases,
+        ],
     ]);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to fetch stats: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to fetch statistics', 500);

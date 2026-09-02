@@ -64,26 +64,38 @@ Otwórz: http://localhost:5173
 
 ## 🌐 Deployment na dHosting
 
-### 1. Build Frontend
+### 1. Build Frontend i synchronizacja do katalogu głównego
 ```bash
 cd frontend
-npm run build
+npm run deploy    # = vite build + kopiowanie build/ do katalogu głównego repo
 ```
 
-### 2. Upload przez FTP
+Skrypt `frontend/scripts/sync-root.mjs` kopiuje `build/index.html`, `build/assets/`, `sw.js`,
+`manifest.json` i `icons/` do katalogu głównego — to on jest serwowany jako `public_html`.
 
-Wgraj następujące elementy do `public_html/`:
+### 2. Publikacja
+
+```bash
+git add . && git commit -m "Opis zmian" && git push
+# na serwerze (public_html):
+git pull origin main
+```
+
+Struktura serwowana z `public_html/`:
 
 ```
 public_html/
-├── index.html          # z frontend/dist/
-├── assets/             # z frontend/dist/assets/
+├── index.html          # z build/
+├── assets/             # z build/assets/
+├── sw.js, manifest.json, icons/   # PWA
 ├── api/                # cały folder api/
 │   ├── (wszystkie pliki PHP)
 │   ├── vendor/         # ważne!
 │   └── .env            # uzupełnij prawidłowe dane
 └── .htaccess           # routing
 ```
+
+Propozycje dalszego rozwoju i lista zmian z przebudowy UI: [`PROPOZYCJE_UX.md`](PROPOZYCJE_UX.md).
 
 ### 3. Plik .htaccess
 

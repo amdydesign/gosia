@@ -1,91 +1,77 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import statsService from '../services/stats';
+import Button from '../components/ui/Button';
+import { Spinner } from '../components/ui/Skeleton';
+import { AuthShell } from './Login';
 
 export default function SocialCallback() {
     const [searchParams] = useSearchParams();
     const { platform } = useParams();
     const navigate = useNavigate();
-    const [status, setStatus] = useState('processing');
-    const [message, setMessage] = useState('Łączenie z usługą...');
-    const [processed, setProcessed] = useState(false);
+    const code = searchParams.get('code');
+    const oauthError = searchParams.get('error');
+    const [status, setStatus] = useState(() => (oauthError || !code ? 'error' : 'processing'));
+    const [message, setMessage] = useState(() =>
+        oauthError ? 'Logowanie zostało anulowane lub platforma zwróciła błąd.' : !code ? 'Brak kodu autoryzacji.' : 'Łączenie z usługą…'
+    );
 
     useEffect(() => {
-        if (processed) return;
+        if (!code || oauthError) return undefined;
+        let cancelled = false;
 
-        const code = searchParams.get('code');
-        const error = searchParams.get('error');
-
-        if (error) {
-            setStatus('error');
-            setMessage('Użytkownik anulował logowanie lub wystąpił błąd po stronie platformy.');
-            setProcessed(true);
-            return;
-        }
-
-        if (!code) {
-            setStatus('error');
-            setMessage('Brak kodu autoryzacji.');
-            setProcessed(true);
-            return;
-        }
-
-        const exchange = async () => {
+        (async () => {
             try {
-                // Determine platform from URL param or default
                 const targetPlatform = platform || 'youtube';
-
                 const res = await statsService.exchangeSocialCode(targetPlatform, code);
+                if (cancelled) return;
                 if (res.success) {
                     setStatus('success');
-                    setMessage(`Pomyślnie połączono z ${targetPlatform === 'youtube' ? 'YouTube' : targetPlatform}!\nKonto: ${res.data?.channel || ''}`);
+                    setMessage(`Połączono z ${targetPlatform}. ${res.data?.channel ? `Konto: ${res.data.channel}` : ''}`);
                 } else {
                     setStatus('error');
                     setMessage(res.message || 'Wystąpił błąd podczas wymiany tokena.');
                 }
-            } catch (err) {
-                console.error(err);
-                setStatus('error');
-                setMessage('Błąd komunikacji z serwerem.');
-            } finally {
-                setProcessed(true);
+            } catch {
+                if (!cancelled) {
+                    setStatus('error');
+                    setMessage('Błąd komunikacji z serwerem.');
+                }
             }
+        })();
+        return () => {
+            cancelled = true;
         };
-
-        exchange();
-    }, [searchParams, platform, processed]);
+    }, [code, oauthError, platform]);
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-md w-full text-center">
+        <AuthShell>
+            <div className="text-center">
                 {status === 'processing' && (
                     <>
-                        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">Autoryzacja...</h2>
-                        <p className="text-gray-500">Trwa łączenie z kontem {platform}...</p>
+                        <Spinner size={36} className="mx-auto mb-5" />
+                        <h2 className="text-xl font-extrabold text-ink tracking-tight">Autoryzacja…</h2>
+                        <p className="text-sm text-ink-muted mt-1">Trwa łączenie z kontem {platform}.</p>
                     </>
                 )}
                 {status === 'success' && (
                     <>
-                        <div className="text-green-500 text-5xl mb-4">✅</div>
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">Sukces!</h2>
-                        <p className="text-gray-500 mb-6 whitespace-pre-line">{message}</p>
-                        <button onClick={() => navigate('/statistics')} className="bg-primary text-white px-6 py-2 rounded-xl w-full hover:bg-purple-700 transition-colors">
-                            Wróć do statystyk
-                        </button>
+                        <CheckCircle2 size={44} className="mx-auto text-emerald-500 mb-4" />
+                        <h2 className="text-xl font-extrabold text-ink tracking-tight">Połączono</h2>
+                        <p className="text-sm text-ink-soft mt-1 mb-6 whitespace-pre-line">{message}</p>
+                        <Button variant="primary" block onClick={() => navigate('/statistics')}>Wróć do statystyk</Button>
                     </>
                 )}
                 {status === 'error' && (
                     <>
-                        <div className="text-red-500 text-5xl mb-4">❌</div>
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">Błąd</h2>
-                        <p className="text-gray-500 mb-6">{message}</p>
-                        <button onClick={() => navigate('/statistics')} className="bg-gray-100 text-gray-700 px-6 py-2 rounded-xl w-full hover:bg-gray-200 transition-colors">
-                            Wróć
-                        </button>
+                        <XCircle size={44} className="mx-auto text-red-500 mb-4" />
+                        <h2 className="text-xl font-extrabold text-ink tracking-tight">Nie udało się</h2>
+                        <p className="text-sm text-ink-soft mt-1 mb-6">{message}</p>
+                        <Button variant="secondary" block onClick={() => navigate('/statistics')}>Wróć</Button>
                     </>
                 )}
             </div>
-        </div>
+        </AuthShell>
     );
 }

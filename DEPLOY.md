@@ -22,7 +22,7 @@ git reset --hard origin/main
 **Na komputerze:**
 ```bash
 cd c:\gosia\frontend
-npm run build
+npm run deploy     # build + kopiowanie do katalogu głównego (index.html, assets/, sw.js)
 cd ..
 git add .
 git commit -m "Opis zmian"

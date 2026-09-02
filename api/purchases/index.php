@@ -16,7 +16,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 try {
     $userId = getCurrentUserId();
     $status = isset($_GET['status']) ? $_GET['status'] : 'all'; // all, kept, returned, partial
-    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
+    // Default was 50 which silently hid older purchases once the history grew
+    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 1000;
+    $limit = max(1, min(5000, $limit));
 
     $db = new Database();
     $conn = $db->getConnection();

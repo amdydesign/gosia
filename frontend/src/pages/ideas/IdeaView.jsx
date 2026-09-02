@@ -1,168 +1,137 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Edit2, Play, CheckCircle2, Trash2, Lightbulb, Clock, Type, Undo2, Copy } from 'lucide-react';
 import ideasService from '../../services/ideas';
-import { ArrowLeft, Edit2, Play, CheckCircle, Trash2, X, Type } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useDashboard } from '../../context/DashboardContext';
+import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import Card from '../../components/ui/Card';
+import EmptyState from '../../components/ui/EmptyState';
+import { PageSkeleton } from '../../components/ui/Skeleton';
+import Prompter from './Prompter';
+import { countWords, estimateSpeechSeconds, formatSeconds, formatDateLong } from '../../utils/format';
 
 export default function IdeaView() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { token } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const toast = useToast();
+    const confirm = useConfirm();
+    const { refresh } = useDashboard();
 
     const [idea, setIdea] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [prompterMode, setPrompterMode] = useState(false);
-    const [fontSize, setFontSize] = useState(36); // Prompter font size
+    const [error, setError] = useState('');
+    const [busy, setBusy] = useState(false);
+    const prompterOpen = searchParams.get('prompter') === '1';
 
     useEffect(() => {
-        loadIdea();
+        let cancelled = false;
+        (async () => {
+            try {
+                const data = await ideasService.getOne(null, id);
+                if (!cancelled) setIdea(data);
+            } catch (err) {
+                if (!cancelled) setError(err.message || 'Nie udało się pobrać pomysłu');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [id]);
 
-    const loadIdea = async () => {
-        try {
-            const data = await ideasService.getOne(token, id);
-            setIdea(data);
-        } catch (err) {
-            navigate('/ideas');
-        } finally {
-            setLoading(false);
-        }
+    const setPrompter = (open) => {
+        const next = new URLSearchParams(searchParams);
+        if (open) next.set('prompter', '1');
+        else next.delete('prompter');
+        setSearchParams(next, { replace: !open });
     };
 
-    const handleMarkAsRecorded = async () => {
+    const toggleRecorded = async () => {
+        const next = idea.status === 'recorded' ? 'draft' : 'recorded';
+        setBusy(true);
         try {
-            await ideasService.update(token, id, { status: 'recorded' });
-            setIdea({ ...idea, status: 'recorded' });
+            await ideasService.update(null, id, { status: next });
+            setIdea({ ...idea, status: next });
+            refresh();
+            if (next === 'recorded') toast.success('Oznaczono jako nagrane 🎬');
         } catch (err) {
-            console.error(err);
+            toast.error(err.message || 'Błąd zapisu');
+        } finally {
+            setBusy(false);
         }
     };
 
     const handleDelete = async () => {
-        if (window.confirm('Czy na pewno chcesz usunąć ten pomysł?')) {
-            try {
-                await ideasService.delete(token, id);
-                navigate('/ideas');
-            } catch (err) {
-                console.error(err);
-            }
+        if (!(await confirm({ title: 'Usunąć pomysł?', message: idea.title, confirmLabel: 'Usuń', danger: true }))) return;
+        try {
+            await ideasService.delete(null, id);
+            toast.success('Pomysł usunięty');
+            refresh();
+            navigate('/ideas', { replace: true });
+        } catch (err) {
+            toast.error(err.message || 'Błąd usuwania');
         }
     };
 
-    if (loading) return <div className="loading">Ładowanie...</div>;
-    if (!idea) return null;
+    const copyText = async () => {
+        try {
+            await navigator.clipboard.writeText(`${idea.title}\n\n${idea.content || ''}`);
+            toast.success('Skopiowano do schowka');
+        } catch {
+            toast.error('Nie udało się skopiować');
+        }
+    };
 
-    // --- PROMPTER MODE ---
-    if (prompterMode) {
-        return (
-            <div className="fixed inset-0 bg-black z-50 overflow-y-auto min-h-screen flex flex-col">
-                {/* Prompter Controls */}
-                <div className="fixed top-0 left-0 right-0 p-4 bg-black/80 backdrop-blur-sm flex justify-between items-center border-b border-gray-800 z-50">
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setPrompterMode(false)}
-                            className="text-gray-400 hover:text-white transition-colors"
-                        >
-                            <X size={32} />
-                        </button>
-                        <div className="flex items-center gap-2 bg-gray-900 rounded-lg p-1">
-                            <button
-                                onClick={() => setFontSize(s => Math.max(18, s - 4))}
-                                className="p-2 text-gray-400 hover:text-white"
-                            >
-                                <Type size={16} />
-                            </button>
-                            <span className="text-gray-500 text-xs w-8 text-center">{fontSize}</span>
-                            <button
-                                onClick={() => setFontSize(s => Math.min(72, s + 4))}
-                                className="p-2 text-gray-400 hover:text-white"
-                            >
-                                <Type size={24} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
+    if (loading) return <PageSkeleton />;
+    if (error || !idea) return <EmptyState icon={Lightbulb} title="Nie znaleziono pomysłu" text={error} action={<Button to="/ideas">Wróć do listy</Button>} />;
 
-                {/* Prompter Content */}
-                <div className="flex-grow flex items-center justify-center p-8 pt-24 pb-32">
-                    <div
-                        className="text-white font-sans leading-relaxed max-w-4xl mx-auto text-center whitespace-pre-wrap"
-                        style={{ fontSize: `${fontSize}px` }}
-                    >
-                        {idea.content}
-                    </div>
-                </div>
-            </div>
-        );
+    const recorded = idea.status === 'recorded';
+    const seconds = estimateSpeechSeconds(idea.content);
+
+    if (prompterOpen) {
+        return <Prompter title={idea.title} content={idea.content} onClose={() => setPrompter(false)} />;
     }
 
-    // --- STANDARD MODE ---
     return (
-        <div className="max-w-3xl mx-auto space-y-6">
-            <header className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <Link to="/ideas" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                        <ArrowLeft size={24} className="text-gray-600" />
-                    </Link>
-                    <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            {idea.status === 'recorded' && (
-                                <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-md flex items-center gap-1">
-                                    <CheckCircle size={12} /> Nagrane
-                                </span>
-                            )}
-                            <span className="text-gray-400 text-xs">Utworzono: {new Date(idea.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <h1 className="text-2xl font-bold text-gray-900">{idea.title}</h1>
-                    </div>
-                </div>
-
-                <div className="flex gap-2">
-                    <Link
-                        to={`/ideas/${id}/edit`}
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                        <Edit2 size={20} />
-                    </Link>
-                    <button
-                        onClick={handleDelete}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                        <Trash2 size={20} />
-                    </button>
-                </div>
-            </header>
-
-            {/* Main Content Card */}
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 md:p-8 min-h-[300px] text-lg leading-relaxed text-gray-700 whitespace-pre-wrap">
-                    {idea.content || <span className="text-gray-400 italic">Brak treści scenariusza. Kliknij edytuj aby dodać tekst.</span>}
-                </div>
+        <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
+            <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={recorded ? 'success' : 'plum'} icon={recorded ? CheckCircle2 : Lightbulb}>{recorded ? 'Nagrane' : 'Do nagrania'}</Badge>
+                {seconds > 0 && <Badge tone="neutral" icon={Clock}>~{formatSeconds(seconds)}</Badge>}
+                <Badge tone="neutral" icon={Type}>{countWords(idea.content)} słów</Badge>
+                <span className="text-xs text-ink-muted ml-auto">{formatDateLong(idea.created_at?.slice(0, 10))}</span>
             </div>
 
-            {/* Actions Bar (Sticky Bottom on Mobile) */}
-            <div className="fixed bottom-10 left-0 right-0 p-4 bg-white border-t border-gray-200 md:static md:bg-transparent md:border-0 flex flex-row gap-3 z-10 safe-area-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                <button
-                    onClick={() => setPrompterMode(true)}
-                    className="flex-1 bg-black text-white px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-gray-900 hover:scale-[1.02] transition-all text-lg"
-                >
-                    <Play size={24} fill="currentColor" />
-                    <span className="truncate">PROMPTER</span>
-                </button>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink">{idea.title}</h1>
 
-                {idea.status !== 'recorded' && (
-                    <button
-                        onClick={handleMarkAsRecorded}
-                        className="flex-none bg-green-50 text-green-600 border-2 border-green-500 px-4 py-3 rounded-xl font-bold hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
-                        title="Oznacz jako nagrane"
-                    >
-                        <CheckCircle size={24} />
-                        <span className="hidden sm:inline">Nagrane</span>
-                    </button>
+            <Card className="!p-6 sm:!p-8">
+                {idea.content ? (
+                    <p className="text-[17px] leading-[1.7] text-ink-soft whitespace-pre-wrap">{idea.content}</p>
+                ) : (
+                    <p className="text-ink-muted italic">Brak treści scenariusza. Kliknij „Edytuj”, aby dodać tekst.</p>
                 )}
+            </Card>
+
+            <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] lg:static -mx-4 sm:mx-0 px-4 sm:px-0 py-3 lg:py-0 bg-canvas/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-t border-line lg:border-0">
+                <div className="flex gap-2">
+                    <Button variant="dark" size="lg" icon={Play} onClick={() => setPrompter(true)} className="flex-[2]" disabled={!idea.content}>
+                        Prompter
+                    </Button>
+                    <Button variant={recorded ? 'secondary' : 'success'} size="lg" icon={recorded ? Undo2 : CheckCircle2} onClick={toggleRecorded} loading={busy} className="flex-1">
+                        {recorded ? 'Cofnij' : 'Nagrane'}
+                    </Button>
+                </div>
             </div>
-            {/* Spacer for sticky bottom on mobile */}
-            <div className="h-40 md:h-0" />
+
+            <div className="grid grid-cols-3 gap-2">
+                <Button to={`/ideas/${id}/edit`} variant="secondary" icon={Edit2}>Edytuj</Button>
+                <Button variant="secondary" icon={Copy} onClick={copyText}>Kopiuj</Button>
+                <Button variant="danger" icon={Trash2} onClick={handleDelete}>Usuń</Button>
+            </div>
         </div>
     );
 }

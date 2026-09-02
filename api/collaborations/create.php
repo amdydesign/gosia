@@ -26,6 +26,11 @@ try {
     $paymentStatus = $input['payment_status'] ?? 'pending';
     $notes = trim($input['notes'] ?? '');
     $team = $input['team'] ?? []; // Array of { name, role, amount }
+    $collabType = $input['collab_type'] ?? 'umowa_50';
+    // Cash ("gotowka") is always private; everything else counts towards PIT unless explicitly disabled
+    $fiscalTracking = array_key_exists('fiscal_tracking', $input)
+        ? (!empty($input['fiscal_tracking']) ? 1 : 0)
+        : ($collabType === 'gotowka' ? 0 : 1);
 
     if (empty($brand))
         $errors['brand'] = 'Brand name is required';
@@ -43,14 +48,16 @@ try {
 
     // Insert collaboration
     $stmt = $conn->prepare("
-        INSERT INTO collaborations (user_id, brand, type, amount_net, amount_gross, date, payment_status, notes)
-        VALUES (:user_id, :brand, :type, :amount_net, :amount_gross, :date, :payment_status, :notes)
+        INSERT INTO collaborations (user_id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes)
+        VALUES (:user_id, :brand, :type, :collab_type, :fiscal_tracking, :amount_net, :amount_gross, :date, :payment_status, :notes)
     ");
 
     $stmt->execute([
         'user_id' => $userId,
         'brand' => $brand,
         'type' => $type,
+        'collab_type' => $collabType,
+        'fiscal_tracking' => $fiscalTracking,
         'amount_net' => $amountNet,
         'amount_gross' => $amountGross,
         'date' => $date,
