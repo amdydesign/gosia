@@ -8,6 +8,7 @@
 
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
+require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/WebPush.php';
 require_once __DIR__ . '/../middleware/auth.php';
@@ -36,6 +37,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensure($conn, 'push_subscriptions');
 
     $stmt = $conn->prepare("
         INSERT INTO push_subscriptions (user_id, endpoint, endpoint_hash, p256dh, auth)
