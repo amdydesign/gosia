@@ -50,7 +50,7 @@ try {
                DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) as days_remaining,
                id
         FROM purchases
-        WHERE status = 'kept'
+        WHERE status IN ('kept', 'partial')
         AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 2
         ORDER BY days_remaining ASC
     ");

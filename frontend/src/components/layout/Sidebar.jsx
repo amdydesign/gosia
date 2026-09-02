@@ -1,104 +1,71 @@
-import { Link, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
+import { Settings, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, ShoppingBag, Briefcase, BarChart2, LogOut, User, Lightbulb } from 'lucide-react';
-import { useUrgentReturns } from '../../hooks/useUrgentReturns';
-import { useState } from 'react';
-import ChangePasswordModal from '../auth/ChangePasswordModal';
+import { useDashboard } from '../../context/DashboardContext';
+import { NAV_ITEMS } from './navItems';
 
-export default function Sidebar() {
-    const { user, logout } = useAuth();
-    const location = useLocation();
-    const urgentCount = useUrgentReturns();
-    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-
-    const menuItems = [
-        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { path: '/collaborations', label: 'Współprace', icon: Briefcase },
-        { path: '/purchases', label: 'Zakupy', icon: ShoppingBag, badge: urgentCount > 0 ? urgentCount : null },
-        { path: '/ideas', label: 'Pomysły', icon: Lightbulb },
-        { path: '/statistics', label: 'Statystyki', icon: BarChart2 },
-    ];
+export default function Sidebar({ onOpenSettings }) {
+    const { user } = useAuth();
+    const { badges } = useDashboard();
 
     return (
-        <>
-            <aside className="sidebar hidden lg:flex flex-col w-72 bg-white border-r border-gray-100 fixed inset-y-0 left-0 z-50">
-                {/* Logo Area */}
-                <div className="h-20 flex items-center px-8 border-b border-gray-50">
-                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">
-                        Gosia 2.0
-                    </h1>
+        <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-40 bg-surface border-r border-line">
+            <div className="h-[72px] px-6 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white flex items-center justify-center shadow-float">
+                    <Sparkles size={18} />
                 </div>
+                <div className="leading-tight">
+                    <div className="font-extrabold tracking-tight text-ink">Gosia</div>
+                    <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">Panel stylistki</div>
+                </div>
+            </div>
 
-                {/* Navigation */}
-                <nav className="flex-1 px-4 py-8 space-y-2">
-                    {menuItems.map((item) => {
-                        const isActive = location.pathname.startsWith(item.path);
-                        const Icon = item.icon;
-
-                        return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative
-                    ${isActive
-                                        ? 'bg-primary/10 text-primary font-semibold'
-                                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                                    }`}
-                            >
-                                <Icon
-                                    size={22}
-                                    className={`transition-colors duration-200 ${isActive ? 'text-primary' : 'text-gray-400 group-hover:text-gray-600'}`}
-                                    strokeWidth={isActive ? 2.5 : 2}
-                                />
-                                <span>{item.label}</span>
-
-                                {item.badge && (
-                                    <span className="absolute right-4 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] h-[18px] flex items-center justify-center">
-                                        {item.badge}
-                                    </span>
-                                )}
-
-                                {isActive && !item.badge && (
-                                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
-                                )}
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                {/* User Section */}
-                <div className="p-4 border-t border-gray-50">
-                    <div className="bg-gray-50 rounded-2xl p-4 flex items-center gap-3">
-                        <div
-                            className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => setIsPasswordModalOpen(true)}
-                            title="Kliknij, aby zmienić hasło"
+            <nav className="flex-1 px-3 py-4 space-y-1">
+                {NAV_ITEMS.map((item) => {
+                    const Icon = item.icon;
+                    const badge = badges[item.key];
+                    return (
+                        <NavLink
+                            key={item.path}
+                            to={item.path}
+                            className={({ isActive }) =>
+                                `group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                                    isActive ? 'bg-primary-50 text-primary-800' : 'text-ink-soft hover:bg-black/[0.035] hover:text-ink'
+                                }`
+                            }
                         >
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-sm">
-                                <User size={20} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 truncate">
-                                    {user?.username || 'Użytkownik'}
-                                </p>
-                                <p className="text-xs text-gray-500">Stylista</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={logout}
-                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
-                            title="Wyloguj"
-                        >
-                            <LogOut size={20} />
-                        </button>
+                            {({ isActive }) => (
+                                <>
+                                    <Icon size={19} strokeWidth={isActive ? 2.4 : 2} className={isActive ? 'text-primary-600' : 'text-ink-muted group-hover:text-ink'} />
+                                    <span className="flex-1">{item.label}</span>
+                                    {badge > 0 && (
+                                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+                                            {badge}
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                        </NavLink>
+                    );
+                })}
+            </nav>
+
+            <div className="p-3 border-t border-line">
+                <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-black/[0.035] transition-colors text-left"
+                >
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary text-white flex items-center justify-center font-bold text-sm">
+                        {(user?.username || 'G').charAt(0).toUpperCase()}
                     </div>
-                </div>
-            </aside>
-
-            <ChangePasswordModal
-                isOpen={isPasswordModalOpen}
-                onClose={() => setIsPasswordModalOpen(false)}
-            />
-        </>
+                    <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-ink truncate">{user?.username || 'Użytkownik'}</div>
+                        <div className="text-xs text-ink-muted">Ustawienia i konto</div>
+                    </div>
+                    <Settings size={17} className="text-ink-muted" />
+                </button>
+            </div>
+        </aside>
     );
 }

@@ -1,6 +1,6 @@
 /* Service Worker: app-shell cache + Web Push */
 
-const CACHE_NAME = 'gosia-v1';
+const CACHE_NAME = 'gosia-v3';
 const PRECACHE = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -67,7 +67,7 @@ self.addEventListener('push', (event) => {
     }
 
     event.waitUntil(
-        self.registration.showNotification(data.title || 'Gosia 2.0', {
+        self.registration.showNotification(data.title || 'Gosia', {
             body: data.body || '',
             icon: '/icons/icon-192.png',
             badge: '/icons/badge-96.png',
@@ -81,14 +81,14 @@ self.addEventListener('notificationclick', (event) => {
     const url = (event.notification.data && event.notification.data.url) || '/';
 
     event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
             for (const client of windows) {
                 if ('focus' in client) {
                     client.navigate(url);
                     return client.focus();
                 }
             }
-            return clients.openWindow(url);
+            return self.clients.openWindow(url);
         })
     );
 });

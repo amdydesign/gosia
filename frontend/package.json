@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "vite build && node scripts/sync-root.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

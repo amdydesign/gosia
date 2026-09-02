@@ -1,149 +1,87 @@
 import { useState } from 'react';
-import { Download, X, FileText, Lock, Archive } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { Download, FileText, Lock, Archive } from 'lucide-react';
+import { getStoredToken } from '../../utils/api';
+import Sheet from '../../components/ui/Sheet';
+import Button from '../../components/ui/Button';
+import { useToast } from '../../context/ToastContext';
+
+const MODES = [
+    { value: 'official', icon: FileText, title: 'Oficjalne (do PIT)', text: 'Umowy o dzieło, Use.me, umowa o pracę', tone: 'text-sky-700 bg-sky-50' },
+    { value: 'full', icon: Archive, title: 'Pełny raport', text: 'Oficjalne + prywatne w dwóch sekcjach', tone: 'text-primary-700 bg-primary-50' },
+    { value: 'private', icon: Lock, title: 'Tylko prywatne', text: 'Gotówka i nieformalne', tone: 'text-emerald-700 bg-emerald-50' },
+];
 
 export default function ExportModal({ isOpen, onClose }) {
-    const { token } = useAuth();
+    const toast = useToast();
     const [mode, setMode] = useState('official');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    if (!isOpen) return null;
 
     const handleDownload = async () => {
         setLoading(true);
-        setError('');
-
         try {
-            // Append token to URL as fallback for servers that strip Auth headers on file downloads
-            const downloadUrl = `${import.meta.env.VITE_API_URL || '/api'}/collaborations/export.php?mode=${mode}&token=${token}`;
-
-            const response = await fetch(downloadUrl, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+            const token = getStoredToken();
+            const response = await fetch(`/api/collaborations/export.php?mode=${mode}&token=${token}`, {
+                headers: { Authorization: `Bearer ${token}` },
             });
-
             if (!response.ok) throw new Error('Błąd pobierania');
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `wspolprace_${new Date().getFullYear()}_${mode}.csv`; // Dynamic filename
+            a.download = `wspolprace_${new Date().getFullYear()}_${mode}.csv`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
+            a.remove();
+            toast.success('Plik CSV pobrany');
             onClose();
-        } catch (err) {
-            setError('Nie udało się pobrać pliku. Spróbuj ponownie.');
-            console.error(err);
+        } catch {
+            toast.error('Nie udało się pobrać pliku. Spróbuj ponownie.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative animate-scaleIn">
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"
-                >
-                    <X size={20} />
-                </button>
-
-                <div className="p-8">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="bg-blue-50 p-3 rounded-2xl text-blue-600">
-                            <Download size={24} />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold text-gray-900">Eksportuj dane</h2>
-                            <p className="text-sm text-gray-500">Wybierz format raportu</p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3 mb-8">
+        <Sheet
+            open={isOpen}
+            onClose={onClose}
+            title="Eksport współprac"
+            description="Plik CSV otworzysz w Excelu lub prześlesz księgowej."
+            size="sm"
+            footer={
+                <Button variant="dark" block icon={Download} loading={loading} onClick={handleDownload}>
+                    Pobierz .csv
+                </Button>
+            }
+        >
+            <div className="space-y-2 pt-1">
+                {MODES.map((m) => {
+                    const active = mode === m.value;
+                    return (
                         <button
-                            onClick={() => setMode('official')}
-                            className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 group
-                                ${mode === 'official'
-                                    ? 'border-blue-500 bg-blue-50 text-blue-900'
-                                    : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'}`}
+                            key={m.value}
+                            type="button"
+                            onClick={() => setMode(m.value)}
+                            className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl border-2 text-left transition-colors ${
+                                active ? 'border-ink bg-canvas' : 'border-line hover:border-line-strong'
+                            }`}
                         >
-                            <div className={`p-2 rounded-lg ${mode === 'official' ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                                <FileText size={20} />
-                            </div>
-                            <div>
-                                <div className="font-bold">Oficjalne (PIT)</div>
-                                <div className="text-xs opacity-70">Tylko faktury i umowy</div>
-                            </div>
-                            <div className={`ml-auto w-4 h-4 rounded-full border-2 flex items-center justify-center
-                                ${mode === 'official' ? 'border-blue-500' : 'border-gray-300'}`}>
-                                {mode === 'official' && <div className="w-2 h-2 bg-blue-500 rounded-full" />}
-                            </div>
+                            <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${m.tone}`}>
+                                <m.icon size={18} />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block font-bold text-ink text-sm">{m.title}</span>
+                                <span className="block text-xs text-ink-muted">{m.text}</span>
+                            </span>
+                            <span className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center ${active ? 'border-ink' : 'border-line-strong'}`}>
+                                {active && <span className="w-2 h-2 rounded-full bg-ink" />}
+                            </span>
                         </button>
-
-                        <button
-                            onClick={() => setMode('full')}
-                            className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 group
-                                ${mode === 'full'
-                                    ? 'border-purple-500 bg-purple-50 text-purple-900'
-                                    : 'border-gray-100 hover:border-purple-200 hover:bg-gray-50'}`}
-                        >
-                            <div className={`p-2 rounded-lg ${mode === 'full' ? 'bg-white text-purple-600' : 'bg-gray-100 text-gray-500'}`}>
-                                <Archive size={20} />
-                            </div>
-                            <div>
-                                <div className="font-bold">Pełny raport</div>
-                                <div className="text-xs opacity-70">Oficjalne + Prywatne (2 sekcje)</div>
-                            </div>
-                            <div className={`ml-auto w-4 h-4 rounded-full border-2 flex items-center justify-center
-                                ${mode === 'full' ? 'border-purple-500' : 'border-gray-300'}`}>
-                                {mode === 'full' && <div className="w-2 h-2 bg-purple-500 rounded-full" />}
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={() => setMode('private')}
-                            className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 group
-                                ${mode === 'private'
-                                    ? 'border-green-500 bg-green-50 text-green-900'
-                                    : 'border-gray-100 hover:border-green-200 hover:bg-gray-50'}`}
-                        >
-                            <div className={`p-2 rounded-lg ${mode === 'private' ? 'bg-white text-green-600' : 'bg-gray-100 text-gray-500'}`}>
-                                <Lock size={20} />
-                            </div>
-                            <div>
-                                <div className="font-bold">Tylko prywatne</div>
-                                <div className="text-xs opacity-70">Gotówka i nieformalne</div>
-                            </div>
-                            <div className={`ml-auto w-4 h-4 rounded-full border-2 flex items-center justify-center
-                                ${mode === 'private' ? 'border-green-500' : 'border-gray-300'}`}>
-                                {mode === 'private' && <div className="w-2 h-2 bg-green-500 rounded-full" />}
-                            </div>
-                        </button>
-                    </div>
-
-                    {error && (
-                        <div className="bg-red-50 text-red-500 text-sm p-3 rounded-lg mb-4 text-center">
-                            {error}
-                        </div>
-                    )}
-
-                    <button
-                        onClick={handleDownload}
-                        disabled={loading}
-                        className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl shadow-lg shadow-gray-200 hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-70 disabled:hover:scale-100"
-                    >
-                        {loading ? 'Pobieranie...' : 'Pobierz .csv'}
-                    </button>
-                </div>
+                    );
+                })}
             </div>
-        </div>
+        </Sheet>
     );
 }

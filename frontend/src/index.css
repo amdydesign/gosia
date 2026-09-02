@@ -1,63 +1,99 @@
 @import "tailwindcss";
 
-@theme {
-  --color-primary: #c084a0;
-  --color-primary-light: #e8c5d5;
-  --color-primary-dark: #9a6b81;
-  --color-secondary: #a78bba;
-  --color-secondary-light: #d4c4e3;
-  --color-secondary-dark: #8a6fa0;
-
-  --font-sans: 'Inter', system-ui, sans-serif;
-}
-
 /* ========================================
-   GOSIA 2.0 - DESIGN SYSTEM
-   Tailwind CSS + Custom Styles
+   GOSIA — DESIGN TOKENS (Tailwind v4 theme)
    ======================================== */
+@theme {
+  /* Brand: dusty rose / mauve */
+  --color-primary-50: #fdf5f8;
+  --color-primary-100: #fbe9f0;
+  --color-primary-200: #f7d1df;
+  --color-primary-300: #efadc5;
+  --color-primary-400: #e37fa3;
+  --color-primary-500: #d15a86;
+  --color-primary-600: #ba3f6e;
+  --color-primary-700: #9c3059;
+  --color-primary-800: #82294b;
+  --color-primary-900: #6d2641;
+  --color-primary: #d15a86;
+  --color-primary-light: #f7d1df;
+  --color-primary-dark: #9c3059;
+
+  /* Secondary accent: soft plum */
+  --color-secondary: #8b6fb3;
+  --color-secondary-light: #e6dcf3;
+  --color-secondary-dark: #6a5190;
+
+  /* Surfaces */
+  --color-canvas: #faf8f7;
+  --color-surface: #ffffff;
+  --color-ink: #1f1a1c;
+  --color-ink-soft: #5c5257;
+  --color-ink-muted: #8f858a;
+  --color-line: #ece6e8;
+  --color-line-strong: #dcd3d6;
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --shadow-card: 0 1px 2px rgba(31, 26, 28, 0.04), 0 4px 16px -8px rgba(31, 26, 28, 0.08);
+  --shadow-float: 0 10px 30px -10px rgba(209, 90, 134, 0.45);
+  --shadow-sheet: 0 -8px 40px -12px rgba(31, 26, 28, 0.25);
+
+  --animate-fade-in: fade-in 0.18s ease-out both;
+  --animate-scale-in: scale-in 0.18s ease-out both;
+  --animate-slide-up: slide-up 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-toast-in: toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}
 
 @layer base {
   * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
   }
 
   html {
     font-size: 16px;
-    scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply font-sans text-gray-800 bg-gray-50 min-h-screen;
+    margin: 0;
+    @apply font-sans text-ink bg-canvas min-h-screen;
+    font-feature-settings: 'cv11', 'ss01', 'tnum';
   }
 
-  /* Focus states */
   :focus-visible {
-    @apply outline-2 outline-primary outline-offset-2;
-  }
-}
-
-@layer components {
-
-  /* Container */
-  .container {
-    @apply w-full max-w-6xl mx-auto px-4 pb-24;
+    @apply outline-2 outline-primary-400 outline-offset-2 rounded-md;
   }
 
-  @media (min-width: 1024px) {
-    .container {
-      @apply pl-72 pb-8;
-    }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
-  /* Loading */
-  .loading {
-    @apply text-center py-10 text-gray-500;
-  }
-
-  .error {
-    @apply text-center py-10 text-red-500;
+  ::selection {
+    @apply bg-primary-200 text-primary-900;
   }
 }

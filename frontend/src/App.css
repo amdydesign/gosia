@@ -1,185 +1,172 @@
 @reference "./index.css";
 
 /* ========================================
-   APP-WIDE TAILWIND EXTENSIONS
+   SHARED COMPONENT CLASSES
    ======================================== */
-
-@layer utilities {
-
-  /* Gradient text */
-  .text-gradient {
-    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
-  }
-}
 
 @layer components {
 
-  /* Stats Grid */
-  .stats-grid {
-    @apply grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 mb-6;
-  }
-
-  /* Stat Card */
-  .stat-card {
-    @apply bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100 transition-all duration-200 hover:shadow-md hover:border-primary-light hover:-translate-y-0.5;
-  }
-
-  .stat-card-highlight {
-    @apply bg-gradient-to-br from-primary to-secondary border-transparent;
-  }
-
-  .stat-card-highlight .stat-value {
-    @apply text-white;
-  }
-
-  .stat-card-highlight .stat-label {
-    @apply text-white/80;
-  }
-
-  .stat-value {
-    @apply block text-2xl lg:text-3xl font-bold text-primary-dark mb-1;
-  }
-
-  .stat-label {
-    @apply text-xs font-semibold text-gray-400 uppercase tracking-wider;
-  }
-
-  /* Cards */
-  .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden;
-  }
-
-  .card-header {
-    @apply flex justify-between items-center p-5 border-b border-gray-100;
-  }
-
-  .card-title {
-    @apply text-base font-semibold text-gray-800;
-  }
-
-  .card-body {
-    @apply p-4 lg:p-5;
-  }
-
-  /* List items */
-  .list {
-    @apply flex flex-col gap-3;
-  }
-
-  .list-item {
-    @apply bg-gray-50 rounded-xl p-4 transition-all duration-200 cursor-pointer border border-transparent hover:bg-white hover:border-gray-200 hover:shadow-sm;
-  }
-
-  .list-item-header {
-    @apply flex justify-between items-start gap-3;
-  }
-
-  .list-item-title {
-    @apply font-semibold text-gray-800 mb-1;
-  }
-
-  .list-item-meta {
-    @apply flex flex-wrap gap-3 text-sm text-gray-500;
-  }
-
-  .list-item-amount {
-    @apply font-bold text-lg text-primary-dark mb-1;
-  }
-
-  .list-item-notes {
-    @apply mt-3 pt-3 border-t border-gray-100 text-sm text-gray-400;
-  }
-
-  /* Badges */
-  .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide;
-  }
-
-  .badge-success {
-    @apply bg-green-100 text-green-700;
-  }
-
-  .badge-warning {
-    @apply bg-amber-100 text-amber-700;
-  }
-
-  .badge-danger {
-    @apply bg-red-100 text-red-700;
-  }
-
-  .badge-info {
-    @apply bg-blue-100 text-blue-700;
-  }
-
-  /* Buttons */
+  /* ----- Buttons ----- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           whitespace-nowrap select-none transition-all duration-150 active:scale-[0.98]
+           disabled:opacity-50 disabled:pointer-events-none;
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:-translate-y-0.5;
+    @apply bg-primary-600 text-white shadow-float hover:bg-primary-700;
   }
 
   .btn-secondary {
-    @apply bg-white text-primary-dark border-2 border-primary-light hover:bg-primary-light;
+    @apply bg-white text-ink border border-line-strong shadow-sm hover:bg-primary-50 hover:border-primary-200;
+  }
+
+  .btn-soft {
+    @apply bg-primary-50 text-primary-700 hover:bg-primary-100;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-ink-soft hover:bg-black/5 hover:text-ink;
+  }
+
+  .btn-danger {
+    @apply bg-red-50 text-red-700 hover:bg-red-100;
   }
 
   .btn-success {
-    @apply bg-green-500 text-white hover:bg-green-600;
+    @apply bg-emerald-600 text-white hover:bg-emerald-700;
   }
 
-  .btn-small {
-    @apply px-4 py-2 text-xs;
+  .btn-dark {
+    @apply bg-ink text-white hover:bg-black;
   }
 
-  /* FAB */
-  .fab {
-    @apply fixed bottom-24 lg:bottom-8 right-4 lg:right-8 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-secondary text-white text-2xl shadow-xl shadow-primary/30 z-40 flex items-center justify-center hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200;
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs rounded-lg gap-1.5;
   }
 
-  /* Alerts */
-  .alert {
-    @apply flex items-start gap-3 p-4 rounded-xl mb-4 text-sm;
+  .btn-lg {
+    @apply px-6 py-3.5 text-base rounded-2xl;
   }
 
-  .alert-icon {
-    @apply text-xl flex-shrink-0;
+  .btn-icon {
+    @apply p-2.5 rounded-xl;
   }
 
-  .alert-danger {
-    @apply bg-red-50 text-red-800 border border-red-200;
+  .btn-block {
+    @apply w-full;
   }
 
-  /* Empty State */
-  .empty-state {
-    @apply text-center py-12 px-4;
+  /* ----- Cards ----- */
+  .card {
+    @apply bg-surface rounded-2xl border border-line shadow-card;
   }
 
-  .empty-state-icon {
-    @apply text-5xl mb-4 opacity-40;
+  .card-pad {
+    @apply p-4 sm:p-5;
   }
 
-  .empty-state-title {
-    @apply text-base font-semibold text-gray-500 mb-1;
+  .card-title {
+    @apply text-sm font-bold text-ink tracking-tight;
   }
 
-  .empty-state-text {
-    @apply text-sm text-gray-400;
+  /* ----- Inputs ----- */
+  .input {
+    @apply w-full rounded-xl border border-line-strong bg-white px-3.5 py-2.5 text-[15px] text-ink
+           placeholder:text-ink-muted transition-colors
+           focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-100
+           disabled:bg-canvas disabled:text-ink-muted;
   }
 
-  /* Filter buttons */
-  .filter-buttons {
-    @apply flex flex-wrap gap-2 mb-5 pb-4 border-b border-gray-100;
+  select.input {
+    @apply appearance-none pr-10 cursor-pointer bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238f858a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.85rem center;
   }
 
-  /* Quick Actions */
-  .quick-actions {
-    @apply grid grid-cols-2 gap-3 mb-6;
+  textarea.input {
+    @apply resize-none leading-relaxed;
   }
 
-  .quick-action-btn {
-    @apply flex items-center justify-center gap-2 p-4 rounded-2xl font-semibold text-white transition-all duration-200 hover:shadow-lg active:scale-95;
+  .label {
+    @apply block text-[13px] font-semibold text-ink-soft mb-1.5;
+  }
+
+  .hint {
+    @apply mt-1.5 text-xs text-ink-muted;
+  }
+
+  /* ----- Badges & chips ----- */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide whitespace-nowrap;
+  }
+
+  .badge-neutral { @apply bg-stone-100 text-stone-600; }
+  .badge-success { @apply bg-emerald-50 text-emerald-700; }
+  .badge-warning { @apply bg-amber-50 text-amber-700; }
+  .badge-danger  { @apply bg-red-50 text-red-700; }
+  .badge-info    { @apply bg-sky-50 text-sky-700; }
+  .badge-brand   { @apply bg-primary-50 text-primary-700; }
+  .badge-plum    { @apply bg-secondary-light text-secondary-dark; }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-xs font-semibold
+           text-ink-soft whitespace-nowrap transition-colors hover:border-primary-200 hover:text-primary-700;
+  }
+
+  .chip-active {
+    @apply bg-ink text-white border-ink hover:bg-ink hover:text-white hover:border-ink;
+  }
+
+  /* ----- Segmented control ----- */
+  .segmented {
+    @apply inline-flex items-center gap-1 rounded-xl bg-stone-100 p-1;
+  }
+
+  .segmented-item {
+    @apply flex-1 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-semibold text-ink-soft whitespace-nowrap transition-all
+           hover:text-ink;
+  }
+
+  .segmented-item-active {
+    @apply bg-white text-ink shadow-sm;
+  }
+
+  /* ----- Lists ----- */
+  .row {
+    @apply flex items-center gap-3 sm:gap-4 px-4 py-3.5 transition-colors;
+  }
+
+  .row-link {
+    @apply flex items-center gap-3 sm:gap-4 px-4 py-3.5 transition-colors hover:bg-primary-50/50 active:bg-primary-50 cursor-pointer;
+  }
+
+  .row-avatar {
+    @apply w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base shrink-0;
+  }
+
+  /* ----- Skeleton ----- */
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-stone-200/70;
+  }
+
+  /* ----- Misc ----- */
+  .divider {
+    @apply border-t border-line;
+  }
+
+  .nowrap {
+    white-space: nowrap;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
-
-/* Header styles moved to Header.css */

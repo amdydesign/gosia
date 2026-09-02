@@ -1,206 +1,293 @@
 /**
- * Utility functions for formatting
+ * Formatting helpers + domain dictionaries (labels, statuses, tax rules)
  */
 
-// Format currency (PLN)
-export function formatCurrency(amount) {
-    if (!amount || amount === 0) return '0 zł';
+// ---------- Money ----------
+export function formatCurrency(amount, { compact = false } = {}) {
+    const value = Number(amount) || 0;
+    if (compact && Math.abs(value) >= 10000) {
+        return `${(value / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })}k zł`;
+    }
     return new Intl.NumberFormat('pl-PL', {
         style: 'currency',
         currency: 'PLN',
         minimumFractionDigits: 0,
         maximumFractionDigits: 2
-    }).format(amount);
+    }).format(value);
 }
 
-// Format date (Polish format)
+// ---------- Dates ----------
+export function parseDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    // "YYYY-MM-DD" -> local midnight (avoid TZ shift)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function formatDate(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('pl-PL', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    }).format(date);
+    const date = parseDate(dateString);
+    if (!date) return '';
+    return new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
 }
 
-// Get today's date in YYYY-MM-DD format
+export function formatDateShort(dateString) {
+    const date = parseDate(dateString);
+    if (!date) return '';
+    return new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short' }).format(date).replace('.', '');
+}
+
+export function formatDateLong(dateString) {
+    const date = parseDate(dateString);
+    if (!date) return '';
+    return new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
+export function formatWeekdayDate(date = new Date()) {
+    const text = new Intl.DateTimeFormat('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' }).format(date);
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function formatMonthYear(monthKey) {
+    // monthKey: "YYYY-MM"
+    const [y, m] = monthKey.split('-').map(Number);
+    const text = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1));
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function toDateInput(date = new Date()) {
+    const d = date instanceof Date ? date : parseDate(date) || new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function getTodayDate() {
+    return toDateInput(new Date());
+}
+
+export function addDays(dateString, days) {
+    const d = parseDate(dateString);
+    if (!d) return null;
+    const copy = new Date(d);
+    copy.setDate(copy.getDate() + Number(days || 0));
+    return copy;
+}
+
+export function daysFromToday(dateString) {
+    const d = parseDate(dateString);
+    if (!d) return null;
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    today.setHours(0, 0, 0, 0);
+    d.setHours(0, 0, 0, 0);
+    return Math.round((d - today) / 86400000);
 }
 
-// Get collaboration type label
+export function pluralDays(n) {
+    const abs = Math.abs(n);
+    if (abs === 1) return 'dzień';
+    return 'dni';
+}
+
+export function greetingForHour(hour = new Date().getHours()) {
+    if (hour < 5) return 'Dobrej nocy';
+    if (hour < 11) return 'Dzień dobry';
+    if (hour < 18) return 'Miłego dnia';
+    return 'Dobry wieczór';
+}
+
+// ---------- Collaboration dictionaries ----------
+export const COLLAB_TYPES = [
+    { value: 'post-instagram', label: 'Post Instagram' },
+    { value: 'story', label: 'Stories' },
+    { value: 'reel', label: 'Reels' },
+    { value: 'sesja', label: 'Sesja zdjęciowa' },
+    { value: 'event', label: 'Event' },
+    { value: 'konsultacja', label: 'Konsultacja' },
+    { value: 'umowa-praca', label: 'Umowa o pracę (wypłata)' },
+    { value: 'inne', label: 'Inne' },
+];
+
 export function getCollabTypeLabel(type) {
-    const types = {
-        'post-instagram': 'Post Instagram',
-        'story': 'Instagram Stories',
-        'reel': 'Reel',
-        'sesja': 'Sesja stylizacji',
-        'konsultacja': 'Konsultacja',
-        'event': 'Event',
-        'inne': 'Inne'
-    };
-    return types[type] || type;
+    const found = COLLAB_TYPES.find((t) => t.value === type);
+    if (found) return found.label;
+    const legacy = { paid: 'Płatna', barter: 'Barter', ambasador: 'Ambasadorska' };
+    return legacy[type] || type || 'Inne';
 }
 
-// Get payment status info
 export function getPaymentStatusInfo(status) {
     const statuses = {
-        'pending': { label: 'Oczekująca', className: 'badge-warning' },
-        'paid': { label: 'Opłacona', className: 'badge-success' },
-        'overdue': { label: 'Zaległa', className: 'badge-danger' }
+        pending: { label: 'Czeka na płatność', short: 'Oczekuje', tone: 'warning' },
+        paid: { label: 'Opłacona', short: 'Opłacona', tone: 'success' },
+        overdue: { label: 'Zaległa płatność', short: 'Zaległa', tone: 'danger' },
     };
-    return statuses[status] || { label: status, className: 'badge-info' };
+    return statuses[status] || { label: status, short: status, tone: 'neutral' };
 }
 
-// Get return urgency info
+// ---------- Purchases ----------
 export function getReturnUrgency(daysRemaining) {
-    if (daysRemaining < 0) {
-        return { level: 'overdue', className: 'badge-danger', message: 'Przekroczony termin!' };
-    } else if (daysRemaining === 0) {
-        return { level: 'today', className: 'badge-danger', message: 'Dziś ostatni dzień!' };
-    } else if (daysRemaining <= 3) {
-        return { level: 'urgent', className: 'badge-danger', message: `Zostały ${daysRemaining} dni` };
-    } else if (daysRemaining <= 7) {
-        return { level: 'soon', className: 'badge-warning', message: `Zostało ${daysRemaining} dni` };
-    } else {
-        return { level: 'ok', className: 'badge-success', message: `Zostało ${daysRemaining} dni` };
+    const days = Number(daysRemaining);
+    if (Number.isNaN(days)) return { level: 'unknown', tone: 'neutral', message: '', short: '' };
+    if (days < 0) {
+        return { level: 'overdue', tone: 'neutral', message: 'Termin minął', short: 'Minął' };
     }
+    if (days === 0) {
+        return { level: 'today', tone: 'danger', message: 'Dziś ostatni dzień!', short: 'Dziś!' };
+    }
+    if (days <= 3) {
+        return { level: 'urgent', tone: 'danger', message: `Zostały ${days} ${pluralDays(days)}`, short: `${days} dni` };
+    }
+    if (days <= 7) {
+        return { level: 'soon', tone: 'warning', message: `Zostało ${days} dni`, short: `${days} dni` };
+    }
+    return { level: 'ok', tone: 'success', message: `Zostało ${days} dni`, short: `${days} dni` };
 }
 
-// Get return status info
-export function getReturnStatusInfo(status) {
-    const statuses = {
-        'pending': { label: 'Do zwrotu', className: 'badge-warning' },
-        'returned': { label: 'Zwrócone', className: 'badge-success' }
-    };
-    return statuses[status] || { label: status, className: 'badge-info' };
+export function getPurchaseStatusInfo(status, daysRemaining) {
+    if (status === 'returned') return { label: 'Zwrócone', tone: 'success' };
+    if (status === 'partial') return { label: 'Częściowy zwrot', tone: 'info' };
+    if (Number(daysRemaining) < 0) return { label: 'Zostawione', tone: 'neutral' };
+    return { label: 'Do decyzji', tone: 'warning' };
 }
 
-// Billing types
+export const RETURN_DAY_PRESETS = [14, 30, 60, 100];
+
+// ---------- Billing / tax ----------
 export const BILLING_TYPES = {
-    umowa_50: { label: 'Umowa o Dzieło (50% KUP)', kup: 0.50, tax: 0.12 },
-    umowa_20: { label: 'Umowa o Dzieło (20% KUP)', kup: 0.20, tax: 0.12 },
-    useme_50: { label: 'Use.me (50% KUP)', kup: 0.50, useme: true },
-    useme_20: { label: 'Use.me (20% KUP)', kup: 0.20, useme: true },
-    umowa_praca: { label: 'Umowa o pracę', tax: 0.12, private: false },
-    gotowka: { label: 'Gotówka prywatna (nieformalna)', private: true }
+    umowa_50: { label: 'Umowa o dzieło (50% KUP)', short: 'UoD 50%', kup: 0.50, tax: 0.12 },
+    umowa_20: { label: 'Umowa o dzieło (20% KUP)', short: 'UoD 20%', kup: 0.20, tax: 0.12 },
+    useme_50: { label: 'Use.me (50% KUP)', short: 'Use.me 50%', kup: 0.50, useme: true },
+    useme_20: { label: 'Use.me (20% KUP)', short: 'Use.me 20%', kup: 0.20, useme: true },
+    umowa_praca: { label: 'Umowa o pracę', short: 'UoP', tax: 0.12, private: false },
+    gotowka: { label: 'Gotówka prywatna (nieformalna)', short: 'Gotówka', private: true },
 };
 
-// Calculate net amount (Do ręki)
-export function calculateNetAmount(gross, type) {
-    if (!gross) return 0;
-    const breakdown = getTaxBreakdown(gross, type);
-    return breakdown.net;
+export function getBillingLabel(collabType, { short = false } = {}) {
+    const config = BILLING_TYPES[collabType];
+    if (config) return short ? config.short : config.label;
+    const legacy = { barter: 'Barter', other: short ? 'UoD 50%' : 'Umowa o dzieło (50% KUP)' };
+    return legacy[collabType] || '';
 }
 
-// Get full tax breakdown
+// Calculate net amount ("na rękę")
+export function calculateNetAmount(gross, type) {
+    if (!gross) return 0;
+    return getTaxBreakdown(gross, type).net;
+}
+
+// Full tax breakdown - the numbers Gosia sees in the form
 export function getTaxBreakdown(grossInput, type) {
     const gross = parseFloat(grossInput || 0);
-    if (!gross) return { gross: 0, net: 0, details: {} };
+    if (!gross) return { gross: 0, net: 0, type, details: {} };
 
-    // Default result structure
-    let result = {
-        gross: gross,
+    const result = {
+        gross,
         net: gross,
-        type: type,
+        type,
         details: {
             commission: 0,
             afterCommission: gross,
             kup: 0,
             taxBase: 0,
             tax: 0,
-            zus: 0,      // Added for UoP
-            health: 0    // Added for UoP
+            zus: 0,
+            health: 0
         }
     };
 
     if (!type || !BILLING_TYPES[type]) return result;
     const config = BILLING_TYPES[type];
 
-    // Gotowka (Private) - No deductions
-    if (config.private) {
-        return result;
-    }
+    if (config.private) return result;
 
-    // Special Case: Umowa o Pracę
     if (type === 'umowa_praca') {
-        // 1. ZUS (13.71%)
         const zus = gross * 0.1371;
         result.details.zus = zus;
-
-        // 2. Health Basis
         const healthBase = gross - zus;
-
-        // 3. Health (9%)
         const health = healthBase * 0.09;
         result.details.health = health;
-
-        // 4. KUP (Standard 250)
         const kup = 250;
         result.details.kup = kup;
-
-        // 5. Tax Basis
         const taxBase = Math.max(0, gross - zus - kup);
         result.details.taxBase = taxBase;
-
-        // 6. Tax (12% - 300 free amount)
         const taxVal = Math.max(0, (taxBase * 0.12) - 300);
         result.details.tax = taxVal;
-
-        // 7. Net
         result.net = gross - zus - health - taxVal;
         return result;
     }
 
     let currentAmount = gross;
 
-    // 1. Use.me Commission (if applicable)
     if (config.useme) {
-        // Commission is 7.8% usually, but let's check exact logic.
-        // User mentioned "min 29 zl" in prompt "Use.me minimalna prowizja: Jeśli 7,8% < 29 zł..."
-        // Assumption: 7.8% of Gross
         let commission = currentAmount * 0.078;
-        if (commission < 29) commission = 29; // Enforce minimum if needed, though user said "show info", usually strict min applies.
-
-        // Cap commission at gross if gross is tiny (edge case)
+        if (commission < 29) commission = 29;
         if (commission > currentAmount) commission = currentAmount;
-
         result.details.commission = commission;
         currentAmount -= commission;
         result.details.afterCommission = currentAmount;
     }
 
-    // 2. KUP (Koszt Uzyskania Przychodu)
-    // KUP is calculated on the amount *after* commission?
-    // Standard Umowa o Dzieło: KUP is % of Gross.
-    // Use.me: The prompt says "KROK 2 - Podatek: KUP (50%) -> szary tekst (np. -691,50 zł)".
-    // If Step 1 result was 1383 (from 1500), 50% of 1383 is 691.50. So yes, KUP is on the amount AFTER commission.
     const kupRate = config.kup || 0;
     const kupAmount = currentAmount * kupRate;
     result.details.kup = kupAmount;
-
-    // 3. Tax Base (Podstawa opodatkowania)
-    const taxBase = Math.round(currentAmount - kupAmount); // Tax base is usually rounded to integer in PL?
-    // Let's use exact for now to match User examples (691.50).
     result.details.taxBase = currentAmount - kupAmount;
 
-    // 4. Tax (Zaliczka na PIT 12%)
     const taxRate = config.tax || 0.12;
-    // Tax is calculated on Tax Base
     const taxAmount = result.details.taxBase * taxRate;
     result.details.tax = taxAmount;
 
-    // 5. Net
     result.net = currentAmount - taxAmount;
-
     return result;
 }
 
-// Truncate text
+// ---------- Text ----------
 export function truncate(text, maxLength) {
     if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
+}
+
+export function countWords(text) {
+    if (!text) return 0;
+    return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+// Approximate speaking time for a script (Polish speech ~2.3 words/s)
+export function estimateSpeechSeconds(text) {
+    return Math.round(countWords(text) / 2.3);
+}
+
+export function formatSeconds(total) {
+    const s = Math.max(0, Math.round(total));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    if (m === 0) return `${r} s`;
+    return `${m}:${String(r).padStart(2, '0')} min`;
+}
+
+export function initials(text) {
+    if (!text) return '?';
+    return text.trim().charAt(0).toUpperCase();
+}
+
+// ---------- Grouping ----------
+export function groupByMonth(items, dateKey = 'date') {
+    const groups = new Map();
+    for (const item of items) {
+        const key = (item[dateKey] || '').slice(0, 7) || 'brak';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+    }
+    return Array.from(groups.entries())
+        .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+        .map(([key, list]) => ({ key, label: key === 'brak' ? 'Bez daty' : formatMonthYear(key), items: list }));
+}
+
+export function uniqueSorted(values) {
+    return Array.from(new Set(values.filter(Boolean).map((v) => String(v).trim()))).sort((a, b) =>
+        a.localeCompare(b, 'pl')
+    );
 }

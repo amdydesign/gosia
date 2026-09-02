@@ -1,127 +1,153 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { Plus, Lightbulb, CheckCircle2, Circle, Clock, Play } from 'lucide-react';
 import ideasService from '../../services/ideas';
-import { Plus, Lightbulb, CheckCircle, Clock } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import { useDashboard } from '../../context/DashboardContext';
+import PageHeader from '../../components/ui/PageHeader';
+import Button from '../../components/ui/Button';
+import Segmented from '../../components/ui/Segmented';
+import SearchInput from '../../components/ui/SearchInput';
+import EmptyState from '../../components/ui/EmptyState';
+import { CardSkeleton } from '../../components/ui/Skeleton';
+import { estimateSpeechSeconds, formatSeconds, formatDateShort } from '../../utils/format';
+
+const FILTERS = [
+    { value: 'draft', label: 'Do nagrania' },
+    { value: 'recorded', label: 'Nagrane' },
+    { value: 'all', label: 'Wszystkie' },
+];
 
 export default function IdeaList() {
-    const { token } = useAuth();
+    const toast = useToast();
+    const { refresh } = useDashboard();
     const [ideas, setIdeas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [filter, setFilter] = useState('all'); // all, draft, recorded
+    const [filter, setFilter] = useState('draft');
+    const [query, setQuery] = useState('');
 
     useEffect(() => {
-        loadIdeas();
-    }, [filter]);
+        let cancelled = false;
+        (async () => {
+            try {
+                setLoading(true);
+                const data = await ideasService.getAll(null, 'all');
+                if (!cancelled) setIdeas(Array.isArray(data) ? data : []);
+            } catch (err) {
+                if (!cancelled) setError(err.message || 'Błąd ładowania pomysłów');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
-    const loadIdeas = async () => {
+    const counts = useMemo(
+        () => ({
+            draft: ideas.filter((i) => i.status === 'draft').length,
+            recorded: ideas.filter((i) => i.status === 'recorded').length,
+            all: ideas.length,
+        }),
+        [ideas]
+    );
+
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return ideas.filter((i) => {
+            if (filter !== 'all' && i.status !== filter) return false;
+            if (q && !`${i.title} ${i.content || ''}`.toLowerCase().includes(q)) return false;
+            return true;
+        });
+    }, [ideas, filter, query]);
+
+    const toggleStatus = async (idea) => {
+        const next = idea.status === 'recorded' ? 'draft' : 'recorded';
+        setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: next } : i)));
         try {
-            setLoading(true);
-            const data = await ideasService.getAll(token, filter);
-            setIdeas(Array.isArray(data) ? data : []);
+            await ideasService.update(null, idea.id, { status: next });
+            refresh();
+            if (next === 'recorded') toast.success(`„${idea.title}” — nagrane 🎬`);
         } catch (err) {
-            setError(err.message || 'Błąd ładowania pomysłów');
-            setIdeas([]);
-        } finally {
-            setLoading(false);
+            setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: idea.status } : i)));
+            toast.error(err.message || 'Nie udało się zmienić statusu');
         }
     };
 
     return (
-        <div className="space-y-6">
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Pomysły na rolki</h1>
-                    <p className="text-gray-500">Twoje scenariusze i inspiracje</p>
+        <div className="animate-fade-in">
+            <PageHeader
+                title="Pomysły na rolki"
+                subtitle="Scenariusze, inspiracje i prompter"
+                actions={
+                    <Button to="/ideas/new" variant="primary" icon={Plus} className="hidden lg:inline-flex">
+                        Nowy pomysł
+                    </Button>
+                }
+            >
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                    <SearchInput value={query} onChange={setQuery} placeholder="Szukaj w tytułach i scenariuszach…" className="flex-1" />
+                    <Segmented value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, count: counts[f.value] }))} />
                 </div>
-                <Link
-                    to="/ideas/new"
-                    className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-purple-200 hover:shadow-xl hover:scale-105 transition-all w-fit"
-                >
-                    <Plus size={20} />
-                    Dodaj pomysł
-                </Link>
-            </header>
+            </PageHeader>
 
-            {/* Filters */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-                {[
-                    { value: 'all', label: 'Wszystkie' },
-                    { value: 'draft', label: 'Do zrobienia' },
-                    { value: 'recorded', label: 'Nagrane' },
-                ].map(f => (
-                    <button
-                        key={f.value}
-                        onClick={() => setFilter(f.value)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors
-                            ${filter === f.value
-                                ? 'bg-gray-900 text-white'
-                                : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                    >
-                        {f.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* List */}
             {loading ? (
-                <div className="loading">Ładowanie...</div>
-            ) : ideas.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-3xl border border-gray-100">
-                    <div className="mb-4 text-purple-400 flex justify-center">
-                        <Lightbulb size={48} strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Brak pomysłów</h3>
-                    <p className="text-gray-500 mb-6">Dodaj swój pierwszy scenariusz na rolkę.</p>
-                    <Link
-                        to="/ideas/new"
-                        className="inline-flex items-center gap-2 text-purple-600 font-bold hover:underline"
-                    >
-                        <Plus size={18} /> Dodaj teraz
-                    </Link>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {[0, 1, 2].map((i) => <CardSkeleton key={i} className="h-44" />)}
+                </div>
+            ) : error ? (
+                <EmptyState icon={Lightbulb} title="Nie udało się pobrać pomysłów" text={error} />
+            ) : filtered.length === 0 ? (
+                <div className="card">
+                    <EmptyState
+                        icon={Lightbulb}
+                        title={ideas.length === 0 ? 'Brak pomysłów' : filter === 'draft' ? 'Wszystko nagrane!' : 'Nic nie pasuje'}
+                        text={ideas.length === 0 ? 'Zapisz pierwszy scenariusz. Potem odpalisz go w prompterze.' : 'Zmień filtr lub dodaj nowy pomysł.'}
+                        action={<Button to="/ideas/new" variant="primary" icon={Plus}>Dodaj pomysł</Button>}
+                    />
                 </div>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {ideas.map(idea => {
-                        const isRecorded = idea.status === 'recorded';
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {filtered.map((idea) => {
+                        const recorded = idea.status === 'recorded';
+                        const seconds = estimateSpeechSeconds(idea.content);
                         return (
-                            <Link
-                                key={idea.id}
-                                to={`/ideas/${idea.id}`}
-                                className={`bg-white p-5 rounded-2xl shadow-sm border transition-all group flex flex-col h-full
-                                    ${isRecorded
-                                        ? 'border-gray-100 opacity-60 hover:opacity-100 hover:shadow-sm'
-                                        : 'border-gray-100 hover:border-purple-300 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="flex justify-between items-start mb-3">
-                                    <div className={`p-2 rounded-lg transition-colors ${isRecorded ? 'bg-gray-100 text-gray-400' : 'bg-purple-50 text-purple-600 group-hover:bg-purple-100'}`}>
-                                        <Lightbulb size={20} />
+                            <div key={idea.id} className={`card flex flex-col transition-all ${recorded ? 'opacity-70 hover:opacity-100' : 'hover:border-secondary/40 hover:shadow-md'}`}>
+                                <Link to={`/ideas/${idea.id}`} className="card-pad flex-1 flex flex-col">
+                                    <div className="flex items-start justify-between gap-3 mb-3">
+                                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${recorded ? 'bg-stone-100 text-ink-muted' : 'bg-secondary-light text-secondary-dark'}`}>
+                                            <Lightbulb size={18} />
+                                        </span>
+                                        {seconds > 0 && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
+                                                <Clock size={11} /> ~{formatSeconds(seconds)}
+                                            </span>
+                                        )}
                                     </div>
-                                    {isRecorded ? (
-                                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md flex items-center gap-1">
-                                            <CheckCircle size={10} /> Nagrane
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-md flex items-center gap-1">
-                                            <Clock size={10} /> Do zrobienia
-                                        </span>
+                                    <h3 className={`font-bold text-[15px] leading-snug line-clamp-2 ${recorded ? 'text-ink-soft' : 'text-ink'}`}>{idea.title}</h3>
+                                    <p className="text-sm text-ink-muted line-clamp-3 mt-1.5 flex-1">
+                                        {idea.content || <span className="italic">Brak scenariusza…</span>}
+                                    </p>
+                                    <div className="text-[11px] text-ink-muted mt-3">{formatDateShort(idea.created_at?.slice(0, 10))}</div>
+                                </Link>
+                                <div className="flex items-center gap-2 px-3 pb-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleStatus(idea)}
+                                        className={`btn btn-sm flex-1 ${recorded ? 'btn-ghost' : 'btn-soft'}`}
+                                    >
+                                        {recorded ? <CheckCircle2 size={14} className="text-emerald-600" /> : <Circle size={14} />}
+                                        {recorded ? 'Nagrane' : 'Oznacz nagrane'}
+                                    </button>
+                                    {!recorded && idea.content && (
+                                        <Link to={`/ideas/${idea.id}?prompter=1`} className="btn btn-sm btn-dark" title="Otwórz w prompterze">
+                                            <Play size={13} fill="currentColor" />
+                                        </Link>
                                     )}
                                 </div>
-
-                                <h3 className={`font-bold text-lg mb-2 transition-colors line-clamp-2 ${isRecorded ? 'text-gray-500' : 'text-gray-900 group-hover:text-purple-700'}`}>
-                                    {idea.title}
-                                </h3>
-
-                                <p className={`text-sm line-clamp-3 mb-4 flex-grow ${isRecorded ? 'text-gray-400' : 'text-gray-500'}`}>
-                                    {idea.content || <span className="italic opacity-50">Brak treści scenariusza...</span>}
-                                </p>
-
-                                <div className="text-xs text-gray-400 pt-4 border-t border-gray-50 mt-auto">
-                                    Utworzono: {new Date(idea.created_at).toLocaleDateString()}
-                                </div>
-                            </Link>
+                            </div>
                         );
                     })}
                 </div>

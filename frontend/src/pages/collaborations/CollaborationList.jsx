@@ -1,134 +1,246 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { Plus, Search, Calendar, CheckCircle, Clock, Briefcase } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Briefcase, Check, Download, Lock, Users } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
-import { formatCurrency, formatDate } from '../../utils/format';
+import { useMarkPaid } from '../../hooks/useMarkPaid';
+import PageHeader from '../../components/ui/PageHeader';
+import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import Segmented from '../../components/ui/Segmented';
+import SearchInput from '../../components/ui/SearchInput';
+import EmptyState from '../../components/ui/EmptyState';
+import { ListSkeleton } from '../../components/ui/Skeleton';
+import ExportModal from './ExportModal';
+import {
+    formatCurrency, formatDateShort, getCollabTypeLabel, getBillingLabel, getPaymentStatusInfo,
+    groupByMonth, initials, daysFromToday
+} from '../../utils/format';
+
+const FILTERS = [
+    { value: 'all', label: 'Wszystkie' },
+    { value: 'unpaid', label: 'Do zapłaty' },
+    { value: 'paid', label: 'Opłacone' },
+];
 
 export default function CollaborationList() {
-    const { token } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [collabs, setCollabs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [filter, setFilter] = useState('all'); // all, unpaid
+    const [query, setQuery] = useState('');
+    const [year, setYear] = useState('all');
+    const [exportOpen, setExportOpen] = useState(false);
+    const { markPaid, busyId } = useMarkPaid();
 
-    useEffect(() => {
-        loadCollabs();
-    }, []);
-
-    const loadCollabs = async () => {
-        try {
-            setLoading(true);
-            const data = await apiRequest('/collaborations/index.php', 'GET', null, token);
-            // Ensure we always have an array, even if API returns error/null
-            setCollabs(Array.isArray(data) ? data : []);
-        } catch (err) {
-            setError(err.message || 'Błąd ładowania');
-            setCollabs([]); // Reset to empty array on error
-        } finally {
-            setLoading(false);
-        }
+    const filter = FILTERS.some((f) => f.value === searchParams.get('filter')) ? searchParams.get('filter') : 'all';
+    const setFilter = (value) => {
+        const next = new URLSearchParams(searchParams);
+        if (value === 'all') next.delete('filter');
+        else next.set('filter', value);
+        setSearchParams(next, { replace: true });
     };
 
-    const filteredCollabs = collabs.filter(c => {
-        if (filter === 'unpaid') return c.payment_status !== 'paid';
-        return true;
-    });
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                setLoading(true);
+                const data = await apiRequest('/collaborations/index.php');
+                if (!cancelled) setCollabs(Array.isArray(data) ? data : []);
+            } catch (err) {
+                if (!cancelled) setError(err.message || 'Błąd ładowania');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const years = useMemo(() => {
+        const set = new Set(collabs.map((c) => (c.date || '').slice(0, 4)).filter(Boolean));
+        return Array.from(set).sort((a, b) => b.localeCompare(a));
+    }, [collabs]);
+
+    const counts = useMemo(
+        () => ({
+            all: collabs.length,
+            unpaid: collabs.filter((c) => c.payment_status !== 'paid').length,
+            paid: collabs.filter((c) => c.payment_status === 'paid').length,
+        }),
+        [collabs]
+    );
+
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return collabs.filter((c) => {
+            if (filter === 'unpaid' && c.payment_status === 'paid') return false;
+            if (filter === 'paid' && c.payment_status !== 'paid') return false;
+            if (year !== 'all' && !(c.date || '').startsWith(year)) return false;
+            if (q) {
+                const haystack = `${c.brand} ${c.notes || ''} ${getCollabTypeLabel(c.type)} ${getBillingLabel(c.collab_type)}`.toLowerCase();
+                if (!haystack.includes(q)) return false;
+            }
+            return true;
+        });
+    }, [collabs, filter, year, query]);
+
+    const totals = useMemo(
+        () =>
+            filtered.reduce(
+                (acc, c) => {
+                    acc.gross += Number(c.amount_gross) || Number(c.amount_net) || 0;
+                    acc.net += Number(c.amount_net) || 0;
+                    return acc;
+                },
+                { gross: 0, net: 0 }
+            ),
+        [filtered]
+    );
+
+    const groups = useMemo(() => groupByMonth(filtered, 'date'), [filtered]);
+
+    const handleStatusChange = (id, payment_status) => {
+        setCollabs((prev) => prev.map((c) => (c.id === id ? { ...c, payment_status } : c)));
+    };
 
     return (
-        <div className="space-y-6 md:pb-10">
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Współprace</h1>
-                    <p className="text-gray-500">Zarządzaj swoimi zleceniami</p>
+        <div className="animate-fade-in">
+            <PageHeader
+                title="Współprace"
+                subtitle="Zlecenia, rozliczenia i płatności"
+                actions={
+                    <>
+                        <Button variant="secondary" icon={Download} onClick={() => setExportOpen(true)} className="hidden sm:inline-flex">
+                            Eksport
+                        </Button>
+                        <Button to="/collaborations/new" variant="primary" icon={Plus} className="hidden lg:inline-flex">
+                            Nowa współpraca
+                        </Button>
+                    </>
+                }
+            >
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                    <SearchInput value={query} onChange={setQuery} placeholder="Szukaj marki, typu, notatki…" className="flex-1" />
+                    <Segmented
+                        className="sm:w-auto"
+                        value={filter}
+                        onChange={setFilter}
+                        options={FILTERS.map((f) => ({ ...f, count: counts[f.value] }))}
+                    />
                 </div>
-                <div className="flex gap-3">
-                    <Link
-                        to="/collaborations/new"
-                        className="bg-primary text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-purple-200 hover:shadow-xl hover:scale-105 transition-all"
-                    >
-                        <Plus size={20} />
-                        Nowa współpraca
-                    </Link>
-                </div>
-            </header>
-
-            {/* Filters */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-                <button
-                    onClick={() => setFilter('all')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors
-                        ${filter === 'all' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                >
-                    Wszystkie
-                </button>
-                <button
-                    onClick={() => setFilter('unpaid')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors
-                        ${filter === 'unpaid' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                >
-                    Nieopłacone
-                </button>
-            </div>
-
-            {/* List */}
-            {loading ? (
-                <div className="loading">Ładowanie...</div>
-            ) : filteredCollabs.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-3xl border border-gray-100">
-                    <div className="mb-4 text-primary flex justify-center">
-                        <Briefcase size={48} strokeWidth={1.5} />
+                {years.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+                        <button type="button" onClick={() => setYear('all')} className={`chip ${year === 'all' ? 'chip-active' : ''}`}>
+                            Wszystkie lata
+                        </button>
+                        {years.map((y) => (
+                            <button key={y} type="button" onClick={() => setYear(y)} className={`chip ${year === y ? 'chip-active' : ''}`}>
+                                {y}
+                            </button>
+                        ))}
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Brak współpracy</h3>
-                    <p className="text-gray-500 mb-6">Dodaj swoje pierwsze zlecenie, aby zacząć.</p>
+                )}
+            </PageHeader>
+
+            {loading ? (
+                <ListSkeleton rows={6} />
+            ) : error ? (
+                <EmptyState icon={Briefcase} title="Nie udało się pobrać współprac" text={error} />
+            ) : filtered.length === 0 ? (
+                <div className="card">
+                    <EmptyState
+                        icon={Briefcase}
+                        title={collabs.length === 0 ? 'Brak współprac' : 'Nic nie pasuje do filtrów'}
+                        text={collabs.length === 0 ? 'Dodaj swoje pierwsze zlecenie, aby zacząć śledzić zarobki.' : 'Zmień filtr lub wyczyść wyszukiwanie.'}
+                        action={collabs.length === 0 ? <Button to="/collaborations/new" variant="primary" icon={Plus}>Dodaj współpracę</Button> : null}
+                    />
                 </div>
             ) : (
-                <div className="grid gap-4">
-                    {filteredCollabs.map(collab => (
-                        <Link
-                            key={collab.id}
-                            to={`/collaborations/${collab.id}`}
-                            className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:border-primary/30 transition-colors flex items-center justify-between group"
-                        >
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-lg">
-                                    {collab.brand.charAt(0)}
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">{collab.brand}</h3>
-                                    <div className="text-sm text-gray-500 flex items-center gap-3">
-                                        <span className="flex items-center gap-1">
-                                            <Calendar size={14} />
-                                            {formatDate(collab.date)}
-                                        </span>
-                                        <span>•</span>
-                                        <span>{collab.type}</span>
-                                    </div>
-                                </div>
-                            </div>
+                <div className="space-y-5">
+                    {/* Summary strip */}
+                    <div className="card px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                        <span className="font-semibold text-ink">{filtered.length} {filtered.length === 1 ? 'współpraca' : 'współprac'}</span>
+                        <span className="text-ink-muted">Brutto <span className="font-bold text-ink">{formatCurrency(totals.gross)}</span></span>
+                        <span className="text-ink-muted">Na rękę <span className="font-bold text-emerald-700">{formatCurrency(totals.net)}</span></span>
+                    </div>
 
-                            <div className="text-right">
-                                <div className="font-bold text-gray-900">{formatCurrency(collab.amount_net || collab.amount)}</div>
-                                <div className="flex justify-end mt-1">
-                                    {collab.payment_status === 'paid' ? (
-                                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                            <CheckCircle size={10} /> Opłacone
-                                        </span>
-                                    ) : collab.payment_status === 'overdue' ? (
-                                        <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                            <Clock size={10} /> Zaległa
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                            <Clock size={10} /> Oczekuje
-                                        </span>
-                                    )}
+                    {groups.map((group) => {
+                        const groupGross = group.items.reduce((s, c) => s + (Number(c.amount_gross) || Number(c.amount_net) || 0), 0);
+                        return (
+                            <section key={group.key}>
+                                <div className="flex items-baseline justify-between px-1 mb-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">{group.label}</h3>
+                                    <span className="text-xs font-semibold text-ink-soft">{group.items.length} · {formatCurrency(groupGross)}</span>
                                 </div>
-                            </div>
-                        </Link>
-                    ))}
+                                <div className="card divide-y divide-line overflow-hidden">
+                                    {group.items.map((c) => (
+                                        <CollabRow
+                                            key={c.id}
+                                            collab={c}
+                                            busy={busyId === c.id}
+                                            onMarkPaid={() => markPaid(c, { onChange: handleStatusChange })}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        );
+                    })}
                 </div>
             )}
+
+            <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
         </div>
+    );
+}
+
+function CollabRow({ collab, busy, onMarkPaid }) {
+    const status = getPaymentStatusInfo(collab.payment_status);
+    const isPaid = collab.payment_status === 'paid';
+    const waiting = !isPaid ? -(daysFromToday(collab.date) ?? 0) : 0;
+    const billing = getBillingLabel(collab.collab_type, { short: true });
+    const isPrivate = collab.fiscal_tracking !== undefined && collab.fiscal_tracking !== null && Number(collab.fiscal_tracking) === 0;
+
+    return (
+        <Link to={`/collaborations/${collab.id}`} className="row-link">
+            <div className={`row-avatar ${isPaid ? 'bg-stone-100 text-ink-soft' : collab.payment_status === 'overdue' ? 'bg-red-50 text-red-600' : 'bg-primary-50 text-primary-700'}`}>
+                {initials(collab.brand)}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="font-semibold text-ink truncate flex items-center gap-1.5">
+                    {collab.brand}
+                    {isPrivate && <Lock size={12} className="text-ink-muted shrink-0" title="Poza PIT" />}
+                    {collab.type === 'event' && <Users size={12} className="text-ink-muted shrink-0" />}
+                </div>
+                <div className="text-xs text-ink-muted truncate">
+                    {formatDateShort(collab.date)} · {getCollabTypeLabel(collab.type)}
+                    {billing && <> · {billing}</>}
+                </div>
+            </div>
+            <div className="text-right shrink-0">
+                <div className="font-bold text-ink">{formatCurrency(collab.amount_gross || collab.amount_net)}</div>
+                <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                    {!isPaid && waiting > 30 && <span className="text-[10px] font-semibold text-red-600">{waiting} dni</span>}
+                    <Badge tone={status.tone}>{status.short}</Badge>
+                </div>
+            </div>
+            {!isPaid && (
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onMarkPaid();
+                    }}
+                    disabled={busy}
+                    className="w-9 h-9 rounded-xl border border-line text-ink-muted hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50"
+                    title="Oznacz jako opłacone"
+                    aria-label="Oznacz jako opłacone"
+                >
+                    <Check size={17} />
+                </button>
+            )}
+        </Link>
     );
 }

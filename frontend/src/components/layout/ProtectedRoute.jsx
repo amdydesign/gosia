@@ -1,10 +1,10 @@
 /**
- * Protected Route Component
- * Redirects to login if not authenticated
+ * Protected Route - redirects to login if not authenticated
  */
 
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { Spinner } from '../ui/Skeleton';
 
 export default function ProtectedRoute({ children }) {
     const { isAuthenticated, loading } = useAuth();
@@ -12,9 +12,9 @@ export default function ProtectedRoute({ children }) {
 
     if (loading) {
         return (
-            <div className="loading-screen">
-                <div className="loading-spinner"></div>
-                <p>Ładowanie...</p>
+            <div className="min-h-dvh flex flex-col items-center justify-center gap-3 text-ink-muted">
+                <Spinner size={28} />
+                <p className="text-sm">Ładowanie…</p>
             </div>
         );
     }
