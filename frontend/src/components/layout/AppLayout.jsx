@@ -34,7 +34,7 @@ export default function AppLayout() {
             <div className="lg:pl-64 flex flex-col min-h-dvh">
                 <TopBar meta={meta} onOpenSettings={() => setSettingsOpen(true)} />
 
-                <main className="flex-1 px-4 pt-4 pb-28 sm:px-6 lg:px-10 lg:pt-8 lg:pb-14">
+                <main className="flex-1 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-10 lg:pt-8 lg:pb-14">
                     <div className="mx-auto w-full max-w-5xl">
                         <Outlet />
                     </div>
@@ -45,7 +45,7 @@ export default function AppLayout() {
                 <button
                     type="button"
                     onClick={handleFab}
-                    className="lg:hidden fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 w-14 h-14 rounded-2xl bg-primary-600 text-white shadow-float flex items-center justify-center active:scale-95 transition-transform"
+                    className="lg:hidden fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 w-14 h-14 rounded-2xl bg-primary-600 text-white shadow-float flex items-center justify-center active:scale-95 transition-transform"
                     aria-label="Dodaj"
                 >
                     <Plus size={26} strokeWidth={2.5} />

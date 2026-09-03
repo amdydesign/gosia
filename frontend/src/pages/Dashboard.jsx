@@ -14,6 +14,7 @@ import Badge from '../components/ui/Badge';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import ReturnSheet from '../components/purchases/ReturnSheet';
+import SocialSection from '../components/social/SocialSection';
 import {
     formatCurrency, formatDateShort, formatWeekdayDate, getCollabTypeLabel, getReturnUrgency,
     greetingForHour, getPaymentStatusInfo, initials
@@ -99,6 +100,11 @@ export default function Dashboard() {
                     to="/collaborations?filter=unpaid"
                 />
             </div>
+
+            {/* Social snapshot (auto-fetched) */}
+            <Link to="/statistics" className="block">
+                <SocialSection compact />
+            </Link>
 
             {/* Attention */}
             {attentionCount > 0 ? (

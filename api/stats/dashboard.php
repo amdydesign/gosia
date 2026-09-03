@@ -168,6 +168,28 @@ try {
     }
     $taxThreshold = 120000;
 
+    // 7b. Social media snapshot (latest count per platform) + staleness flag for the app's background refresh
+    $social = [];
+    $socialStale = [];
+    try {
+        $stmt = $conn->prepare("
+            SELECT s.platform, s.followers_count, s.date
+            FROM social_stats s
+            INNER JOIN (SELECT platform, MAX(date) AS max_date FROM social_stats WHERE user_id = :user_id GROUP BY platform) l
+                ON l.platform = s.platform AND l.max_date = s.date
+            WHERE s.user_id = :user_id2
+        ");
+        $stmt->execute(['user_id' => $userId, 'user_id2' => $userId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $social[$row['platform']] = ['count' => (int) $row['followers_count'], 'date' => $row['date']];
+        }
+        require_once __DIR__ . '/../config/SocialFetcher.php';
+        $fetcher = new SocialFetcher($conn);
+        $socialStale = $fetcher->stalePlatforms($userId);
+    } catch (Exception $e) {
+        // social tables optional
+    }
+
     // 8. Ideas
     $ideasDrafts = 0;
     $nextIdea = null;
@@ -219,6 +241,8 @@ try {
             'active_returns_value' => floatval($activeReturns['total']),
             'ideas_drafts' => $ideasDrafts,
         ],
+        'social' => $social,
+        'social_stale' => $socialStale,
         'urgent_returns_count' => $urgentReturnsCount,
         'urgent_purchases' => $urgentPurchases,
         'unpaid_collaborations' => $unpaidCollabs,

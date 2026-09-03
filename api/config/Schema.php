@@ -42,6 +42,29 @@ class Schema
                 INDEX idx_user_id (user_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        'social_profiles' => "
+            CREATE TABLE IF NOT EXISTS social_profiles (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                platform ENUM('facebook', 'instagram', 'tiktok', 'youtube') NOT NULL,
+                handle VARCHAR(255) NOT NULL DEFAULT '',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE KEY idx_user_platform (user_id, platform)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        'social_refresh_log' => "
+            CREATE TABLE IF NOT EXISTS social_refresh_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                platform ENUM('facebook', 'instagram', 'tiktok', 'youtube') NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                success TINYINT(1) NOT NULL DEFAULT 0,
+                source VARCHAR(40) NULL,
+                error VARCHAR(500) NULL,
+                INDEX idx_user_platform (user_id, platform, id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
     ];
 
     /**
