@@ -5,6 +5,7 @@
  * Sends push notifications about:
  *  - purchases whose return deadline is within 2 days (status 'kept')
  *  - collaborations with overdue payments
+ *  - ideas waiting to be recorded (Mondays and Thursdays, or with --ideas / ?ideas=1)
  *
  * Run once a day, e.g. on dHosting:
  *   CLI cron:  php /path/to/public_html/api/cron/send_reminders.php
@@ -84,6 +85,34 @@ try {
                 . number_format((float) $row['total'], 2, ',', ' ') . ' zł',
             'url' => '/collaborations',
         ];
+    }
+
+    // 3. Ideas waiting to be recorded - reminder on Mondays and Thursdays
+    //    (or any day with ?ideas=1 / --ideas)
+    $ideasDay = in_array((int) date('N'), [1, 4], true)
+        || ($isCli ? in_array('--ideas', $argv ?? [], true) : !empty($_GET['ideas']));
+    if ($ideasDay) {
+        try {
+            $stmt = $conn->query("
+                SELECT i.user_id, COUNT(*) AS cnt,
+                       (SELECT title FROM ideas WHERE user_id = i.user_id AND status = 'draft' ORDER BY created_at DESC LIMIT 1) AS latest,
+                       (SELECT id FROM ideas WHERE user_id = i.user_id AND status = 'draft' ORDER BY created_at DESC LIMIT 1) AS latest_id
+                FROM ideas i
+                WHERE i.status = 'draft'
+                GROUP BY i.user_id
+            ");
+            foreach ($stmt->fetchAll() as $row) {
+                $cnt = (int) $row['cnt'];
+                $word = $cnt === 1 ? 'pomysł' : ($cnt < 5 ? 'pomysły' : 'pomysłów');
+                $notifications[$row['user_id']][] = [
+                    'title' => "🎬 Masz {$cnt} {$word} do nagrania",
+                    'body' => $cnt === 1 ? "„{$row['latest']}” czeka na prompter." : "Najnowszy: „{$row['latest']}”. Odpal prompter i nagraj rolkę.",
+                    'url' => $cnt === 1 && $row['latest_id'] ? '/ideas/' . $row['latest_id'] . '?prompter=1' : '/ideas',
+                ];
+            }
+        } catch (Exception $e) {
+            // ideas table optional
+        }
     }
 
     // Send

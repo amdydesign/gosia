@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Wallet, CalendarClock, AlertCircle, CheckCircle2, ChevronRight, TrendingUp, RotateCcw, Check, Play } from 'lucide-react';
+import { ShoppingBag, Wallet, CalendarClock, AlertCircle, CheckCircle2, ChevronRight, TrendingUp, RotateCcw, Check, Play, Lightbulb, Plus, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useMarkPaid } from '../hooks/useMarkPaid';
@@ -11,7 +11,7 @@ import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import ReturnSheet from '../components/purchases/ReturnSheet';
 import SocialSection from '../components/social/SocialSection';
-import { formatCurrency, formatDateShort, formatWeekdayDate, getReturnUrgency, greetingForHour } from '../utils/format';
+import { formatCurrency, formatDateShort, formatWeekdayDate, getReturnUrgency, greetingForHour, formatSeconds } from '../utils/format';
 
 /**
  * Start: greeting, 3 numbers, one "to do" list, social strip.
@@ -127,11 +127,6 @@ export default function Dashboard() {
                                         <span className="hidden sm:inline">Zwrócone</span>
                                     </Button>
                                 )}
-                                {item.action === 'prompter' && (
-                                    <Button size="sm" variant="dark" icon={Play} to={item.to} aria-label="Prompter">
-                                        <span className="hidden sm:inline">Prompter</span>
-                                    </Button>
-                                )}
                             </div>
                         ))}
                     </div>
@@ -147,6 +142,9 @@ export default function Dashboard() {
                     </div>
                 )}
             </Card>
+
+            {/* Ideas to record */}
+            <IdeasWidget ideas={data?.draft_ideas || []} total={counts.ideas_drafts || 0} />
 
             {/* Social (auto-fetched) */}
             <div>
@@ -164,8 +162,59 @@ export default function Dashboard() {
     );
 }
 
+function IdeasWidget({ ideas, total }) {
+    return (
+        <Card padded={false}>
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-line">
+                <h2 className="card-title flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-secondary-light text-secondary-dark flex items-center justify-center">
+                        <Lightbulb size={14} />
+                    </span>
+                    Pomysły do nagrania
+                    {total > 0 && <span className="text-xs font-semibold text-ink-muted">({total})</span>}
+                </h2>
+                <Link to="/ideas" className="text-xs font-semibold text-primary-700 hover:text-primary-800 inline-flex items-center gap-0.5">
+                    Wszystkie <ChevronRight size={14} />
+                </Link>
+            </div>
+            {ideas.length === 0 ? (
+                <div className="px-5 py-4 flex items-center justify-between gap-3">
+                    <p className="text-sm text-ink-muted">Brak scenariuszy do nagrania. Zapisz pomysł, gdy tylko wpadnie Ci do głowy.</p>
+                    <Button to="/ideas/new" size="sm" variant="soft" icon={Plus}>Dodaj</Button>
+                </div>
+            ) : (
+                <>
+                    <div className="divide-y divide-line">
+                        {ideas.slice(0, 3).map((idea) => {
+                            const seconds = Math.round((Number(idea.words) || 0) / 2.3);
+                            return (
+                                <div key={idea.id} className="row !py-3">
+                                    <Link to={`/ideas/${idea.id}`} className="flex-1 min-w-0">
+                                        <div className="font-semibold text-ink truncate">{idea.title}</div>
+                                        <div className="text-xs text-ink-muted mt-0.5 inline-flex items-center gap-1">
+                                            {seconds > 0 ? <><Clock size={11} /> ~{formatSeconds(seconds)} · </> : null}
+                                            dodano {formatDateShort(idea.created_at?.slice(0, 10))}
+                                        </div>
+                                    </Link>
+                                    <Button size="sm" variant="dark" icon={Play} to={`/ideas/${idea.id}?prompter=1`} aria-label="Prompter" disabled={!idea.words}>
+                                        <span className="hidden sm:inline">Prompter</span>
+                                    </Button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="flex items-center justify-between gap-3 px-5 py-2.5 border-t border-line">
+                        <span className="text-xs text-ink-muted">{total > 3 ? `i jeszcze ${total - 3}…` : 'Nagraj i oznacz jako „nagrane”.'}</span>
+                        <Link to="/ideas/new" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-1"><Plus size={12} /> Nowy pomysł</Link>
+                    </div>
+                </>
+            )}
+        </Card>
+    );
+}
+
 /**
- * One prioritized list: urgent returns, overdue, unpaid (oldest), upcoming returns, next idea.
+ * One prioritized list: urgent returns, overdue, unpaid (oldest), upcoming returns.
  */
 function buildTodo(data) {
     if (!data) return [];
@@ -196,20 +245,6 @@ function buildTodo(data) {
         if (seenPurchases.has(p.id)) continue;
         const u = getReturnUrgency(p.days_remaining);
         items.push({ key: `u-${p.id}`, id: p.id, raw: p, to: `/purchases/${p.id}`, title: `${p.store} · zwrot`, meta: `${u.message} · do ${formatDateShort(p.return_deadline)}`, amount: formatCurrency(p.amount), urgent: false, tone: u.tone, action: 'return' });
-    }
-    if (data.next_idea) {
-        items.push({
-            key: 'idea',
-            id: data.next_idea.id,
-            raw: null,
-            to: `/ideas/${data.next_idea.id}?prompter=1`,
-            title: data.next_idea.title,
-            meta: `Do nagrania${data.counts?.ideas_drafts > 1 ? ` · jeszcze ${data.counts.ideas_drafts - 1}` : ''}`,
-            amount: '',
-            urgent: false,
-            tone: 'info',
-            action: 'prompter',
-        });
     }
     return items.slice(0, 8);
 }
