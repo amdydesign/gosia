@@ -190,16 +190,30 @@ try {
         // social tables optional
     }
 
-    // 8. Ideas
+    // 8. Ideas (drafts to record)
     $ideasDrafts = 0;
     $nextIdea = null;
+    $draftIdeas = [];
     try {
         $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM ideas WHERE user_id = :user_id AND status = 'draft'");
         $stmt->execute($p);
         $ideasDrafts = intval($stmt->fetch()['c']);
-        $stmt = $conn->prepare("SELECT id, title FROM ideas WHERE user_id = :user_id AND status = 'draft' ORDER BY created_at DESC LIMIT 1");
+        $stmt = $conn->prepare("
+            SELECT id, title, created_at,
+                   CASE WHEN content IS NULL OR content = '' THEN 0
+                        ELSE LENGTH(TRIM(content)) - LENGTH(REPLACE(TRIM(content), ' ', '')) + 1 END AS words
+            FROM ideas
+            WHERE user_id = :user_id AND status = 'draft'
+            ORDER BY created_at DESC
+            LIMIT 4
+        ");
         $stmt->execute($p);
-        $nextIdea = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        $draftIdeas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($draftIdeas as &$idea) {
+            $idea['words'] = intval($idea['words']);
+        }
+        unset($idea);
+        $nextIdea = $draftIdeas[0] ?? null;
     } catch (Exception $e) {
         // ideas table optional on older installs
     }
@@ -247,6 +261,7 @@ try {
         'urgent_purchases' => $urgentPurchases,
         'unpaid_collaborations' => $unpaidCollabs,
         'next_idea' => $nextIdea,
+        'draft_ideas' => $draftIdeas,
         'upcoming' => [
             'collaborations' => $upcomingCollabs,
             'purchases' => $upcomingPurchases,

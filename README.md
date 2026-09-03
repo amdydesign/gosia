@@ -172,7 +172,7 @@ I zaktualizuj w tabeli `users`.
 ### PWA i Powiadomienia Push
 - ✅ Aplikacja instalowalna na telefonie (manifest + service worker)
 - ✅ Działa offline (cache aplikacji)
-- ✅ Powiadomienia push: przypomnienia o terminach zwrotów i zaległych płatnościach
+- ✅ Powiadomienia push: przypomnienia o terminach zwrotów, zaległych płatnościach i pomysłach do nagrania (poniedziałki i czwartki)
 - ✅ Włączanie/wyłączanie dzwonkiem w nagłówku aplikacji
 
 ### Techniczne
