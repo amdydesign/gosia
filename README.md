@@ -152,11 +152,12 @@ I zaktualizuj w tabeli `users`.
 - ✅ Kategorie i wartości
 
 ### Statystyki Social Media
-- ✅ Integracja YouTube (API Key + Channel ID)
-- ✅ Integracja TikTok (OAuth)
-- ✅ Integracja Facebook (OAuth)
-- ✅ Automatyczne odświeżanie przy wejściu
-- ✅ Ikony SVG platform
+- ✅ **Automatyczne pobieranie** liczby obserwujących z Instagrama, Facebooka, YouTube i TikToka
+- ✅ Wystarczy podać nazwy profili w aplikacji (Statystyki → „Profile”), bez kluczy API
+- ✅ Odświeżanie w tle raz dziennie (przy otwarciu aplikacji) + opcjonalny cron serwerowy
+- ✅ Zmiana liczby obserwujących w ostatnich 7 dniach, status pobierania i błędy per platforma
+- ✅ Opcjonalnie: klucz YouTube Data API, OAuth TikTok/Facebook, awaryjne scrapery RapidAPI
+- ✅ Ręczna korekta liczby (ołówek na kafelku)
 
 ### Wykresy i Raporty
 - ✅ Zarobki miesięczne (wykres)
@@ -201,6 +202,24 @@ I zaktualizuj w tabeli `users`.
    `https://twoja-domena.pl/api/cron/send_reminders.php?secret=TWÓJ_SEKRET`
 
 4. W aplikacji kliknij **dzwonek** w nagłówku i zaakceptuj zgodę na powiadomienia. Od razu przyjdzie powiadomienie testowe.
+
+## 📈 Automatyczne pobieranie obserwujących
+
+1. W aplikacji: **Statystyki → Profile** — wpisz nazwę profilu Instagram, link do strony na Facebooku, handle kanału YouTube (`@nazwa` lub `UC…`) i nazwę na TikToku. Zapis od razu pobiera liczby.
+2. Aplikacja sama odświeża dane **raz dziennie** przy pierwszym otwarciu (w tle, bez blokowania).
+3. Dla pewności ustaw też dzienny cron na serwerze (np. 7:30), niezależny od otwierania aplikacji:
+   ```
+   php /ścieżka/do/public_html/api/cron/refresh_social.php
+   ```
+   lub przez URL z `CRON_SECRET`: `https://twoja-domena.pl/api/cron/refresh_social.php?secret=TWÓJ_SEKRET`
+4. Skąd biorą się dane (kolejność prób w `api/config/SocialFetcher.php`):
+   - Instagram: publiczne API webowe → HTML profilu → RapidAPI (jeśli klucz w `social_credentials.php`)
+   - Facebook: Graph API (po OAuth) → HTML strony → RapidAPI (jeśli klucz)
+   - YouTube: Data API v3 (darmowy klucz `youtube.api_key` — zalecane) → OAuth → HTML kanału
+   - TikTok: HTML profilu → OAuth (token odświeżany automatycznie)
+5. Nieudana próba jest ponawiana po 3 godzinach; status i treść błędu widać w oknie „Profile”. Zawsze można wpisać liczbę ręcznie.
+
+Tabele `social_profiles` i `social_refresh_log` tworzą się same przy pierwszym użyciu.
 
 Wysyłka push nie wymaga żadnych bibliotek composera — implementacja VAPID (RFC 8292) i szyfrowania aes128gcm (RFC 8291) jest w `api/config/WebPush.php` i korzysta tylko z rozszerzeń `openssl` + `curl`.
 

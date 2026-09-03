@@ -27,7 +27,7 @@ export default defineConfig([
       // Context files export a Provider component together with its `useX` hook
       'react-refresh/only-export-components': [
         'warn',
-        { allowExportNames: ['useAuth', 'useToast', 'useConfirm', 'useDashboard', 'AuthShell'] },
+        { allowExportNames: ['useAuth', 'useToast', 'useConfirm', 'useDashboard', 'AuthShell', 'SocialIcons', 'PLATFORMS'] },
       ],
     },
   },

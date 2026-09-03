@@ -41,6 +41,23 @@ export const statsService = {
         return await api.post('/stats/social/refresh.php');
     },
 
+    /** Background refresh of platforms without today's numbers. */
+    async autoRefreshSocial({ force = false, platforms = null } = {}) {
+        return await api.post('/stats/social/auto_refresh.php', platforms ? { force, platforms } : { force });
+    },
+
+    async getSocialProfiles() {
+        return await api.get('/stats/social/profiles.php');
+    },
+
+    async saveSocialProfiles(profiles) {
+        return await api.post('/stats/social/profiles.php', profiles);
+    },
+
+    async getSocialHistory() {
+        return await api.get('/stats/social/history.php');
+    },
+
     async scrapeInstagram() {
         return await api.post('/social/scrape_instagram.php');
     },

@@ -23,7 +23,7 @@ export default function TopBar({ meta, onOpenSettings }) {
     const BellIcon = push.status === 'subscribed' ? BellRing : push.status === 'denied' ? BellOff : Bell;
 
     return (
-        <header className="sticky top-0 z-30 bg-canvas/85 backdrop-blur-md border-b border-line/70">
+        <header className="sticky top-0 z-30 bg-canvas/95 backdrop-blur-md border-b border-line/70" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
             <div className="mx-auto w-full max-w-5xl px-3 sm:px-6 lg:px-10 h-14 lg:h-[72px] flex items-center gap-2">
                 {meta.back ? (
                     <button

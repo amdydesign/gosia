@@ -84,6 +84,18 @@
     @apply outline-2 outline-primary-400 outline-offset-2 rounded-md;
   }
 
+  /* PWA: no 300ms tap delay / double-tap zoom on controls, no long-press callouts */
+  a,
+  button,
+  [role='button'],
+  input,
+  select,
+  textarea,
+  label {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+  }
+
   input[type='number'] {
     -moz-appearance: textfield;
   }

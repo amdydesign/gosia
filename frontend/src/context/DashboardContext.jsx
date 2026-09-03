@@ -37,6 +37,32 @@ export function DashboardProvider({ children }) {
         return inFlight.current;
     }, [isAuthenticated, token]);
 
+    // Background social refresh: once per day per device, only when the server reports stale platforms
+    const socialAttempted = useRef(false);
+    useEffect(() => {
+        if (!data?.social_stale?.length || socialAttempted.current) return;
+        const key = 'social.autoRefresh';
+        const today = new Date().toISOString().slice(0, 10);
+        let last = null;
+        try {
+            last = localStorage.getItem(key);
+        } catch {
+            last = null;
+        }
+        if (last === today) return;
+        socialAttempted.current = true;
+        try {
+            localStorage.setItem(key, today);
+        } catch {
+            // ignore
+        }
+        apiRequest('/stats/social/auto_refresh.php', 'POST', {}, token)
+            .then((result) => {
+                if (result?.updated?.length) refresh();
+            })
+            .catch(() => {});
+    }, [data, token, refresh]);
+
     useEffect(() => {
         if (!isAuthenticated) {
             setData(null);
