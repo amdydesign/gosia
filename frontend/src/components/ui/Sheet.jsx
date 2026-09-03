@@ -32,7 +32,7 @@ export default function Sheet({ open, onClose, title, description, children, foo
                 className={`w-full ${maxW} bg-surface rounded-t-3xl sm:rounded-3xl shadow-sheet flex flex-col max-h-[92dvh] animate-slide-up sm:animate-scale-in`}
             >
                 <div className="sm:hidden flex justify-center pt-2.5">
-                    <div className="h-1 w-10 rounded-full bg-stone-300" />
+                    <div className="h-1 w-10 rounded-full bg-slate-300" />
                 </div>
                 {(title || onClose) && (
                     <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-3">

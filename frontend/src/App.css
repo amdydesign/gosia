@@ -101,12 +101,13 @@
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide whitespace-nowrap;
   }
 
-  .badge-neutral { @apply bg-stone-100 text-stone-600; }
+  .badge-neutral { @apply bg-slate-100 text-slate-600; }
   .badge-success { @apply bg-emerald-50 text-emerald-700; }
   .badge-warning { @apply bg-amber-50 text-amber-700; }
   .badge-danger  { @apply bg-red-50 text-red-700; }
   .badge-info    { @apply bg-sky-50 text-sky-700; }
   .badge-brand   { @apply bg-primary-50 text-primary-700; }
+  .badge-accent  { @apply bg-secondary-light text-secondary-dark; }
   .badge-plum    { @apply bg-secondary-light text-secondary-dark; }
 
   .chip {
@@ -120,7 +121,7 @@
 
   /* ----- Segmented control ----- */
   .segmented {
-    @apply inline-flex items-center gap-1 rounded-xl bg-stone-100 p-1;
+    @apply inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1;
   }
 
   .segmented-item {
@@ -147,7 +148,7 @@
 
   /* ----- Skeleton ----- */
   .skeleton {
-    @apply animate-pulse rounded-lg bg-stone-200/70;
+    @apply animate-pulse rounded-lg bg-slate-200/70;
   }
 
   /* ----- Misc ----- */

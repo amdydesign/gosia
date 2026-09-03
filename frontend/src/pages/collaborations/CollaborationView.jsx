@@ -183,7 +183,7 @@ export default function CollaborationView() {
                             const paid = member.is_paid === true || member.is_paid === 'true' || Number(member.is_paid) === 1;
                             return (
                                 <div key={i} className="row">
-                                    <div className="row-avatar bg-stone-100 text-ink-soft !w-9 !h-9 !text-sm">{(member.name || '?').charAt(0)}</div>
+                                    <div className="row-avatar bg-slate-100 text-ink-soft !w-9 !h-9 !text-sm">{(member.name || '?').charAt(0)}</div>
                                     <div className="flex-1 min-w-0">
                                         <div className="font-semibold text-ink truncate">{member.name}</div>
                                         <Badge tone={paid ? 'success' : 'warning'} className="mt-0.5">{paid ? 'Opłacono' : 'Do zapłaty'}</Badge>
