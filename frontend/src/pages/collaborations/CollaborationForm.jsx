@@ -245,7 +245,7 @@ export default function CollaborationForm() {
                 </Field>
 
                 {isCash && (
-                    <div className="flex items-start gap-3 rounded-xl bg-stone-100 p-3 text-xs text-ink-soft">
+                    <div className="flex items-start gap-3 rounded-xl bg-slate-100 p-3 text-xs text-ink-soft">
                         <Lock size={16} className="shrink-0 mt-0.5" />
                         <span><strong className="text-ink">Transakcja prywatna.</strong> Nie wchodzi do oficjalnych rozliczeń PIT i eksportu „Oficjalne”.</span>
                     </div>

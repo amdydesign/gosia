@@ -1,20 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Briefcase, Check, Download, Lock, Users } from 'lucide-react';
+import { Plus, Briefcase, Download, Lock } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
-import { useMarkPaid } from '../../hooks/useMarkPaid';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
 import Segmented from '../../components/ui/Segmented';
 import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 import ExportModal from './ExportModal';
-import {
-    formatCurrency, formatDateShort, getCollabTypeLabel, getBillingLabel, getPaymentStatusInfo,
-    groupByMonth, initials, daysFromToday
-} from '../../utils/format';
+import { formatCurrency, formatDateShort, getCollabTypeLabel, getBillingLabel, getPaymentStatusInfo, daysFromToday } from '../../utils/format';
 
 const FILTERS = [
     { value: 'all', label: 'Wszystkie' },
@@ -30,7 +25,6 @@ export default function CollaborationList() {
     const [query, setQuery] = useState('');
     const [year, setYear] = useState('all');
     const [exportOpen, setExportOpen] = useState(false);
-    const { markPaid, busyId } = useMarkPaid();
 
     const filter = FILTERS.some((f) => f.value === searchParams.get('filter')) ? searchParams.get('filter') : 'all';
     const setFilter = (value) => {
@@ -99,11 +93,6 @@ export default function CollaborationList() {
         [filtered]
     );
 
-    const groups = useMemo(() => groupByMonth(filtered, 'date'), [filtered]);
-
-    const handleStatusChange = (id, payment_status) => {
-        setCollabs((prev) => prev.map((c) => (c.id === id ? { ...c, payment_status } : c)));
-    };
 
     return (
         <div className="animate-fade-in">
@@ -166,27 +155,11 @@ export default function CollaborationList() {
                         <span className="text-ink-muted">Na rękę <span className="font-bold text-emerald-700">{formatCurrency(totals.net)}</span></span>
                     </div>
 
-                    {groups.map((group) => {
-                        const groupGross = group.items.reduce((s, c) => s + (Number(c.amount_gross) || Number(c.amount_net) || 0), 0);
-                        return (
-                            <section key={group.key}>
-                                <div className="flex items-baseline justify-between px-1 mb-2">
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">{group.label}</h3>
-                                    <span className="text-xs font-semibold text-ink-soft">{group.items.length} · {formatCurrency(groupGross)}</span>
-                                </div>
-                                <div className="card divide-y divide-line overflow-hidden">
-                                    {group.items.map((c) => (
-                                        <CollabRow
-                                            key={c.id}
-                                            collab={c}
-                                            busy={busyId === c.id}
-                                            onMarkPaid={() => markPaid(c, { onChange: handleStatusChange })}
-                                        />
-                                    ))}
-                                </div>
-                            </section>
-                        );
-                    })}
+                    <div className="card divide-y divide-line overflow-hidden">
+                        {filtered.map((c) => (
+                            <CollabRow key={c.id} collab={c} />
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -195,52 +168,36 @@ export default function CollaborationList() {
     );
 }
 
-function CollabRow({ collab, busy, onMarkPaid }) {
+function CollabRow({ collab }) {
     const status = getPaymentStatusInfo(collab.payment_status);
     const isPaid = collab.payment_status === 'paid';
+    const isOverdue = collab.payment_status === 'overdue';
     const waiting = !isPaid ? -(daysFromToday(collab.date) ?? 0) : 0;
     const billing = getBillingLabel(collab.collab_type, { short: true });
     const isPrivate = collab.fiscal_tracking !== undefined && collab.fiscal_tracking !== null && Number(collab.fiscal_tracking) === 0;
+    const statusColor = isPaid ? 'text-emerald-600' : isOverdue ? 'text-red-600' : 'text-amber-600';
+    const dotColor = isPaid ? 'bg-emerald-500' : isOverdue ? 'bg-red-500' : 'bg-amber-400';
 
     return (
-        <Link to={`/collaborations/${collab.id}`} className="row-link">
-            <div className={`row-avatar ${isPaid ? 'bg-stone-100 text-ink-soft' : collab.payment_status === 'overdue' ? 'bg-red-50 text-red-600' : 'bg-primary-50 text-primary-700'}`}>
-                {initials(collab.brand)}
-            </div>
+        <Link to={`/collaborations/${collab.id}`} className="row-link !py-3">
             <div className="flex-1 min-w-0">
-                <div className="font-semibold text-ink truncate flex items-center gap-1.5">
+                <div className="font-semibold text-ink text-[15px] truncate flex items-center gap-1.5">
                     {collab.brand}
                     {isPrivate && <Lock size={12} className="text-ink-muted shrink-0" title="Poza PIT" />}
-                    {collab.type === 'event' && <Users size={12} className="text-ink-muted shrink-0" />}
                 </div>
-                <div className="text-xs text-ink-muted truncate">
+                <div className="text-xs text-ink-muted truncate mt-0.5">
                     {formatDateShort(collab.date)} · {getCollabTypeLabel(collab.type)}
                     {billing && <> · {billing}</>}
                 </div>
             </div>
             <div className="text-right shrink-0">
-                <div className="font-bold text-ink">{formatCurrency(collab.amount_gross || collab.amount_net)}</div>
-                <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                    {!isPaid && waiting > 30 && <span className="text-[10px] font-semibold text-red-600">{waiting} dni</span>}
-                    <Badge tone={status.tone}>{status.short}</Badge>
+                <div className="font-bold text-ink tabular-nums">{formatCurrency(collab.amount_gross || collab.amount_net)}</div>
+                <div className={`text-[11px] font-semibold mt-0.5 inline-flex items-center gap-1.5 ${statusColor}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                    {status.short}
+                    {!isPaid && waiting > 30 && <span> · {waiting} dni</span>}
                 </div>
             </div>
-            {!isPaid && (
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onMarkPaid();
-                    }}
-                    disabled={busy}
-                    className="w-9 h-9 rounded-xl border border-line text-ink-muted hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50"
-                    title="Oznacz jako opłacone"
-                    aria-label="Oznacz jako opłacone"
-                >
-                    <Check size={17} />
-                </button>
-            )}
         </Link>
     );
 }

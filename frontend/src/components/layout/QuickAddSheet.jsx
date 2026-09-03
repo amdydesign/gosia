@@ -4,7 +4,7 @@ import Sheet from '../ui/Sheet';
 
 const OPTIONS = [
     { to: '/collaborations/new', icon: Briefcase, title: 'Nowa współpraca', text: 'Zlecenie, kwota, rozliczenie i zespół', tone: 'bg-primary-50 text-primary-600' },
-    { to: '/purchases/new', icon: ShoppingBag, title: 'Nowy zakup', text: 'Zapisz zakup i termin zwrotu', tone: 'bg-amber-50 text-amber-600' },
+    { to: '/purchases/new', icon: ShoppingBag, title: 'Nowy zakup', text: 'Zapisz zakup i termin zwrotu', tone: 'bg-emerald-50 text-emerald-600' },
     { to: '/ideas/new', icon: Lightbulb, title: 'Nowy pomysł na rolkę', text: 'Scenariusz do promptera', tone: 'bg-secondary-light text-secondary-dark' },
 ];
 

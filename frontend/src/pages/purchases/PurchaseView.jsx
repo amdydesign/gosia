@@ -111,7 +111,7 @@ export default function PurchaseView() {
 
                     {/* Deadline */}
                     {purchase.status === 'kept' && (
-                        <div className={`mt-4 rounded-2xl border p-4 ${isActive ? (urgency.tone === 'danger' ? 'bg-red-50 border-red-100' : urgency.tone === 'warning' ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50/60 border-emerald-100') : 'bg-stone-50 border-line'}`}>
+                        <div className={`mt-4 rounded-2xl border p-4 ${isActive ? (urgency.tone === 'danger' ? 'bg-red-50 border-red-100' : urgency.tone === 'warning' ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50/60 border-emerald-100') : 'bg-slate-50 border-line'}`}>
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 text-sm font-bold text-ink">
                                     <CalendarClock size={16} />

@@ -52,8 +52,8 @@ export default function Statistics() {
                 {
                     label: 'Na rękę',
                     data: monthlyStats?.monthly?.map((m) => m.value) || [],
-                    backgroundColor: 'rgba(209, 90, 134, 0.85)',
-                    hoverBackgroundColor: 'rgba(186, 63, 110, 1)',
+                    backgroundColor: 'rgba(37, 99, 235, 0.85)',
+                    hoverBackgroundColor: 'rgba(29, 78, 216, 1)',
                     borderRadius: 8,
                     borderSkipped: false,
                     maxBarThickness: 42,
@@ -70,7 +70,7 @@ export default function Statistics() {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: '#1f1a1c',
+                    backgroundColor: '#0f172a',
                     padding: 12,
                     cornerRadius: 10,
                     displayColors: false,
@@ -86,11 +86,11 @@ export default function Statistics() {
             scales: {
                 y: {
                     beginAtZero: true,
-                    grid: { color: '#ece6e8' },
+                    grid: { color: '#e6eaf1' },
                     border: { display: false },
-                    ticks: { callback: (v) => (v >= 1000 ? `${v / 1000}k` : v), font: { size: 11 }, color: '#8f858a' },
+                    ticks: { callback: (v) => (v >= 1000 ? `${v / 1000}k` : v), font: { size: 11 }, color: '#7c8798' },
                 },
-                x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11 }, color: '#8f858a' } },
+                x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11 }, color: '#7c8798' } },
             },
         }),
         [monthlyStats]
@@ -145,7 +145,7 @@ export default function Statistics() {
                                 <span>I próg podatkowy (12%)</span>
                                 <span className={progress >= 100 ? 'text-red-600' : ''}>{Math.round(progress)}% z {formatCurrency(official.tax_threshold || 120000, { compact: true })}</span>
                             </div>
-                            <div className="h-2.5 rounded-full bg-stone-100 overflow-hidden">
+                            <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
                                 <div className={`h-full rounded-full transition-all duration-700 ${progress >= 90 ? 'bg-red-500' : progress >= 70 ? 'bg-amber-400' : 'bg-gradient-to-r from-primary-400 to-primary-600'}`} style={{ width: `${progress}%` }} />
                             </div>
                             <p className="text-[11px] text-ink-muted mt-1.5">
@@ -231,7 +231,7 @@ export default function Statistics() {
                                                 <div className="text-sm font-semibold text-ink truncate">{getCollabTypeLabel(stat.type)}</div>
                                                 <div className="text-xs text-ink-muted whitespace-nowrap">{stat.count} · <strong className="text-ink">{formatCurrency(stat.total, { compact: true })}</strong></div>
                                             </div>
-                                            <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
+                                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                                                 <div className="h-full rounded-full bg-primary-500" style={{ width: `${pct}%` }} />
                                             </div>
                                         </div>

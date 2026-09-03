@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, ShoppingBag, RotateCcw, ExternalLink } from 'lucide-react';
+import { Plus, ShoppingBag, ExternalLink } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
 import Segmented from '../../components/ui/Segmented';
 import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
-import ReturnSheet from '../../components/purchases/ReturnSheet';
 import { formatCurrency, formatDateShort, getReturnUrgency, getPurchaseStatusInfo } from '../../utils/format';
 
 const FILTERS = [
@@ -31,7 +29,6 @@ export default function PurchaseList() {
     const [error, setError] = useState('');
     const [filter, setFilter] = useState('active');
     const [query, setQuery] = useState('');
-    const [returning, setReturning] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -82,10 +79,6 @@ export default function PurchaseList() {
         () => purchases.filter((p) => bucket(p) === 'returned').reduce((s, p) => s + (Number(p.returned_amount) || 0), 0),
         [purchases]
     );
-
-    const handleReturned = (updated) => {
-        setPurchases((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-    };
 
     return (
         <div className="animate-fade-in">
@@ -142,75 +135,43 @@ export default function PurchaseList() {
                     ) : (
                         <div className="card divide-y divide-line overflow-hidden">
                             {filtered.map((p) => (
-                                <PurchaseRow key={p.id} purchase={p} onReturn={() => setReturning(p)} />
+                                <PurchaseRow key={p.id} purchase={p} />
                             ))}
                         </div>
                     )}
                 </div>
             )}
-
-            <ReturnSheet purchase={returning} open={!!returning} onClose={() => setReturning(null)} onDone={handleReturned} />
         </div>
     );
 }
 
-function PurchaseRow({ purchase, onReturn }) {
+function PurchaseRow({ purchase }) {
     const b = bucket(purchase);
     const urgency = getReturnUrgency(purchase.days_remaining);
     const status = getPurchaseStatusInfo(purchase.status, purchase.days_remaining);
-    const days = Number(purchase.days_remaining);
-    const total = Number(purchase.return_days) || 14;
-    const progress = Math.max(0, Math.min(100, 100 - (days / total) * 100));
+    const colors = { danger: 'text-red-600', warning: 'text-amber-600', success: 'text-emerald-600', neutral: 'text-ink-muted', info: 'text-primary-700' };
+    const label = b === 'active' ? urgency.message : status.label;
+    const color = b === 'active' ? colors[urgency.tone] : colors[status.tone];
 
     return (
-        <Link to={`/purchases/${purchase.id}`} className="row-link !items-start sm:!items-center">
-            <div className={`row-avatar ${b === 'active' ? (urgency.tone === 'danger' ? 'bg-red-50 text-red-600' : urgency.tone === 'warning' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600') : 'bg-stone-100 text-ink-muted'}`}>
-                <ShoppingBag size={20} />
-            </div>
+        <Link to={`/purchases/${purchase.id}`} className="row-link !py-3">
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 font-semibold text-ink truncate">
+                <div className="font-semibold text-ink text-[15px] truncate flex items-center gap-1.5">
                     {purchase.store}
                     {purchase.purchase_url && <ExternalLink size={12} className="text-ink-muted shrink-0" />}
                 </div>
-                <div className="text-xs text-ink-muted truncate">{purchase.items}</div>
-                {b === 'active' ? (
-                    <div className="flex items-center gap-2 mt-1.5">
-                        <div className="h-1 flex-1 max-w-[140px] rounded-full bg-stone-100 overflow-hidden">
-                            <div
-                                className={`h-full rounded-full ${urgency.tone === 'danger' ? 'bg-red-500' : urgency.tone === 'warning' ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
-                        <span className="text-[11px] text-ink-muted">do {formatDateShort(purchase.return_deadline)}</span>
-                    </div>
-                ) : (
-                    <div className="text-[11px] text-ink-muted mt-1">
-                        Kupione {formatDateShort(purchase.purchase_date)}
-                        {b === 'returned' && Number(purchase.returned_amount) > 0 && <> · zwrócono {formatCurrency(purchase.returned_amount)}</>}
-                    </div>
-                )}
-            </div>
-            <div className="text-right shrink-0">
-                <div className="font-bold text-ink">{formatCurrency(purchase.amount)}</div>
-                <div className="mt-0.5">
-                    {b === 'active' ? <Badge tone={urgency.tone}>{urgency.message}</Badge> : <Badge tone={status.tone}>{status.label}</Badge>}
+                <div className="text-xs text-ink-muted truncate mt-0.5">
+                    {purchase.items}
+                    {b === 'active' ? <> · do {formatDateShort(purchase.return_deadline)}</> : <> · {formatDateShort(purchase.purchase_date)}</>}
                 </div>
             </div>
-            {b === 'active' && (
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onReturn();
-                    }}
-                    className="w-9 h-9 rounded-xl border border-line text-ink-muted hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 flex items-center justify-center shrink-0 transition-colors self-center"
-                    title="Zwrócone"
-                    aria-label="Zwrócone"
-                >
-                    <RotateCcw size={16} />
-                </button>
-            )}
+            <div className="text-right shrink-0">
+                <div className="font-bold text-ink tabular-nums">{formatCurrency(purchase.amount)}</div>
+                <div className={`text-[11px] font-semibold mt-0.5 ${color}`}>
+                    {label}
+                    {b === 'returned' && Number(purchase.returned_amount) > 0 && purchase.status === 'partial' && <> · {formatCurrency(purchase.returned_amount)}</>}
+                </div>
+            </div>
         </Link>
     );
 }

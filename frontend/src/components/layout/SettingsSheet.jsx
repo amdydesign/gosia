@@ -44,7 +44,7 @@ export default function SettingsSheet({ open, onClose }) {
                 <div className="card divide-y divide-line overflow-hidden">
                     {push.supported && (
                         <button type="button" onClick={handlePush} disabled={push.busy} className="row w-full text-left hover:bg-canvas">
-                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${push.status === 'subscribed' ? 'bg-primary-50 text-primary-600' : 'bg-stone-100 text-ink-muted'}`}>
+                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${push.status === 'subscribed' ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
                                 {push.status === 'subscribed' ? <Bell size={18} /> : <BellOff size={18} />}
                             </span>
                             <span className="flex-1 min-w-0">
@@ -57,20 +57,20 @@ export default function SettingsSheet({ open, onClose }) {
                                             : 'Wyłączone'}
                                 </span>
                             </span>
-                            <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${push.status === 'subscribed' ? 'bg-primary-600' : 'bg-stone-300'}`}>
+                            <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${push.status === 'subscribed' ? 'bg-primary-600' : 'bg-slate-300'}`}>
                                 <span className={`block w-5 h-5 rounded-full bg-white shadow transition-transform ${push.status === 'subscribed' ? 'translate-x-5' : ''}`} />
                             </span>
                         </button>
                     )}
                     <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-canvas">
-                        <span className="w-9 h-9 rounded-xl bg-stone-100 text-ink-soft flex items-center justify-center">
+                        <span className="w-9 h-9 rounded-xl bg-slate-100 text-ink-soft flex items-center justify-center">
                             <Download size={18} />
                         </span>
                         <span className="flex-1 text-sm font-semibold text-ink">Eksport współprac (CSV)</span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
                     <button type="button" onClick={() => setPasswordOpen(true)} className="row w-full text-left hover:bg-canvas">
-                        <span className="w-9 h-9 rounded-xl bg-stone-100 text-ink-soft flex items-center justify-center">
+                        <span className="w-9 h-9 rounded-xl bg-slate-100 text-ink-soft flex items-center justify-center">
                             <KeyRound size={18} />
                         </span>
                         <span className="flex-1 text-sm font-semibold text-ink">Zmień hasło</span>

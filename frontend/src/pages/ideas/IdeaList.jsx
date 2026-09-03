@@ -117,7 +117,7 @@ export default function IdeaList() {
                             <div key={idea.id} className={`card flex flex-col transition-all ${recorded ? 'opacity-70 hover:opacity-100' : 'hover:border-secondary/40 hover:shadow-md'}`}>
                                 <Link to={`/ideas/${idea.id}`} className="card-pad flex-1 flex flex-col">
                                     <div className="flex items-start justify-between gap-3 mb-3">
-                                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${recorded ? 'bg-stone-100 text-ink-muted' : 'bg-secondary-light text-secondary-dark'}`}>
+                                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${recorded ? 'bg-slate-100 text-ink-muted' : 'bg-secondary-light text-secondary-dark'}`}>
                                             <Lightbulb size={18} />
                                         </span>
                                         {seconds > 0 && (
