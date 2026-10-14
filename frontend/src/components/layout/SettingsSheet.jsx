@@ -8,6 +8,7 @@ import { usePush } from '../../hooks/usePush';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useDashboard } from '../../context/DashboardContext';
+import { useQuickActions } from '../../context/QuickActionsContext';
 
 export default function SettingsSheet({ open, onClose }) {
     const { user, logout } = useAuth();
@@ -15,6 +16,7 @@ export default function SettingsSheet({ open, onClose }) {
     const toast = useToast();
     const confirm = useConfirm();
     const { data: dashboard } = useDashboard();
+    const { openAiSettings } = useQuickActions();
     const ai = dashboard?.ai;
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
@@ -65,21 +67,25 @@ export default function SettingsSheet({ open, onClose }) {
                             </span>
                         </button>
                     )}
-                    {ai && (
-                        <div className="row">
-                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${ai.enabled ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
-                                <Sparkles size={18} />
+                    <button
+                        type="button"
+                        onClick={() => {
+                            onClose();
+                            openAiSettings();
+                        }}
+                        className="row w-full text-left hover:bg-canvas"
+                    >
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${ai?.enabled ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
+                            <Sparkles size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Czytanie screenów (AI)</span>
+                            <span className="block text-xs text-ink-muted">
+                                {ai?.enabled ? `Włączone · ${ai.provider === 'gemini' ? 'Gemini' : 'Claude'}` : 'Wyłączone — wpisz klucz API'}
                             </span>
-                            <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-semibold text-ink">Czytanie screenów (AI)</span>
-                                <span className="block text-xs text-ink-muted">
-                                    {ai.enabled
-                                        ? `Włączone · ${ai.provider === 'gemini' ? 'Gemini' : 'Claude'}`
-                                        : 'Wyłączone — dodaj ANTHROPIC_API_KEY lub GEMINI_API_KEY w api/.env'}
-                                </span>
-                            </span>
-                        </div>
-                    )}
+                        </span>
+                        <ChevronRight size={18} className="text-ink-muted" />
+                    </button>
                     <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-canvas">
                         <span className="w-9 h-9 rounded-xl bg-slate-100 text-ink-soft flex items-center justify-center">
                             <Download size={18} />

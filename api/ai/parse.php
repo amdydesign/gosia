@@ -12,7 +12,7 @@
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
-require_once __DIR__ . '/../config/AiClient.php';
+require_once __DIR__ . '/../config/AiSettings.php';
 require_once __DIR__ . '/../middleware/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -27,11 +27,13 @@ const BILLING_TYPES = ['umowa_50', 'umowa_20', 'useme_50', 'useme_20', 'gotowka'
 const COLLAB_TYPES = ['post-instagram', 'story', 'reel', 'sesja', 'event', 'konsultacja', 'inne'];
 
 try {
-    getCurrentUserId();
+    $userId = getCurrentUserId();
     @set_time_limit(120);
 
+    $db = new Database();
+    AiSettings::apply($db->getConnection(), $userId);
     if (!AiClient::provider()) {
-        Response::error('Rozpoznawanie screenów jest wyłączone - dodaj ANTHROPIC_API_KEY lub GEMINI_API_KEY w api/.env.', 503);
+        Response::error('Czytanie screenów jest wyłączone - wpisz klucz AI w Ustawieniach.', 503);
     }
 
     $input = json_decode(file_get_contents('php://input'), true) ?: [];

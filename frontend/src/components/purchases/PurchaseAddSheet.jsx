@@ -8,6 +8,7 @@ import { imagesFromClipboard, imagesFromDataTransfer } from '../../utils/images'
 import { RETURN_DAY_PRESETS, buildStoreMemory } from '../../utils/purchases';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
+import { useQuickActions } from '../../context/QuickActionsContext';
 import { addDays, formatCurrency, formatDateLong, formatDateShort, getTodayDate, parseAmount, yesterdayDate } from '../../utils/format';
 
 const today = getTodayDate();
@@ -21,9 +22,12 @@ const emptyItem = () => ({ name: '', amount: '', include: true });
 export default function PurchaseAddSheet({ initialFiles, manual = false, onClose, onSaved }) {
     const toast = useToast();
     const { data: dashboard, refresh } = useDashboard();
+    const { openAiSettings } = useQuickActions();
     const aiEnabled = dashboard?.ai?.enabled !== false;
 
-    const [step, setStep] = useState(manual || !aiEnabled ? 'review' : 'pick');
+    // "auto" = screenshot picker when AI is on, manual form when it is off
+    const [rawStep, setStep] = useState(manual ? 'review' : 'auto');
+    const step = rawStep === 'auto' ? (aiEnabled ? 'pick' : 'review') : rawStep;
     const [files, setFiles] = useState([]);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
@@ -215,9 +219,13 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, onClose
             {step === 'review' && (
                 <div className="space-y-5 pt-1">
                     {!aiEnabled && (
-                        <p className="text-xs text-ink-muted rounded-xl bg-canvas border border-line px-3 py-2">
-                            Czytanie screenów jest wyłączone — dodaj klucz AI w <code>api/.env</code>, a wystarczy wrzucić screena.
-                        </p>
+                        <button type="button" onClick={openAiSettings} className="w-full flex items-center gap-3 rounded-xl bg-primary-50/60 border border-primary-100 px-3.5 py-2.5 text-left">
+                            <Sparkles size={18} className="text-primary-600 shrink-0" />
+                            <span className="text-xs text-primary-900">
+                                <strong className="block text-sm">Wolisz wrzucić screena?</strong>
+                                Wpisz klucz AI w ustawieniach — sklep, rzeczy i ceny uzupełnią się same.
+                            </span>
+                        </button>
                     )}
                     {files.length > 0 && (
                         <div className="flex items-center gap-3">

@@ -3,7 +3,8 @@
  * Reads screenshots (orders, receipts, briefs) with an AI vision model and
  * returns structured JSON.
  *
- * Providers (keys in api/.env, never sent to the browser):
+ * Keys come from the app settings (Ustawienia -> Czytanie screenów, stored
+ * encrypted by AiSettings) or from api/.env; they never reach the browser.
  *   ANTHROPIC_API_KEY  -> Claude (Messages API, structured outputs)
  *   GEMINI_API_KEY     -> Gemini (generateContent, response schema)
  *   AI_PROVIDER        -> optional "claude" | "gemini" when both keys are set
@@ -23,14 +24,41 @@ class AiClient
     const GEMINI_MODEL = 'gemini-flash-latest';
     const TIMEOUT = 90;
 
+    /** Settings saved in the app: ['provider' => ..., 'claude' => key, 'gemini' => key] */
+    private static $config = [];
+
+    public static function configure(array $config)
+    {
+        self::$config = $config;
+    }
+
+    /** API key for "claude" | "gemini": app settings first, then api/.env. */
+    public static function key($provider)
+    {
+        $fromApp = trim((string) (self::$config[$provider] ?? ''));
+        if ($fromApp !== '') {
+            return $fromApp;
+        }
+        return trim($_ENV[$provider === 'claude' ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY'] ?? '');
+    }
+
+    /** Where the key comes from: "app", "env" or null. */
+    public static function keySource($provider)
+    {
+        if (trim((string) (self::$config[$provider] ?? '')) !== '') {
+            return 'app';
+        }
+        return self::key($provider) !== '' ? 'env' : null;
+    }
+
     /**
      * Active provider: "claude", "gemini" or null when no key is configured.
      */
     public static function provider()
     {
-        $hasClaude = trim($_ENV['ANTHROPIC_API_KEY'] ?? '') !== '';
-        $hasGemini = trim($_ENV['GEMINI_API_KEY'] ?? '') !== '';
-        $preferred = strtolower(trim($_ENV['AI_PROVIDER'] ?? ''));
+        $hasClaude = self::key('claude') !== '';
+        $hasGemini = self::key('gemini') !== '';
+        $preferred = strtolower(trim((string) (self::$config['provider'] ?? '') ?: ($_ENV['AI_PROVIDER'] ?? '')));
 
         if ($preferred === 'gemini' && $hasGemini) {
             return 'gemini';
@@ -115,7 +143,7 @@ class AiClient
 
     private static function extractWithClaude($prompt, array $images, array $schema)
     {
-        $key = trim($_ENV['ANTHROPIC_API_KEY']);
+        $key = self::key('claude');
         $headers = [
             'Content-Type: application/json',
             'x-api-key: ' . $key,
@@ -217,13 +245,47 @@ class AiClient
         $model = trim($_ENV['GEMINI_MODEL'] ?? '') ?: self::GEMINI_MODEL;
         [$status, $data] = self::post(
             sprintf(static::GEMINI_URL, rawurlencode($model)),
-            ['Content-Type: application/json', 'x-goog-api-key: ' . trim($_ENV['GEMINI_API_KEY'])],
+            ['Content-Type: application/json', 'x-goog-api-key: ' . self::key('gemini')],
             self::buildGeminiBody($prompt, $images, $schema)
         );
         if ($status !== 200) {
             throw new RuntimeException(self::httpErrorMessage('Gemini', $status, $data['error']['message'] ?? ''));
         }
         return self::parseGeminiResponse($data);
+    }
+
+    /**
+     * Check a key without spending tokens (lists models).
+     * @return bool|null true = works, false = rejected, null = could not check
+     */
+    public static function verifyKey($provider, $key)
+    {
+        if ($provider === 'claude') {
+            $url = 'https://api.anthropic.com/v1/models?limit=1';
+            $headers = ['x-api-key: ' . $key, 'anthropic-version: 2023-06-01'];
+        } else {
+            $url = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1';
+            $headers = ['x-goog-api-key: ' . $key];
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT => 12,
+        ]);
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($raw === false || $status === 0 || $status >= 500 || $status === 429) {
+            return null;
+        }
+        if ($status === 200) {
+            return true;
+        }
+        // Gemini answers 400 API_KEY_INVALID for a wrong key
+        return in_array($status, [400, 401, 403], true) ? false : null;
     }
 
     // ---------------------------------------------------------------- shared

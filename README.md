@@ -201,7 +201,11 @@ I zaktualizuj w tabeli `users`.
 
 ## 🤖 Czytanie screenów (AI)
 
-W `api/.env` wystarczy dodać **jeden** klucz:
+Najprościej w aplikacji: **Ustawienia → Czytanie screenów (AI)** → wybierz Claude albo Gemini, wklej klucz
+i „Sprawdź i zapisz”. Klucz jest sprawdzany u dostawcy (bez kosztów), zapisywany w bazie zaszyfrowany
+(AES-256-GCM, klucz pochodny od `JWT_SECRET`) i potem pokazywany tylko jako maska.
+
+Alternatywnie w `api/.env` (klucz z aplikacji ma pierwszeństwo):
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...      # Claude (https://console.anthropic.com)
@@ -209,11 +213,12 @@ ANTHROPIC_API_KEY=sk-ant-...      # Claude (https://console.anthropic.com)
 GEMINI_API_KEY=...                # Gemini (https://aistudio.google.com/apikey)
 ```
 
-- Gdy są oba klucze, wybór: `AI_PROVIDER=claude` lub `AI_PROVIDER=gemini`.
+- Gdy są oba klucze, wybór w Ustawieniach albo `AI_PROVIDER=claude|gemini`.
 - Model można zmienić przez `ANTHROPIC_MODEL` / `GEMINI_MODEL` (domyślnie `claude-opus-5-5` / `gemini-flash-latest`).
-- Bez klucza zakupy działają w trybie ręcznym; status widać w Ustawieniach („Czytanie screenów (AI)”).
-- Endpoint: `api/ai/parse.php` (tryby `purchase` i `collaboration`), klucz nigdy nie trafia do przeglądarki.
-- Kolumny `purchases.kept_confirmed` i `purchases.returned_at` tworzą się same przy pierwszym użyciu.
+- Bez klucza zakupy działają w trybie ręcznym.
+- Zmiana `JWT_SECRET` unieważnia zapisane w aplikacji klucze - trzeba je wpisać ponownie.
+- Endpointy: `api/ai/parse.php` (tryby `purchase` i `collaboration`), `api/settings/ai.php` (zapis klucza). Klucz nigdy nie trafia do przeglądarki.
+- Tabela `app_settings` i kolumny `purchases.kept_confirmed`, `purchases.returned_at` tworzą się same przy pierwszym użyciu.
 
 ## 📈 Automatyczne pobieranie obserwujących
 

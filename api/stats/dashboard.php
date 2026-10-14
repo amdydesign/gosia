@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
 require_once __DIR__ . '/../config/Schema.php';
-require_once __DIR__ . '/../config/AiClient.php';
+require_once __DIR__ . '/../config/AiSettings.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -191,6 +191,13 @@ try {
         $socialStale = $fetcher->stalePlatforms($userId);
     } catch (Exception $e) {
         // social tables optional
+    }
+
+    // 7c. Screenshot reading (AI) availability
+    try {
+        AiSettings::apply($conn, $userId);
+    } catch (Exception $e) {
+        // settings table optional - fall back to api/.env keys
     }
 
     // 8. Ideas (drafts to record)
