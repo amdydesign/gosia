@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../middleware/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
@@ -24,6 +25,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensurePurchases($conn);
 
     // Verify ownership
     $stmt = $conn->prepare("SELECT id FROM purchases WHERE id = :id AND user_id = :user_id");
@@ -69,6 +71,11 @@ try {
         $fields[] = "notes = :notes";
         $params['notes'] = $data->notes;
     }
+    // "Zostawiam" - decided to keep before the deadline (stops reminders)
+    if (isset($data->kept_confirmed)) {
+        $fields[] = "kept_confirmed = :kept_confirmed";
+        $params['kept_confirmed'] = $data->kept_confirmed ? 1 : 0;
+    }
 
     // Status handling - if setting to 'returned', set timestamp
     if (isset($data->status)) {
@@ -78,7 +85,7 @@ try {
         $fields[] = "status = :status";
         $params['status'] = $data->status;
 
-        if ($data->status === 'returned') {
+        if ($data->status === 'returned' || $data->status === 'partial') {
             $fields[] = "returned_at = CURRENT_TIMESTAMP";
         } elseif ($data->status === 'kept') {
             $fields[] = "returned_at = NULL";
@@ -96,7 +103,7 @@ try {
     Response::success(['message' => 'Purchase updated']);
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Update failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to update purchase', 500);

@@ -291,3 +291,16 @@ export function uniqueSorted(values) {
         a.localeCompare(b, 'pl')
     );
 }
+
+// ---------- Input ----------
+/** "1 299,99" -> 1299.99 (accepts comma decimals and spaces) */
+export function parseAmount(value) {
+    const n = parseFloat(String(value ?? '').replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+}
+
+export function yesterdayDate() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return toDateInput(d);
+}

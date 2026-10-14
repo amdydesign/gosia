@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight } from 'lucide-react';
+import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
 import ExportModal from '../../pages/collaborations/ExportModal';
@@ -7,12 +7,17 @@ import { useAuth } from '../../context/AuthContext';
 import { usePush } from '../../hooks/usePush';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
+import { useDashboard } from '../../context/DashboardContext';
+import { useQuickActions } from '../../context/QuickActionsContext';
 
 export default function SettingsSheet({ open, onClose }) {
     const { user, logout } = useAuth();
     const push = usePush();
     const toast = useToast();
     const confirm = useConfirm();
+    const { data: dashboard } = useDashboard();
+    const { openAiSettings } = useQuickActions();
+    const ai = dashboard?.ai;
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
 
@@ -51,7 +56,7 @@ export default function SettingsSheet({ open, onClose }) {
                                 <span className="block text-sm font-semibold text-ink">Powiadomienia push</span>
                                 <span className="block text-xs text-ink-muted">
                                     {push.status === 'subscribed'
-                                        ? 'Włączone: terminy zwrotów i zaległe płatności'
+                                        ? 'Włączone: terminy zwrotów, spóźnione przelewy, pomysły'
                                         : push.status === 'denied'
                                             ? 'Zablokowane w przeglądarce'
                                             : 'Wyłączone'}
@@ -62,6 +67,25 @@ export default function SettingsSheet({ open, onClose }) {
                             </span>
                         </button>
                     )}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            onClose();
+                            openAiSettings();
+                        }}
+                        className="row w-full text-left hover:bg-canvas"
+                    >
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${ai?.enabled ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
+                            <Sparkles size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Czytanie screenów (AI)</span>
+                            <span className="block text-xs text-ink-muted">
+                                {ai?.enabled ? `Włączone · ${ai.provider === 'gemini' ? 'Gemini' : 'Claude'}` : 'Wyłączone — wpisz klucz API'}
+                            </span>
+                        </span>
+                        <ChevronRight size={18} className="text-ink-muted" />
+                    </button>
                     <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-canvas">
                         <span className="w-9 h-9 rounded-xl bg-slate-100 text-ink-soft flex items-center justify-center">
                             <Download size={18} />
@@ -84,7 +108,7 @@ export default function SettingsSheet({ open, onClose }) {
                     </button>
                 </div>
 
-                <p className="text-center text-[11px] text-ink-muted mt-4 pb-1">Gosia panel · wersja 3.0</p>
+                <p className="text-center text-[11px] text-ink-muted mt-4 pb-1">Gosia panel · wersja 4.0</p>
             </Sheet>
 
             <ChangePasswordModal isOpen={passwordOpen} onClose={() => setPasswordOpen(false)} />

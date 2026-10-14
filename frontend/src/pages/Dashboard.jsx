@@ -1,26 +1,30 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ShoppingBag, Wallet, CalendarClock, AlertCircle, CheckCircle2, ChevronRight, TrendingUp, RotateCcw, Check, Play, Lightbulb, Plus, Clock } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle, Briefcase, Camera, Check, CheckCircle2, ChevronRight, Clock, Heart, Lightbulb, Play, Plus, RotateCcw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
+import { useQuickActions } from '../context/QuickActionsContext';
 import { useMarkPaid } from '../hooks/useMarkPaid';
-import StatTile from '../components/ui/StatTile';
-import Card, { CardHeader } from '../components/ui/Card';
+import { usePurchaseActions } from '../hooks/usePurchaseActions';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
-import ReturnSheet from '../components/purchases/ReturnSheet';
 import SocialSection from '../components/social/SocialSection';
-import { formatCurrency, formatDateShort, formatWeekdayDate, getReturnUrgency, greetingForHour, formatSeconds } from '../utils/format';
+import { formatCurrency, formatDateShort, formatSeconds, formatWeekdayDate, greetingForHour } from '../utils/format';
+import { deadlineText, deadlineTone } from '../utils/purchases';
+import { LATE_AFTER_DAYS } from '../utils/collabs';
 
 /**
- * Start: greeting, 3 numbers, one "to do" list, social strip.
+ * Start = shortcuts to everything: add buttons, the 3 numbers that matter,
+ * one to-do list with one-tap actions, ideas and followers.
  */
 export default function Dashboard() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const { data, loading, error, refresh } = useDashboard();
-    const { markPaid, busyId } = useMarkPaid();
-    const [returning, setReturning] = useState(null);
+    const { openCollab, openPurchase, bump } = useQuickActions();
+    const { markPaid, busyId: payingId } = useMarkPaid();
+    const { returned, keep, busyId: returningId } = usePurchaseActions({ onChange: () => bump('purchases') });
 
     useEffect(() => {
         refresh();
@@ -29,7 +33,6 @@ export default function Dashboard() {
     const todo = useMemo(() => buildTodo(data), [data]);
 
     if (loading && !data) return <PageSkeleton />;
-
     if (error && !data) {
         return (
             <EmptyState
@@ -41,210 +44,215 @@ export default function Dashboard() {
         );
     }
 
-    const financials = data?.financials || {};
+    const fin = data?.financials || {};
     const counts = data?.counts || {};
-    const year = financials.year || new Date().getFullYear();
-    const overdueCount = financials.pending?.overdue_count || 0;
-    const hasUrgent = todo.some((t) => t.urgent);
+    const ideas = data?.draft_ideas || [];
+    const nextIdea = ideas.find((i) => Number(i.words) > 0);
+
+    const tiles = [
+        { label: 'Współpraca', sub: 'marka + kwota', icon: Plus, tone: 'bg-primary-600 text-white shadow-float', iconTone: 'bg-white/15', onClick: () => openCollab() },
+        { label: 'Zakup', sub: 'ze screena', icon: Camera, tone: 'bg-secondary text-white shadow-[0_10px_30px_-10px_rgba(249,115,22,0.55)]', iconTone: 'bg-white/20', onClick: () => openPurchase() },
+        { label: 'Pomysł', sub: 'na rolkę', icon: Lightbulb, tone: 'bg-surface text-ink border border-line shadow-card', iconTone: 'bg-amber-50 text-amber-600', onClick: () => navigate('/ideas/new') },
+        nextIdea
+            ? { label: 'Nagraj', sub: nextIdea.title, icon: Play, tone: 'bg-ink text-white', iconTone: 'bg-white/10', onClick: () => navigate(`/ideas/${nextIdea.id}?prompter=1`) }
+            : { label: 'Pomysły', sub: 'scenariusze', icon: Lightbulb, tone: 'bg-surface text-ink border border-line shadow-card', iconTone: 'bg-slate-100 text-ink-soft', onClick: () => navigate('/ideas') },
+    ];
 
     return (
         <div className="space-y-5 animate-fade-in">
-            {/* Greeting */}
-            <div className="flex items-end justify-between gap-4">
-                <div>
-                    <p className="lg:hidden text-sm text-ink-muted font-medium">{formatWeekdayDate()}</p>
-                    <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-ink mt-0.5">
-                        {greetingForHour()}, {user?.username || 'Gosia'}
-                    </h2>
-                </div>
-                <div className="hidden lg:flex items-center gap-2">
-                    <Button to="/collaborations/new" variant="primary">Nowa współpraca</Button>
-                    <Button to="/purchases/new" variant="secondary">Nowy zakup</Button>
-                </div>
+            <div>
+                <p className="text-sm text-ink-muted font-medium lg:hidden">{formatWeekdayDate()}</p>
+                <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-ink mt-0.5">
+                    {greetingForHour()}, {user?.username || 'Gosia'}
+                </h2>
+            </div>
+
+            {/* Add / do */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {tiles.map((t) => (
+                    <button
+                        key={t.label}
+                        type="button"
+                        onClick={t.onClick}
+                        className={`rounded-2xl p-4 text-left flex flex-col gap-3 min-h-[104px] active:scale-[0.98] transition-transform ${t.tone}`}
+                    >
+                        <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${t.iconTone}`}>
+                            <t.icon size={22} strokeWidth={2.4} />
+                        </span>
+                        <span className="min-w-0">
+                            <span className="block font-extrabold leading-tight">{t.label}</span>
+                            <span className="block text-xs opacity-75 truncate">{t.sub}</span>
+                        </span>
+                    </button>
+                ))}
             </div>
 
             {/* Numbers */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="col-span-2 lg:col-span-1">
-                    <StatTile
-                        tone="brand"
-                        icon={TrendingUp}
-                        label="Ten miesiąc"
-                        value={formatCurrency(financials.month?.gross || 0)}
-                        sub={`Na rękę ${formatCurrency(financials.month?.net || 0)}`}
-                        to="/collaborations?filter=paid"
-                    />
-                </div>
-                <StatTile
-                    icon={CalendarClock}
-                    tone={overdueCount ? 'danger' : 'warning'}
+            <div className="grid grid-cols-3 gap-2.5">
+                <NumberTile to="/statistics" label="Ten miesiąc" value={formatCurrency(fin.month?.net || 0, { compact: true })} sub="na rękę" />
+                <NumberTile
+                    to="/collaborations"
                     label="Do zapłaty"
-                    value={formatCurrency(financials.pending?.gross || 0, { compact: true })}
-                    sub={
-                        financials.pending?.count
-                            ? `${financials.pending.count} ${financials.pending.count === 1 ? 'współpraca' : 'współprac'}${overdueCount ? ` · ${overdueCount} zaległe` : ''}`
-                            : 'Wszystko opłacone'
-                    }
-                    to="/collaborations?filter=unpaid"
+                    value={formatCurrency(fin.pending?.gross || 0, { compact: true })}
+                    sub={fin.pending?.count ? `${fin.pending.count} × współpraca` : 'wszystko opłacone'}
+                    alert={fin.pending?.overdue_count > 0}
                 />
-                <StatTile
-                    icon={Wallet}
-                    label={`Rok ${year}`}
-                    value={formatCurrency(financials.yearly_gross || 0, { compact: true })}
-                    sub={`Na rękę ${formatCurrency(financials.yearly_net || 0, { compact: true })}`}
-                    to="/statistics"
+                <NumberTile
+                    to="/purchases"
+                    label="Do zwrotu"
+                    value={formatCurrency(counts.active_returns_value || 0, { compact: true })}
+                    sub={counts.active_returns ? `${counts.active_returns} ${counts.active_returns === 1 ? 'rzecz' : 'rzeczy'}` : 'nic nie czeka'}
                 />
             </div>
 
             {/* To do */}
-            <Card padded={false}>
-                <CardHeader
-                    icon={todo.length ? AlertCircle : CheckCircle2}
-                    title={todo.length ? `Do zrobienia (${todo.length})` : 'Wszystko pod kontrolą'}
-                    className={hasUrgent ? '[&_svg]:text-red-500' : '[&_svg]:text-emerald-500'}
-                />
+            <section className="card overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
+                    {todo.length ? <AlertCircle size={17} className="text-amber-500" /> : <CheckCircle2 size={17} className="text-emerald-500" />}
+                    <h3 className="card-title flex-1">{todo.length ? 'Do ogarnięcia' : 'Wszystko pod kontrolą'}</h3>
+                </div>
                 {todo.length === 0 ? (
-                    <p className="px-5 py-4 text-sm text-ink-muted">Brak pilnych zwrotów i nieopłaconych współprac.</p>
+                    <p className="px-4 py-4 text-sm text-ink-muted">Żadne zwroty się nie kończą i nic nie wisi z płatnościami.</p>
                 ) : (
                     <div className="divide-y divide-line">
-                        {todo.map((item) => (
-                            <div key={item.key} className="row !py-3">
-                                <Link to={item.to} className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`w-2 h-2 rounded-full shrink-0 ${item.urgent ? 'bg-red-500' : item.tone === 'warning' ? 'bg-amber-400' : item.tone === 'info' ? 'bg-secondary' : 'bg-primary-400'}`} />
-                                        <span className="font-semibold text-ink truncate">{item.title}</span>
-                                    </div>
-                                    <div className={`text-xs mt-0.5 truncate pl-4 ${item.urgent ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>{item.meta}</div>
-                                </Link>
-                                {item.amount && <div className="text-sm font-bold text-ink tabular-nums shrink-0">{item.amount}</div>}
-                                {item.action === 'paid' && (
-                                    <Button size="sm" variant="success" icon={Check} loading={busyId === item.id} onClick={() => markPaid(item.raw)} aria-label="Oznacz jako opłacone">
-                                        <span className="hidden sm:inline">Opłacone</span>
-                                    </Button>
-                                )}
-                                {item.action === 'return' && (
-                                    <Button size="sm" variant="secondary" icon={RotateCcw} onClick={() => setReturning(item.raw)} aria-label="Zwrócone">
-                                        <span className="hidden sm:inline">Zwrócone</span>
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
+                        {todo.map((item) =>
+                            item.kind === 'return' ? (
+                                <div key={item.key} className="flex items-center gap-2 pl-4 pr-2.5 py-2.5">
+                                    <Link to={`/purchases/${item.raw.id}`} className="flex-1 min-w-0">
+                                        <div className="text-[15px] font-semibold text-ink truncate">{item.raw.items}</div>
+                                        <div className={`text-xs truncate ${item.tone === 'danger' ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>
+                                            Zwrot · {item.raw.store} · {deadlineText(Number(item.raw.days_remaining), item.raw.return_deadline)}
+                                        </div>
+                                    </Link>
+                                    <IconAction label="Zwrócone" tone="success" busy={returningId === item.raw.id} onClick={() => returned(item.raw)} icon={RotateCcw} />
+                                    <IconAction label="Zostaje" tone="neutral" busy={returningId === item.raw.id} onClick={() => keep(item.raw)} icon={Heart} />
+                                </div>
+                            ) : (
+                                <div key={item.key} className="flex items-center gap-2 pl-4 pr-2.5 py-2.5">
+                                    <Link to={`/collaborations/${item.raw.id}`} className="flex-1 min-w-0">
+                                        <div className="text-[15px] font-semibold text-ink truncate">{item.raw.brand}</div>
+                                        <div className={`text-xs truncate ${item.late ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>
+                                            {formatCurrency(item.raw.amount_gross)} · {item.raw.days_waiting > 0 ? `czeka ${item.raw.days_waiting} dni` : `od ${formatDateShort(item.raw.date)}`}
+                                        </div>
+                                    </Link>
+                                    <IconAction label="Opłacone" tone="success" busy={payingId === item.raw.id} onClick={() => markPaid(item.raw)} icon={Check} />
+                                </div>
+                            )
+                        )}
                     </div>
                 )}
-                {(counts.unpaid > 0 || counts.active_returns > 0) && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 border-t border-line text-xs text-ink-muted">
-                        <Link to="/collaborations?filter=unpaid" className="inline-flex items-center gap-1 hover:text-primary-700">
-                            {counts.unpaid} do zapłaty <ChevronRight size={12} />
-                        </Link>
-                        <Link to="/purchases" className="inline-flex items-center gap-1 hover:text-primary-700">
-                            <ShoppingBag size={12} /> {counts.active_returns} do decyzji · {formatCurrency(counts.active_returns_value || 0, { compact: true })} <ChevronRight size={12} />
-                        </Link>
-                    </div>
-                )}
-            </Card>
+            </section>
 
-            {/* Ideas to record */}
-            <IdeasWidget ideas={data?.draft_ideas || []} total={counts.ideas_drafts || 0} />
-
-            {/* Social (auto-fetched) */}
-            <div>
-                <div className="flex items-center justify-between px-1 mb-2">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">Obserwujący</h3>
-                    <Link to="/statistics" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-0.5">
-                        Statystyki <ChevronRight size={12} />
+            {/* Ideas */}
+            <section className="card overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line">
+                    <h3 className="card-title flex items-center gap-2">
+                        <Lightbulb size={16} className="text-amber-500" /> Do nagrania
+                        {counts.ideas_drafts > 0 && <span className="text-xs font-semibold text-ink-muted">({counts.ideas_drafts})</span>}
+                    </h3>
+                    <Link to="/ideas" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-0.5">
+                        Wszystkie <ChevronRight size={14} />
                     </Link>
                 </div>
-                <SocialSection compact />
-            </div>
-
-            <ReturnSheet purchase={returning} open={!!returning} onClose={() => setReturning(null)} onDone={() => refresh()} />
-        </div>
-    );
-}
-
-function IdeasWidget({ ideas, total }) {
-    return (
-        <Card padded={false}>
-            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-line">
-                <h2 className="card-title flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-lg bg-secondary-light text-secondary-dark flex items-center justify-center">
-                        <Lightbulb size={14} />
-                    </span>
-                    Pomysły do nagrania
-                    {total > 0 && <span className="text-xs font-semibold text-ink-muted">({total})</span>}
-                </h2>
-                <Link to="/ideas" className="text-xs font-semibold text-primary-700 hover:text-primary-800 inline-flex items-center gap-0.5">
-                    Wszystkie <ChevronRight size={14} />
-                </Link>
-            </div>
-            {ideas.length === 0 ? (
-                <div className="px-5 py-4 flex items-center justify-between gap-3">
-                    <p className="text-sm text-ink-muted">Brak scenariuszy do nagrania. Zapisz pomysł, gdy tylko wpadnie Ci do głowy.</p>
-                    <Button to="/ideas/new" size="sm" variant="soft" icon={Plus}>Dodaj</Button>
-                </div>
-            ) : (
-                <>
+                {ideas.length === 0 ? (
+                    <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+                        <p className="text-sm text-ink-muted">Brak scenariuszy. Zapisz pomysł, gdy tylko wpadnie.</p>
+                        <Button to="/ideas/new" size="sm" variant="soft" icon={Plus}>Dodaj</Button>
+                    </div>
+                ) : (
                     <div className="divide-y divide-line">
                         {ideas.slice(0, 3).map((idea) => {
                             const seconds = Math.round((Number(idea.words) || 0) / 2.3);
                             return (
-                                <div key={idea.id} className="row !py-3">
+                                <div key={idea.id} className="flex items-center gap-3 pl-4 pr-2.5 py-2.5">
                                     <Link to={`/ideas/${idea.id}`} className="flex-1 min-w-0">
-                                        <div className="font-semibold text-ink truncate">{idea.title}</div>
-                                        <div className="text-xs text-ink-muted mt-0.5 inline-flex items-center gap-1">
-                                            {seconds > 0 ? <><Clock size={11} /> ~{formatSeconds(seconds)} · </> : null}
+                                        <div className="text-[15px] font-semibold text-ink truncate">{idea.title}</div>
+                                        <div className="text-xs text-ink-muted inline-flex items-center gap-1">
+                                            {seconds > 0 && <><Clock size={11} /> ~{formatSeconds(seconds)} · </>}
                                             dodano {formatDateShort(idea.created_at?.slice(0, 10))}
                                         </div>
                                     </Link>
-                                    <Button size="sm" variant="dark" icon={Play} to={`/ideas/${idea.id}?prompter=1`} aria-label="Prompter" disabled={!idea.words}>
+                                    <Button size="sm" variant="dark" icon={Play} to={`/ideas/${idea.id}?prompter=1`} disabled={!idea.words} aria-label="Prompter">
                                         <span className="hidden sm:inline">Prompter</span>
                                     </Button>
                                 </div>
                             );
                         })}
                     </div>
-                    <div className="flex items-center justify-between gap-3 px-5 py-2.5 border-t border-line">
-                        <span className="text-xs text-ink-muted">{total > 3 ? `i jeszcze ${total - 3}…` : 'Nagraj i oznacz jako „nagrane”.'}</span>
-                        <Link to="/ideas/new" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-1"><Plus size={12} /> Nowy pomysł</Link>
-                    </div>
-                </>
-            )}
-        </Card>
+                )}
+            </section>
+
+            {/* Followers */}
+            <section>
+                <div className="flex items-center justify-between px-1 mb-2">
+                    <h3 className="section-label">Obserwujący</h3>
+                    <Link to="/statistics" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-0.5">
+                        Statystyki <ChevronRight size={12} />
+                    </Link>
+                </div>
+                <SocialSection compact />
+            </section>
+
+            <div className="lg:hidden grid grid-cols-2 gap-2 pb-2">
+                <Button to="/collaborations" variant="secondary" icon={Briefcase}>Współprace</Button>
+                <Button to="/purchases" variant="secondary" icon={RotateCcw}>Zwroty</Button>
+            </div>
+        </div>
+    );
+}
+
+function NumberTile({ to, label, value, sub, alert = false }) {
+    return (
+        <Link to={to} className={`rounded-2xl p-3 sm:p-4 border transition-colors ${alert ? 'bg-red-50 border-red-100' : 'bg-surface border-line shadow-card hover:border-primary-200'}`}>
+            <div className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider truncate ${alert ? 'text-red-700' : 'text-ink-muted'}`}>{label}</div>
+            <div className="text-[17px] sm:text-2xl font-extrabold text-ink mt-1 tracking-tight tabular-nums truncate">{value}</div>
+            <div className="text-[11px] text-ink-muted truncate">{sub}</div>
+        </Link>
+    );
+}
+
+function IconAction({ label, tone, busy, onClick, icon: Icon }) {
+    const cls = tone === 'success' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-ink-soft border-line-strong';
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={busy}
+            className={`shrink-0 h-10 px-3 rounded-xl border text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50 ${cls}`}
+            aria-label={label}
+            title={label}
+        >
+            {Icon && <Icon size={15} />}
+            <span className="hidden sm:inline">{label}</span>
+        </button>
     );
 }
 
 /**
- * One prioritized list: urgent returns, overdue, unpaid (oldest), upcoming returns.
+ * Returns ending within a week + unpaid collaborations (late first).
  */
 function buildTodo(data) {
     if (!data) return [];
     const items = [];
-    const seenPurchases = new Set();
+    const seen = new Set();
 
-    for (const p of data.urgent_purchases || []) {
-        seenPurchases.add(p.id);
-        const u = getReturnUrgency(p.days_remaining);
-        items.push({ key: `p-${p.id}`, id: p.id, raw: p, to: `/purchases/${p.id}`, title: `${p.store} · zwrot`, meta: `${u.message} · ${p.items}`, amount: formatCurrency(p.amount), urgent: true, tone: 'danger', action: 'return' });
+    const returns = [...(data.urgent_purchases || []), ...(data.upcoming?.purchases || [])]
+        .filter((p) => Number(p.days_remaining) <= 7)
+        .sort((a, b) => Number(a.days_remaining) - Number(b.days_remaining));
+    for (const p of returns) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        items.push({ key: `p-${p.id}`, kind: 'return', raw: p, tone: deadlineTone(Number(p.days_remaining)) });
     }
-    for (const c of data.unpaid_collaborations || []) {
-        const overdue = c.payment_status === 'overdue';
-        items.push({
-            key: `c-${c.id}`,
-            id: c.id,
-            raw: c,
-            to: `/collaborations/${c.id}`,
-            title: c.brand,
-            meta: overdue ? `Zaległa płatność · czeka ${c.days_waiting} dni` : `Czeka na płatność${c.days_waiting > 0 ? ` od ${c.days_waiting} dni` : ''} · ${formatDateShort(c.date)}`,
-            amount: formatCurrency(c.amount_gross),
-            urgent: overdue,
-            tone: overdue ? 'danger' : 'warning',
-            action: 'paid',
-        });
-    }
-    for (const p of data.upcoming?.purchases || []) {
-        if (seenPurchases.has(p.id)) continue;
-        const u = getReturnUrgency(p.days_remaining);
-        items.push({ key: `u-${p.id}`, id: p.id, raw: p, to: `/purchases/${p.id}`, title: `${p.store} · zwrot`, meta: `${u.message} · do ${formatDateShort(p.return_deadline)}`, amount: formatCurrency(p.amount), urgent: false, tone: u.tone, action: 'return' });
-    }
-    return items.slice(0, 8);
+
+    const unpaid = (data.unpaid_collaborations || []).map((c) => ({
+        key: `c-${c.id}`,
+        kind: 'collab',
+        raw: c,
+        late: c.payment_status === 'overdue' || Number(c.days_waiting) > LATE_AFTER_DAYS,
+    }));
+    unpaid.sort((a, b) => Number(b.late) - Number(a.late));
+    items.push(...unpaid.slice(0, 6));
+
+    return items;
 }

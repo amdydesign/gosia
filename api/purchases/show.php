@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../middleware/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -23,11 +24,12 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensurePurchases($conn);
 
     $stmt = $conn->prepare("
         SELECT 
             id, store, items, purchase_date, return_days, 
-            amount, returned_amount, purchase_url, notes, status, 
+            amount, returned_amount, purchase_url, notes, status, kept_confirmed, 
             DATE_ADD(purchase_date, INTERVAL return_days DAY) as return_deadline,
             DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) as days_remaining,
             created_at, returned_at
@@ -45,7 +47,7 @@ try {
     }
 
 } catch (Exception $e) {
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Fetch failed: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to fetch purchase', 500);

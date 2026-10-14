@@ -1,6 +1,7 @@
 /* Service Worker: app-shell cache + Web Push */
 
-const CACHE_NAME = 'gosia-v4';
+const CACHE_NAME = 'gosia-v5';
+const SHARE_CACHE = 'gosia-share';
 const PRECACHE = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -14,16 +15,47 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
-            .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+            .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME && k !== SHARE_CACHE).map((k) => caches.delete(k))))
             .then(() => self.clients.claim())
     );
 });
 
+// Android share sheet -> "Gosia": keep the shared screenshots and open the purchase flow
+async function handleShare(request) {
+    try {
+        const form = await request.formData();
+        const files = form.getAll('screens').filter((f) => f && typeof f === 'object' && f.size);
+        await caches.delete(SHARE_CACHE);
+        const cache = await caches.open(SHARE_CACHE);
+        await Promise.all(
+            files.slice(0, 8).map((file, i) =>
+                cache.put(
+                    `/shared-screen/${i}`,
+                    new Response(file, {
+                        headers: {
+                            'Content-Type': file.type || 'image/png',
+                            'X-File-Name': encodeURIComponent(file.name || `screen-${i + 1}.png`),
+                        },
+                    })
+                )
+            )
+        );
+    } catch {
+        // open the app anyway
+    }
+    return Response.redirect('/purchases?shared=1', 303);
+}
+
 self.addEventListener('fetch', (event) => {
     const request = event.request;
+    const url = new URL(request.url);
+
+    if (request.method === 'POST' && url.origin === self.location.origin && url.pathname === '/share-target') {
+        event.respondWith(handleShare(request));
+        return;
+    }
     if (request.method !== 'GET') return;
 
-    const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
     if (url.pathname.startsWith('/api/')) return; // never cache API responses
 

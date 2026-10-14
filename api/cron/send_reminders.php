@@ -3,8 +3,8 @@
  * Daily Push Reminders (cron)
  *
  * Sends push notifications about:
- *  - purchases whose return deadline is within 2 days (status 'kept')
- *  - collaborations with overdue payments
+ *  - purchases whose return deadline is within 2 days (not returned, not marked "zostawiam")
+ *  - collaborations with overdue payments (status 'overdue' or unpaid for over 30 days)
  *  - ideas waiting to be recorded (Mondays and Thursdays, or with --ideas / ?ideas=1)
  *
  * Run once a day, e.g. on dHosting:
@@ -16,6 +16,7 @@
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/WebPush.php';
+require_once __DIR__ . '/../config/Schema.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->safeLoad();
@@ -42,6 +43,7 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     $webPush = new WebPush();
+    Schema::ensurePurchases($conn);
 
     $notifications = []; // user_id => list of payloads
 
@@ -51,7 +53,7 @@ try {
                DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) as days_remaining,
                id
         FROM purchases
-        WHERE status IN ('kept', 'partial')
+        WHERE status = 'kept' AND kept_confirmed = 0
         AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 2
         ORDER BY days_remaining ASC
     ");
@@ -76,6 +78,7 @@ try {
         SELECT user_id, COUNT(*) as cnt, COALESCE(SUM(amount_gross), 0) as total
         FROM collaborations
         WHERE payment_status = 'overdue'
+           OR (payment_status = 'pending' AND date < DATE_SUB(CURDATE(), INTERVAL 30 DAY))
         GROUP BY user_id
     ");
     foreach ($stmt->fetchAll() as $row) {

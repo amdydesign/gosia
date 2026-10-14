@@ -1,30 +1,29 @@
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, ShoppingBag, Lightbulb, ChevronRight } from 'lucide-react';
+import { Briefcase, Camera, Lightbulb, ChevronRight } from 'lucide-react';
 import Sheet from '../ui/Sheet';
-
-const OPTIONS = [
-    { to: '/collaborations/new', icon: Briefcase, title: 'Nowa współpraca', text: 'Zlecenie, kwota, rozliczenie i zespół', tone: 'bg-primary-50 text-primary-600' },
-    { to: '/purchases/new', icon: ShoppingBag, title: 'Nowy zakup', text: 'Zapisz zakup i termin zwrotu', tone: 'bg-emerald-50 text-emerald-600' },
-    { to: '/ideas/new', icon: Lightbulb, title: 'Nowy pomysł na rolkę', text: 'Scenariusz do promptera', tone: 'bg-secondary-light text-secondary-dark' },
-];
+import { useQuickActions } from '../../context/QuickActionsContext';
 
 export default function QuickAddSheet({ open, onClose }) {
     const navigate = useNavigate();
+    const { openCollab, openPurchase } = useQuickActions();
+
+    const options = [
+        { key: 'collab', icon: Briefcase, title: 'Współpraca', text: 'Marka i kwota — reszta jak ostatnio', tone: 'bg-primary-50 text-primary-600', run: () => openCollab() },
+        { key: 'purchase', icon: Camera, title: 'Zakup ze screena', text: 'Wrzuć screena, przypomnę o zwrocie', tone: 'bg-secondary-light text-secondary-dark', run: () => openPurchase() },
+        { key: 'idea', icon: Lightbulb, title: 'Pomysł na rolkę', text: 'Scenariusz do promptera', tone: 'bg-amber-50 text-amber-600', run: () => { onClose(); navigate('/ideas/new'); } },
+    ];
 
     return (
-        <Sheet open={open} onClose={onClose} title="Co chcesz dodać?" size="sm">
+        <Sheet open={open} onClose={onClose} title="Co dodajesz?" size="sm">
             <div className="space-y-2 pb-2">
-                {OPTIONS.map((opt) => (
+                {options.map((opt) => (
                     <button
-                        key={opt.to}
+                        key={opt.key}
                         type="button"
-                        onClick={() => {
-                            onClose();
-                            navigate(opt.to);
-                        }}
+                        onClick={opt.run}
                         className="w-full flex items-center gap-4 p-3.5 rounded-2xl border border-line hover:border-primary-200 hover:bg-primary-50/40 transition-colors text-left"
                     >
-                        <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${opt.tone}`}>
+                        <span className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${opt.tone}`}>
                             <opt.icon size={22} />
                         </span>
                         <span className="flex-1 min-w-0">
