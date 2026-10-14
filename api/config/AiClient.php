@@ -18,7 +18,7 @@
 class AiClient
 {
     const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-    const CLAUDE_MODEL = 'claude-opus-5-5';
+    const CLAUDE_MODEL = 'claude-sonnet-5-5';
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
     const GEMINI_MODEL = 'gemini-flash-latest';
