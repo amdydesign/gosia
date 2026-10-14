@@ -214,7 +214,7 @@ GEMINI_API_KEY=...                # Gemini (https://aistudio.google.com/apikey)
 ```
 
 - Gdy są oba klucze, wybór w Ustawieniach albo `AI_PROVIDER=claude|gemini`.
-- Model można zmienić przez `ANTHROPIC_MODEL` / `GEMINI_MODEL` (domyślnie `claude-opus-5-5` / `gemini-flash-latest`).
+- Model można zmienić przez `ANTHROPIC_MODEL` / `GEMINI_MODEL` (domyślnie `claude-sonnet-5-5` / `gemini-flash-latest`).
 - Bez klucza zakupy działają w trybie ręcznym.
 - Zmiana `JWT_SECRET` unieważnia zapisane w aplikacji klucze - trzeba je wpisać ponownie.
 - Endpointy: `api/ai/parse.php` (tryby `purchase` i `collaboration`), `api/settings/ai.php` (zapis klucza). Klucz nigdy nie trafia do przeglądarki.
