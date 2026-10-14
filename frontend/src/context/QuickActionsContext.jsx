@@ -1,0 +1,72 @@
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import CollabFormSheet from '../components/collaborations/CollabFormSheet';
+import PurchaseAddSheet from '../components/purchases/PurchaseAddSheet';
+import QuickAddSheet from '../components/layout/QuickAddSheet';
+
+const QuickActionsContext = createContext(null);
+
+/**
+ * Global "add" flows available from every screen (FAB, Start tiles, lists):
+ *   openCollab({ id?, prefill? })   - quick add / edit collaboration sheet
+ *   openPurchase({ files? })        - purchase from screenshot (or manual)
+ *   openQuickAdd()                  - "what do you want to add?" chooser
+ * `versions` change after every save so lists know when to reload.
+ */
+export function QuickActionsProvider({ children }) {
+    const [collab, setCollab] = useState(null);
+    const [purchase, setPurchase] = useState(null);
+    const [chooserOpen, setChooserOpen] = useState(false);
+    const [versions, setVersions] = useState({ collaborations: 0, purchases: 0 });
+
+    const bump = useCallback((entity) => {
+        setVersions((v) => ({ ...v, [entity]: (v[entity] || 0) + 1 }));
+    }, []);
+
+    const openCollab = useCallback((opts = {}) => {
+        setChooserOpen(false);
+        setCollab({ key: Date.now(), ...opts });
+    }, []);
+
+    const openPurchase = useCallback((opts = {}) => {
+        setChooserOpen(false);
+        setPurchase({ key: Date.now(), ...opts });
+    }, []);
+
+    const openQuickAdd = useCallback(() => setChooserOpen(true), []);
+
+    const value = useMemo(
+        () => ({ openCollab, openPurchase, openQuickAdd, versions, bump }),
+        [openCollab, openPurchase, openQuickAdd, versions, bump]
+    );
+
+    return (
+        <QuickActionsContext.Provider value={value}>
+            {children}
+            <QuickAddSheet open={chooserOpen} onClose={() => setChooserOpen(false)} />
+            {collab && (
+                <CollabFormSheet
+                    key={collab.key}
+                    collabId={collab.id}
+                    prefill={collab.prefill}
+                    onClose={() => setCollab(null)}
+                    onSaved={() => bump('collaborations')}
+                />
+            )}
+            {purchase && (
+                <PurchaseAddSheet
+                    key={purchase.key}
+                    initialFiles={purchase.files}
+                    manual={purchase.manual}
+                    onClose={() => setPurchase(null)}
+                    onSaved={() => bump('purchases')}
+                />
+            )}
+        </QuickActionsContext.Provider>
+    );
+}
+
+export function useQuickActions() {
+    const ctx = useContext(QuickActionsContext);
+    if (!ctx) throw new Error('useQuickActions must be used within QuickActionsProvider');
+    return ctx;
+}

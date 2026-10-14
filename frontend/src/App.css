@@ -171,3 +171,23 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+@layer components {
+  /* Big touch-friendly choice chips (forms) */
+  .choice {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold
+           text-ink-soft whitespace-nowrap select-none transition-colors active:scale-[0.97] hover:border-primary-300 hover:text-primary-700;
+  }
+
+  .choice-active {
+    @apply border-primary-600 bg-primary-600 text-white hover:text-white hover:border-primary-600;
+  }
+
+  .section-label {
+    @apply text-[11px] font-bold uppercase tracking-wider text-ink-muted;
+  }
+
+  .tap-row {
+    @apply flex items-center gap-3 px-4 py-3 transition-colors hover:bg-primary-50/40 active:bg-primary-50 cursor-pointer;
+  }
+}

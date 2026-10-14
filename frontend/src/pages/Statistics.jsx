@@ -1,266 +1,205 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bar } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
-import { Wallet, Building2, Lock, Download, TrendingUp, Award } from 'lucide-react';
-import statsService from '../services/stats';
-import PageHeader from '../components/ui/PageHeader';
+import { ChevronLeft, ChevronRight, Download, Award, RotateCcw, Landmark } from 'lucide-react';
+import { apiRequest } from '../utils/api';
 import Button from '../components/ui/Button';
-import Card, { CardHeader } from '../components/ui/Card';
-import Segmented from '../components/ui/Segmented';
 import { PageSkeleton } from '../components/ui/Skeleton';
-import ExportModal from './collaborations/ExportModal';
 import SocialSection from '../components/social/SocialSection';
-import { formatCurrency, getCollabTypeLabel } from '../utils/format';
+import ExportModal from './collaborations/ExportModal';
+import { formatCurrency } from '../utils/format';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+const MONTHS_SHORT = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
 
+/**
+ * One year at a glance: how much you earned, month by month, who paid the most,
+ * how far from the tax threshold, what returns saved.
+ */
 export default function Statistics() {
-    const [dashboardStats, setDashboardStats] = useState(null);
-    const [monthlyStats, setMonthlyStats] = useState(null);
-    const [months, setMonths] = useState(6);
+    const currentYear = new Date().getFullYear();
+    const [year, setYear] = useState(currentYear);
+    const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [picked, setPicked] = useState(null);
     const [exportOpen, setExportOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-        statsService
-            .getDashboard()
-            .then((r) => r.success && !cancelled && setDashboardStats(r.data))
-            .catch(() => !cancelled && setError('Nie udało się pobrać danych finansowych'))
+        apiRequest(`/stats/summary.php?year=${year}`)
+            .then((d) => {
+                if (cancelled) return;
+                setData(d);
+                setError('');
+                setPicked(null);
+            })
+            .catch((err) => !cancelled && setError(err.message || 'Nie udało się pobrać statystyk'))
             .finally(() => !cancelled && setLoading(false));
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [year]);
 
-    useEffect(() => {
-        let cancelled = false;
-        statsService
-            .getMonthly(months)
-            .then((r) => r.success && !cancelled && setMonthlyStats(r.data))
-            .catch(() => !cancelled && setError('Nie udało się pobrać danych miesięcznych'));
-        return () => {
-            cancelled = true;
-        };
-    }, [months]);
+    const months = useMemo(() => data?.months || [], [data]);
+    const max = Math.max(1, ...months.map((m) => m.net));
+    const monthsSoFar = year === currentYear ? new Date().getMonth() + 1 : 12;
+    const best = months.reduce((b, m) => (m.net > (b?.net || 0) ? m : b), null);
+    const selectedMonth = picked ?? (year === currentYear ? new Date().getMonth() + 1 : best?.month || 12);
+    const selected = months.find((m) => m.month === selectedMonth);
+    const years = data?.years?.length ? data.years : [currentYear];
+    const idx = years.indexOf(year);
+    const changeYear = (y) => {
+        if (!y || y === year) return;
+        setLoading(true);
+        setYear(y);
+    };
 
-    const chartData = useMemo(
-        () => ({
-            labels: monthlyStats?.monthly?.map((m) => m.short || m.label) || [],
-            datasets: [
-                {
-                    label: 'Na rękę',
-                    data: monthlyStats?.monthly?.map((m) => m.value) || [],
-                    backgroundColor: 'rgba(37, 99, 235, 0.85)',
-                    hoverBackgroundColor: 'rgba(29, 78, 216, 1)',
-                    borderRadius: 8,
-                    borderSkipped: false,
-                    maxBarThickness: 42,
-                },
-            ],
-        }),
-        [monthlyStats]
-    );
+    if (loading && !data) return <PageSkeleton />;
 
-    const chartOptions = useMemo(
-        () => ({
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#0f172a',
-                    padding: 12,
-                    cornerRadius: 10,
-                    displayColors: false,
-                    callbacks: {
-                        title: (items) => monthlyStats?.monthly?.[items[0].dataIndex]?.label,
-                        label: (ctx) => {
-                            const m = monthlyStats?.monthly?.[ctx.dataIndex];
-                            return [`Na rękę: ${formatCurrency(ctx.parsed.y)}`, m ? `Brutto: ${formatCurrency(m.gross)} · ${m.count} współprac` : ''].filter(Boolean);
-                        },
-                    },
-                },
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: { color: '#e6eaf1' },
-                    border: { display: false },
-                    ticks: { callback: (v) => (v >= 1000 ? `${v / 1000}k` : v), font: { size: 11 }, color: '#7c8798' },
-                },
-                x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11 }, color: '#7c8798' } },
-            },
-        }),
-        [monthlyStats]
-    );
-
-    if (loading) return <PageSkeleton />;
-
-    const financials = dashboardStats?.financials || {};
-    const official = financials.official || {};
-    const progress = Math.min(100, Number(official.tax_threshold_progress) || 0);
-    const typeTotal = monthlyStats?.by_type?.reduce((s, t) => s + parseFloat(t.total || 0), 0) || 0;
-    const monthlyTotal = monthlyStats?.monthly?.reduce((s, m) => s + m.value, 0) || 0;
-    const bestMonth = monthlyStats?.monthly?.reduce((best, m) => (m.value > (best?.value || 0) ? m : best), null);
+    const totals = data?.totals || { net: 0, gross: 0, count: 0 };
+    const tax = data?.tax || { income: 0, threshold: 120000, progress: 0 };
+    const progress = Math.min(100, tax.progress || 0);
+    const pur = data?.purchases || {};
+    const topMax = Math.max(1, ...(data?.top_brands || []).map((b) => b.net));
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            <PageHeader
-                title="Statystyki"
-                subtitle="Finanse, PIT i zasięgi"
-                actions={<Button variant="secondary" icon={Download} onClick={() => setExportOpen(true)}>Eksport CSV</Button>}
-            />
-
-            {error && <div className="bg-red-50 text-red-700 border border-red-100 p-3.5 rounded-xl text-sm">{error}</div>}
-
-            <SocialSection />
-
-            {/* Finance split */}
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="relative overflow-hidden">
-                    <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-primary-100/60 blur-2xl pointer-events-none" />
-                    <div className="relative">
-                        <div className="flex items-center gap-2 text-primary-700 mb-3">
-                            <Building2 size={18} />
-                            <h2 className="text-sm font-bold">Oficjalne (PIT) · {financials.year}</h2>
-                        </div>
-                        <div className="text-3xl font-extrabold text-ink tracking-tight">{formatCurrency(official.gross || 0)}</div>
-                        <div className="text-xs text-ink-muted mt-0.5">Przychód brutto z opłaconych współprac</div>
-
-                        <div className="grid grid-cols-2 gap-3 mt-4">
-                            <div className="rounded-xl bg-canvas border border-line p-3">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Dochód (po KUP)</div>
-                                <div className="text-base font-bold text-ink mt-0.5">{formatCurrency(official.income || 0)}</div>
-                            </div>
-                            <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Na rękę</div>
-                                <div className="text-base font-bold text-emerald-800 mt-0.5">{formatCurrency(official.net || 0)}</div>
-                            </div>
-                        </div>
-
-                        <div className="mt-5">
-                            <div className="flex justify-between text-[11px] font-semibold text-ink-muted mb-1.5">
-                                <span>I próg podatkowy (12%)</span>
-                                <span className={progress >= 100 ? 'text-red-600' : ''}>{Math.round(progress)}% z {formatCurrency(official.tax_threshold || 120000, { compact: true })}</span>
-                            </div>
-                            <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                                <div className={`h-full rounded-full transition-all duration-700 ${progress >= 90 ? 'bg-red-500' : progress >= 70 ? 'bg-amber-400' : 'bg-gradient-to-r from-primary-400 to-primary-600'}`} style={{ width: `${progress}%` }} />
-                            </div>
-                            <p className="text-[11px] text-ink-muted mt-1.5">
-                                {progress >= 100
-                                    ? 'Przekroczyłaś próg — nadwyżka dochodu opodatkowana 32%.'
-                                    : `Do II progu zostało ${formatCurrency(Math.max(0, (official.tax_threshold || 120000) - (official.income || 0)))} dochodu.`}
-                            </p>
-                        </div>
-                    </div>
-                </Card>
-
-                <Card className="relative overflow-hidden">
-                    <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-emerald-100/60 blur-2xl pointer-events-none" />
-                    <div className="relative">
-                        <div className="flex items-center gap-2 text-emerald-700 mb-3">
-                            <Wallet size={18} />
-                            <h2 className="text-sm font-bold">Prywatne (gotówka) · {financials.year}</h2>
-                        </div>
-                        <div className="text-3xl font-extrabold text-ink tracking-tight">{formatCurrency(financials.private?.revenue || 0)}</div>
-                        <div className="text-xs text-ink-muted mt-0.5">Środki poza rozliczeniami PIT</div>
-
-                        <div className="rounded-xl bg-canvas border border-line p-3 mt-4 flex gap-3 text-xs text-ink-soft">
-                            <Lock size={16} className="shrink-0 text-ink-muted mt-0.5" />
-                            <p>Sumowane są opłacone współprace oznaczone jako „Gotówka prywatna”. Nie trafiają do eksportu „Oficjalne”.</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 mt-4">
-                            <div className="rounded-xl bg-canvas border border-line p-3">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Łącznie na rękę</div>
-                                <div className="text-base font-bold text-ink mt-0.5">{formatCurrency(financials.yearly_net || 0)}</div>
-                            </div>
-                            <div className="rounded-xl bg-canvas border border-line p-3">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Do zapłaty</div>
-                                <div className="text-base font-bold text-amber-700 mt-0.5">{formatCurrency(financials.pending?.gross || 0)}</div>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-            </section>
-
-            {/* Chart + breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <Card padded={false} className="lg:col-span-2">
-                    <CardHeader
-                        icon={TrendingUp}
-                        title="Zarobki miesięczne (na rękę)"
-                        action={
-                            <Segmented
-                                value={months}
-                                onChange={setMonths}
-                                options={[
-                                    { value: 6, label: '6 mies.' },
-                                    { value: 12, label: '12 mies.' },
-                                    { value: 24, label: '24 mies.' },
-                                ]}
-                            />
-                        }
-                    />
-                    <div className="card-pad">
-                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-muted mb-4">
-                            <span>Suma: <strong className="text-ink">{formatCurrency(monthlyTotal)}</strong></span>
-                            <span>Średnio: <strong className="text-ink">{formatCurrency(months ? monthlyTotal / months : 0)}</strong> / mies.</span>
-                            {bestMonth?.value > 0 && <span>Najlepszy: <strong className="text-ink">{bestMonth.label} {bestMonth.year}</strong> · {formatCurrency(bestMonth.value)}</span>}
-                        </div>
-                        <div className="h-64">
-                            <Bar data={chartData} options={chartOptions} />
-                        </div>
-                    </div>
-                </Card>
-
-                <div className="space-y-4">
-                    <Card padded={false}>
-                        <CardHeader title={`Typy współprac · ${financials.year}`} />
-                        <div className="card-pad space-y-4">
-                            {!monthlyStats?.by_type?.length ? (
-                                <p className="text-sm text-ink-muted text-center py-4">Brak danych</p>
-                            ) : (
-                                monthlyStats.by_type.map((stat) => {
-                                    const pct = typeTotal > 0 ? Math.round((parseFloat(stat.total) / typeTotal) * 100) : 0;
-                                    return (
-                                        <div key={stat.type}>
-                                            <div className="flex justify-between items-baseline gap-2 mb-1.5">
-                                                <div className="text-sm font-semibold text-ink truncate">{getCollabTypeLabel(stat.type)}</div>
-                                                <div className="text-xs text-ink-muted whitespace-nowrap">{stat.count} · <strong className="text-ink">{formatCurrency(stat.total, { compact: true })}</strong></div>
-                                            </div>
-                                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                                                <div className="h-full rounded-full bg-primary-500" style={{ width: `${pct}%` }} />
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </Card>
-
-                    {monthlyStats?.top_brands?.length > 0 && (
-                        <Card padded={false}>
-                            <CardHeader icon={Award} title="Najlepsi klienci" />
-                            <div className="divide-y divide-line">
-                                {monthlyStats.top_brands.map((b, i) => (
-                                    <div key={b.brand} className="row !py-2.5">
-                                        <span className="w-6 text-xs font-bold text-ink-muted">{i + 1}.</span>
-                                        <span className="flex-1 text-sm font-semibold text-ink truncate">{b.brand}</span>
-                                        <span className="text-xs text-ink-muted">{b.count}×</span>
-                                        <span className="text-sm font-bold text-ink tabular-nums">{formatCurrency(b.total, { compact: true })}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    )}
+        <div className="space-y-5 animate-fade-in">
+            {/* Year switcher */}
+            <div className="flex items-center justify-between gap-3">
+                <h1 className="hidden lg:block text-[28px] font-extrabold tracking-tight text-ink">Statystyki</h1>
+                <div className="flex items-center gap-1 mx-auto lg:mx-0 bg-surface border border-line rounded-2xl p-1 shadow-card">
+                    <button type="button" onClick={() => changeYear(years[idx + 1])} disabled={idx === -1 || idx >= years.length - 1} className="p-2 rounded-xl text-ink-soft hover:bg-black/5 disabled:opacity-30" aria-label="Poprzedni rok">
+                        <ChevronLeft size={20} />
+                    </button>
+                    <span className="px-4 text-lg font-extrabold tabular-nums text-ink">{year}</span>
+                    <button type="button" onClick={() => changeYear(years[idx - 1])} disabled={idx <= 0} className="p-2 rounded-xl text-ink-soft hover:bg-black/5 disabled:opacity-30" aria-label="Następny rok">
+                        <ChevronRight size={20} />
+                    </button>
                 </div>
             </div>
 
-            <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
+            {error && <div className="bg-red-50 text-red-700 border border-red-100 p-3.5 rounded-xl text-sm">{error}</div>}
 
+            {/* Hero */}
+            <section className="rounded-3xl bg-gradient-to-br from-primary-600 to-primary-800 text-white p-5 sm:p-6 shadow-float">
+                <div className="text-sm font-semibold text-white/75">Zarobione na rękę w {year}</div>
+                <div className="text-4xl sm:text-5xl font-extrabold tracking-tight mt-1 tabular-nums">{formatCurrency(totals.net)}</div>
+                <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-white/80">
+                    <span>brutto <strong className="text-white">{formatCurrency(totals.gross)}</strong></span>
+                    <span><strong className="text-white">{totals.count}</strong> opłaconych współprac</span>
+                    <span>średnio <strong className="text-white">{formatCurrency(Math.round(totals.net / monthsSoFar))}</strong> / mies.</span>
+                </div>
+                {data?.pending?.count > 0 && (
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-sm">
+                        Czeka jeszcze <strong>{formatCurrency(data.pending.gross)}</strong> ({data.pending.count})
+                    </div>
+                )}
+            </section>
+
+            {/* Months */}
+            <section className="card card-pad">
+                <div className="flex items-baseline justify-between gap-3 mb-4">
+                    <h2 className="card-title">Miesiąc po miesiącu</h2>
+                    {best?.net > 0 && <span className="text-xs text-ink-muted">najlepszy: {MONTHS[best.month - 1].toLowerCase()}</span>}
+                </div>
+                <div className="flex items-end gap-1 sm:gap-2 h-40">
+                    {months.map((m) => {
+                        const h = m.net > 0 ? Math.max(4, (m.net / max) * 100) : 2;
+                        const active = m.month === selectedMonth;
+                        const future = year === currentYear && m.month > new Date().getMonth() + 1;
+                        return (
+                            <button
+                                key={m.month}
+                                type="button"
+                                onClick={() => setPicked(m.month)}
+                                className="flex-1 h-full flex flex-col justify-end items-center gap-1.5 group"
+                                aria-label={`${MONTHS[m.month - 1]}: ${formatCurrency(m.net)}`}
+                            >
+                                <div
+                                    className={`w-full rounded-t-lg rounded-b-sm transition-all ${active ? 'bg-secondary' : future ? 'bg-slate-100' : 'bg-primary-500 group-hover:bg-primary-600'}`}
+                                    style={{ height: `${h}%` }}
+                                />
+                                <span className={`text-[10px] sm:text-[11px] font-semibold ${active ? 'text-ink' : 'text-ink-muted'}`}>{MONTHS_SHORT[m.month - 1]}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                {selected && (
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-canvas border border-line px-4 py-3">
+                        <span className="font-bold text-ink">{MONTHS[selected.month - 1]}</span>
+                        <span className="text-sm text-ink-muted text-right">
+                            <strong className="text-ink text-base tabular-nums">{formatCurrency(selected.net)}</strong> na rękę
+                            {selected.count > 0 && <> · {selected.count} {selected.count === 1 ? 'współpraca' : 'współprac'}</>}
+                        </span>
+                    </div>
+                )}
+            </section>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Top brands */}
+                <section className="card card-pad">
+                    <h2 className="card-title flex items-center gap-2 mb-3"><Award size={16} className="text-secondary" /> Najlepsi klienci</h2>
+                    {!data?.top_brands?.length ? (
+                        <p className="text-sm text-ink-muted">Brak opłaconych współprac w {year}.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {data.top_brands.map((b, i) => (
+                                <div key={b.brand}>
+                                    <div className="flex items-baseline justify-between gap-2 text-sm">
+                                        <span className="font-semibold text-ink truncate">{i + 1}. {b.brand}</span>
+                                        <span className="text-ink-muted whitespace-nowrap"><strong className="text-ink tabular-nums">{formatCurrency(b.net)}</strong> · {b.count}×</span>
+                                    </div>
+                                    <div className="h-1.5 rounded-full bg-slate-100 mt-1.5 overflow-hidden">
+                                        <div className="h-full rounded-full bg-primary-500" style={{ width: `${(b.net / topMax) * 100}%` }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                {/* Tax + returns */}
+                <div className="space-y-4">
+                    <section className="card card-pad">
+                        <h2 className="card-title flex items-center gap-2"><Landmark size={16} className="text-primary-500" /> Próg podatkowy</h2>
+                        <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden mt-3">
+                            <div className={`h-full rounded-full ${progress >= 90 ? 'bg-red-500' : progress >= 70 ? 'bg-amber-400' : 'bg-primary-500'}`} style={{ width: `${progress}%` }} />
+                        </div>
+                        <p className="text-sm text-ink-soft mt-2">
+                            {progress >= 100
+                                ? 'Próg przekroczony — nadwyżka liczona jest według 32%.'
+                                : <>Do progu 120 tys. zostało <strong className="text-ink">{formatCurrency(Math.max(0, tax.threshold - tax.income))}</strong> dochodu.</>}
+                        </p>
+                        {data?.cash > 0 && <p className="text-xs text-ink-muted mt-1">Gotówka poza PIT: {formatCurrency(data.cash)}</p>}
+                    </section>
+
+                    <section className="card card-pad">
+                        <h2 className="card-title flex items-center gap-2"><RotateCcw size={16} className="text-emerald-600" /> Zakupy i zwroty</h2>
+                        <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                            <MiniStat label="Odzyskane" value={formatCurrency(pur.returned_value, { compact: true })} sub={`${pur.returned_count || 0} zwrotów`} tone="text-emerald-700" />
+                            <MiniStat label="Zostawione" value={formatCurrency(pur.kept_value, { compact: true })} sub={`${pur.kept_count || 0} rzeczy`} />
+                            <MiniStat label="Do decyzji" value={formatCurrency(pur.active_value, { compact: true })} sub={`${pur.active_count || 0} rzeczy`} />
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <SocialSection />
+
+            <div className="flex justify-center pt-1">
+                <Button variant="secondary" icon={Download} onClick={() => setExportOpen(true)}>Eksport CSV dla księgowej</Button>
+            </div>
+
+            <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
+        </div>
+    );
+}
+
+function MiniStat({ label, value, sub, tone = 'text-ink' }) {
+    return (
+        <div className="rounded-xl bg-canvas border border-line px-2 py-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{label}</div>
+            <div className={`text-base font-extrabold mt-0.5 tabular-nums ${tone}`}>{value}</div>
+            <div className="text-[11px] text-ink-muted">{sub}</div>
         </div>
     );
 }

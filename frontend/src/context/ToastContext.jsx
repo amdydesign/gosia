@@ -41,7 +41,7 @@ export function ToastProvider({ children }) {
     return (
         <ToastContext.Provider value={api}>
             {children}
-            <div className="pointer-events-none fixed inset-x-0 bottom-24 lg:bottom-auto lg:top-5 lg:right-5 lg:inset-x-auto z-[100] flex flex-col items-center lg:items-end gap-2 px-4">
+            <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] lg:top-5 lg:right-5 lg:inset-x-auto z-[100] flex flex-col items-center lg:items-end gap-2 px-4">
                 {toasts.map((t) => (
                     <ToastItem key={t.id} toast={t} onClose={() => dismiss(t.id)} />
                 ))}

@@ -11,6 +11,8 @@ require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
+require_once __DIR__ . '/../config/Schema.php';
+require_once __DIR__ . '/../config/AiClient.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -21,6 +23,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensurePurchases($conn);
     $p = ['user_id' => $userId];
 
     // 1. Yearly financials (paid, official + private)
@@ -50,7 +53,7 @@ try {
         SELECT COALESCE(SUM(amount_gross), 0) AS pending_gross,
                COALESCE(SUM(amount_net), 0)   AS pending_net,
                COUNT(*)                        AS pending_count,
-               SUM(CASE WHEN payment_status = 'overdue' THEN 1 ELSE 0 END) AS overdue_count
+               SUM(CASE WHEN payment_status = 'overdue' OR date < DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS overdue_count
         FROM collaborations
         WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
     ");
@@ -63,8 +66,8 @@ try {
                DATEDIFF(CURDATE(), date) AS days_waiting
         FROM collaborations
         WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
-        ORDER BY FIELD(payment_status, 'overdue', 'pending'), date ASC
-        LIMIT 8
+        ORDER BY date ASC
+        LIMIT 10
     ");
     $stmt->execute($p);
     $unpaidCollabs = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -85,7 +88,7 @@ try {
     $stmt = $conn->prepare("
         SELECT COUNT(*) AS c, COALESCE(SUM(amount), 0) AS total
         FROM purchases
-        WHERE user_id = :user_id AND status = 'kept'
+        WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
           AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) >= 0
     ");
     $stmt->execute($p);
@@ -98,7 +101,7 @@ try {
                DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) AS days_remaining,
                purchase_url, amount, status
         FROM purchases
-        WHERE user_id = :user_id AND status = 'kept'
+        WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
           AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 3
         ORDER BY days_remaining ASC
     ");
@@ -108,7 +111,7 @@ try {
     // 5. Badge: returns due within 7 days
     $stmt = $conn->prepare("
         SELECT COUNT(*) AS c FROM purchases
-        WHERE user_id = :user_id AND status = 'kept'
+        WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
           AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 7
     ");
     $stmt->execute($p);
@@ -132,7 +135,7 @@ try {
                DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) AS days_remaining,
                purchase_url, amount, status
         FROM purchases
-        WHERE user_id = :user_id AND status = 'kept'
+        WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
           AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 14
         ORDER BY days_remaining ASC
         LIMIT 6
@@ -255,6 +258,7 @@ try {
             'active_returns_value' => floatval($activeReturns['total']),
             'ideas_drafts' => $ideasDrafts,
         ],
+        'ai' => ['enabled' => AiClient::provider() !== null, 'provider' => AiClient::provider()],
         'social' => $social,
         'social_stale' => $socialStale,
         'urgent_returns_count' => $urgentReturnsCount,

@@ -130,26 +130,23 @@ I zaktualizuj w tabeli `users`.
 
 ## 📱 Funkcje
 
-### Dashboard
-- ✅ Podsumowanie współprac i zarobków
-- ✅ Nadchodzące terminy zwrotów z alertami
-- ✅ Szybki podgląd statystyk
+### Start (skróty do wszystkiego)
+- ✅ 4 duże przyciski: Współpraca, Zakup ze screena, Pomysł, Nagraj (prompter)
+- ✅ 3 liczby: ten miesiąc na rękę, do zapłaty, do zwrotu
+- ✅ Jedna lista „Do ogarnięcia” z akcjami jednym kliknięciem (opłacone / zwrot / zostaje)
 
 ### Współprace
-- ✅ Pełne zarządzanie współpracami (CRUD)
-- ✅ Typy: barter, płatny, ambasadorski, eventy
-- ✅ Śledzenie statusów i terminów
-- ✅ Filtrowanie i wyszukiwanie
+- ✅ Dodawanie w jednym arkuszu: marka + kwota, reszta „jak ostatnio” z tą marką
+- ✅ Wybór jednym kliknięciem (rozliczenie, rodzaj, data) zamiast list rozwijanych
+- ✅ Opcjonalnie: uzupełnienie ze screena maila / zlecenia (AI)
+- ✅ Na górze nieopłacone z przyciskiem ✓, historia po miesiącach
+- ✅ Spóźniony przelew (> 30 dni) oznacza się sam
 
-### Zwroty
-- ✅ Zarządzanie zwrotami produktów
-- ✅ Automatyczne alerty przed terminem
-- ✅ Historia i statusy
-
-### Zakupy
-- ✅ Rejestr zakupów odzieży
-- ✅ Śledzenie zwrotów do sklepów
-- ✅ Kategorie i wartości
+### Zakupy i zwroty
+- ✅ Dodawanie ze screena zamówienia / paragonu (AI odczytuje sklep, datę, rzeczy i ceny)
+- ✅ Wklejanie ze schowka, zdjęcie aparatem, „Udostępnij → Gosia” z galerii (Android)
+- ✅ Każda rzecz osobno: „Zwrot” albo „Zostaje” jednym kliknięciem, cofanie z powiadomienia
+- ✅ Przypomnienia push przed końcem terminu zwrotu
 
 ### Statystyki Social Media
 - ✅ **Automatyczne pobieranie** liczby obserwujących z Instagrama, Facebooka, YouTube i TikToka
@@ -159,10 +156,9 @@ I zaktualizuj w tabeli `users`.
 - ✅ Opcjonalnie: klucz YouTube Data API, OAuth TikTok/Facebook, awaryjne scrapery RapidAPI
 - ✅ Ręczna korekta liczby (ołówek na kafelku)
 
-### Wykresy i Raporty
-- ✅ Zarobki miesięczne (wykres)
-- ✅ Podział według typu współpracy
-- ✅ Łączne statystyki
+### Statystyki
+- ✅ Rok na jednym ekranie: na rękę, brutto, miesiąc po miesiącu, najlepsi klienci
+- ✅ Próg podatkowy, gotówka poza PIT, odzyskane ze zwrotów
 
 ### Załączniki
 - ✅ Pliki przy współpracach (umowy, faktury) i zakupach (paragony)
@@ -172,7 +168,7 @@ I zaktualizuj w tabeli `users`.
 ### PWA i Powiadomienia Push
 - ✅ Aplikacja instalowalna na telefonie (manifest + service worker)
 - ✅ Działa offline (cache aplikacji)
-- ✅ Powiadomienia push: przypomnienia o terminach zwrotów, zaległych płatnościach i pomysłach do nagrania (poniedziałki i czwartki)
+- ✅ Powiadomienia push: przypomnienia o terminach zwrotów (bez rzeczy oznaczonych „zostaje”), spóźnionych przelewach (> 30 dni) i pomysłach do nagrania (poniedziałki i czwartki)
 - ✅ Włączanie/wyłączanie dzwonkiem w nagłówku aplikacji
 
 ### Techniczne
@@ -202,6 +198,22 @@ I zaktualizuj w tabeli `users`.
    `https://twoja-domena.pl/api/cron/send_reminders.php?secret=TWÓJ_SEKRET`
 
 4. W aplikacji kliknij **dzwonek** w nagłówku i zaakceptuj zgodę na powiadomienia. Od razu przyjdzie powiadomienie testowe.
+
+## 🤖 Czytanie screenów (AI)
+
+W `api/.env` wystarczy dodać **jeden** klucz:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...      # Claude (https://console.anthropic.com)
+# albo
+GEMINI_API_KEY=...                # Gemini (https://aistudio.google.com/apikey)
+```
+
+- Gdy są oba klucze, wybór: `AI_PROVIDER=claude` lub `AI_PROVIDER=gemini`.
+- Model można zmienić przez `ANTHROPIC_MODEL` / `GEMINI_MODEL` (domyślnie `claude-opus-5-5` / `gemini-flash-latest`).
+- Bez klucza zakupy działają w trybie ręcznym; status widać w Ustawieniach („Czytanie screenów (AI)”).
+- Endpoint: `api/ai/parse.php` (tryby `purchase` i `collaboration`), klucz nigdy nie trafia do przeglądarki.
+- Kolumny `purchases.kept_confirmed` i `purchases.returned_at` tworzą się same przy pierwszym użyciu.
 
 ## 📈 Automatyczne pobieranie obserwujących
 

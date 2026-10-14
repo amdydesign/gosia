@@ -1,10 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { Settings, Sparkles } from 'lucide-react';
+import { Plus, Settings, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { NAV_ITEMS } from './navItems';
 
-export default function Sidebar({ onOpenSettings }) {
+export default function Sidebar({ onOpenSettings, onAdd }) {
     const { user } = useAuth();
     const { badges } = useDashboard();
 
@@ -18,6 +18,12 @@ export default function Sidebar({ onOpenSettings }) {
                     <div className="font-extrabold tracking-tight text-ink">Gosia</div>
                     <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">Panel stylistki</div>
                 </div>
+            </div>
+
+            <div className="px-3 pt-2">
+                <button type="button" onClick={onAdd} className="btn btn-primary btn-block !py-3">
+                    <Plus size={18} strokeWidth={2.5} /> Dodaj
+                </button>
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1">

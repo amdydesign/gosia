@@ -68,6 +68,39 @@ class Schema
     ];
 
     /**
+     * Columns added after the first release ("table.column" => ALTER statement).
+     */
+    private static $columns = [
+        'purchases.kept_confirmed' => "ALTER TABLE purchases ADD COLUMN kept_confirmed TINYINT(1) NOT NULL DEFAULT 0",
+        'purchases.returned_at' => "ALTER TABLE purchases ADD COLUMN returned_at TIMESTAMP NULL DEFAULT NULL",
+    ];
+
+    /**
+     * Add the column if it does not exist (once per request).
+     */
+    public static function ensureColumn(PDO $conn, $table, $column)
+    {
+        $key = $table . '.' . $column;
+        if (isset(self::$ensured[$key]) || !isset(self::$columns[$key])) {
+            return;
+        }
+        $stmt = $conn->query("SHOW COLUMNS FROM `" . str_replace('`', '', $table) . "` LIKE " . $conn->quote($column));
+        if ($stmt->rowCount() === 0) {
+            $conn->exec(self::$columns[$key]);
+        }
+        self::$ensured[$key] = true;
+    }
+
+    /**
+     * Purchases columns used by the returns flow.
+     */
+    public static function ensurePurchases(PDO $conn)
+    {
+        self::ensureColumn($conn, 'purchases', 'kept_confirmed');
+        self::ensureColumn($conn, 'purchases', 'returned_at');
+    }
+
+    /**
      * Create the table if it does not exist (once per request).
      */
     public static function ensure(PDO $conn, $table)

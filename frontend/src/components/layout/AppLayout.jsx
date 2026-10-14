@@ -4,32 +4,28 @@ import { Plus } from 'lucide-react';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileNav from './MobileNav';
-import QuickAddSheet from './QuickAddSheet';
 import SettingsSheet from './SettingsSheet';
 import { getRouteMeta } from './routeMeta';
-
-const SECTION_NEW = {
-    collaborations: '/collaborations/new',
-    purchases: '/purchases/new',
-    ideas: '/ideas/new',
-};
+import { useQuickActions } from '../../context/QuickActionsContext';
 
 export default function AppLayout() {
     const location = useLocation();
     const navigate = useNavigate();
-    const [quickAddOpen, setQuickAddOpen] = useState(false);
+    const { openCollab, openPurchase, openQuickAdd } = useQuickActions();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const meta = getRouteMeta(location.pathname);
 
+    // "+" adds what the current screen is about; on Start it asks
     const handleFab = () => {
-        const target = SECTION_NEW[meta.section];
-        if (target) navigate(target);
-        else setQuickAddOpen(true);
+        if (meta.section === 'collaborations') openCollab();
+        else if (meta.section === 'purchases') openPurchase();
+        else if (meta.section === 'ideas') navigate('/ideas/new');
+        else openQuickAdd();
     };
 
     return (
         <div className="min-h-dvh bg-canvas">
-            <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
+            <Sidebar onOpenSettings={() => setSettingsOpen(true)} onAdd={openQuickAdd} />
 
             <div className="lg:pl-64 flex flex-col min-h-dvh">
                 <TopBar meta={meta} onOpenSettings={() => setSettingsOpen(true)} />
@@ -53,7 +49,6 @@ export default function AppLayout() {
             )}
 
             <MobileNav />
-            <QuickAddSheet open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
             <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );
