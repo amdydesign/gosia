@@ -128,6 +128,14 @@ echo password_hash('nowe_haslo', PASSWORD_BCRYPT);
 
 I zaktualizuj w tabeli `users`.
 
+**Nie pamiętasz hasła?** Przez SSH na serwerze (tylko z linii poleceń, z przeglądarki niedostępne):
+```bash
+cd ~/public_html
+php api/utils/reset_password.php          # lista użytkowników
+php api/utils/reset_password.php admin    # ustawia losowe hasło i je wypisuje
+```
+Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
+
 ## 📱 Funkcje
 
 ### Start (skróty do wszystkiego)
