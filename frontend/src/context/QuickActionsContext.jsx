@@ -8,7 +8,8 @@ const QuickActionsContext = createContext(null);
 
 /**
  * Global "add" flows available from every screen (FAB, Start tiles, lists):
- *   openCollab({ id?, prefill? })   - quick add / edit collaboration sheet
+ *   openCollab({ id?, prefill?, onSaved? }) - quick add / edit collaboration sheet
+ *                                     (onSaved gets the collaboration id)
  *   openPurchase({ files? })        - purchase from screenshot (or manual)
  *   openQuickAdd()                  - "what do you want to add?" chooser
  *   openAiSettings()                - enter the AI key for screenshot reading
@@ -53,7 +54,10 @@ export function QuickActionsProvider({ children }) {
                     collabId={collab.id}
                     prefill={collab.prefill}
                     onClose={() => setCollab(null)}
-                    onSaved={() => bump('collaborations')}
+                    onSaved={(id) => {
+                        bump('collaborations');
+                        collab.onSaved?.(id);
+                    }}
                 />
             )}
             {purchase && (

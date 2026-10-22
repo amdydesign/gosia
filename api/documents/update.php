@@ -1,7 +1,7 @@
 <?php
 /**
  * Rename a document / edit its notes / change signing status
- * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date?, counterparty? }
+ * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date?, counterparty?, amount?, doc_kind?, billing? }
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -50,9 +50,21 @@ try {
     }
 
     if (array_key_exists('counterparty', $data)) {
-        $counterparty = trim((string) $data['counterparty']);
+        $counterparty = documentsNormalizeCounterparty($data['counterparty']);
         $fields[] = 'counterparty = :counterparty';
         $params['counterparty'] = $counterparty === '' ? null : mb_substr($counterparty, 0, 255);
+    }
+    if (array_key_exists('amount', $data)) {
+        $fields[] = 'amount = :amount';
+        $params['amount'] = $data['amount'] === null || $data['amount'] === '' ? null : documentsParseMoney($data['amount']);
+    }
+    if (array_key_exists('doc_kind', $data)) {
+        $fields[] = 'doc_kind = :doc_kind';
+        $params['doc_kind'] = in_array($data['doc_kind'], DOCUMENTS_KINDS, true) ? $data['doc_kind'] : null;
+    }
+    if (array_key_exists('billing', $data)) {
+        $fields[] = 'billing = :billing';
+        $params['billing'] = in_array($data['billing'], DOCUMENTS_BILLINGS, true) ? $data['billing'] : null;
     }
     if (array_key_exists('doc_date', $data)) {
         $fields[] = 'doc_date = :doc_date';

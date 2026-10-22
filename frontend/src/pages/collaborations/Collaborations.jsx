@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Check, Plus, Search, X, Lock, Download } from 'lucide-react';
+import { Briefcase, Check, Plus, Search, X, Lock, Download, FileText, ChevronRight } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -35,6 +35,7 @@ export default function Collaborations() {
     const [monthsShown, setMonthsShown] = useState(MONTHS_STEP);
     const [busyId, setBusyId] = useState(null);
     const [exportOpen, setExportOpen] = useState(false);
+    const [docSuggestions, setDocSuggestions] = useState(0); // collaborations proposed from contracts / bills
 
     const isNew = location.pathname.endsWith('/new');
     const detailId = !isNew && id ? id : null;
@@ -45,6 +46,16 @@ export default function Collaborations() {
             .then((data) => !cancelled && setCollabs(Array.isArray(data) ? data : []))
             .catch((err) => !cancelled && setError(err.message || 'Nie udało się pobrać współprac'))
             .finally(() => !cancelled && setLoading(false));
+        return () => {
+            cancelled = true;
+        };
+    }, [versions.collaborations]);
+
+    useEffect(() => {
+        let cancelled = false;
+        apiRequest('/documents/suggestions.php')
+            .then((data) => !cancelled && setDocSuggestions(Array.isArray(data) ? data.length : 0))
+            .catch(() => {});
         return () => {
             cancelled = true;
         };
@@ -116,6 +127,23 @@ export default function Collaborations() {
                     <Button variant="primary" icon={Plus} onClick={() => openCollab()}>Nowa współpraca</Button>
                 </div>
             </div>
+
+            {docSuggestions > 0 && (
+                <button
+                    type="button"
+                    onClick={() => navigate('/documents?suggestions=1')}
+                    className="w-full flex items-center gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 hover:bg-primary-50 px-4 py-3 text-left transition-colors"
+                >
+                    <span className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center shrink-0">
+                        <FileText size={17} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold text-ink">Do uzupełnienia z umów i rachunków: {docSuggestions}</span>
+                        <span className="block text-xs text-ink-soft truncate">Sprawdź propozycje i potwierdź jednym kliknięciem</span>
+                    </span>
+                    <ChevronRight size={18} className="text-primary-600 shrink-0" />
+                </button>
+            )}
 
             {/* Summary */}
             <div className="grid grid-cols-2 gap-3">

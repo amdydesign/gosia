@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2, Sparkles, ChevronRight, Briefcase } from 'lucide-react';
 import documentsService from '../../services/documents';
 import { documentText, ocrImage } from '../../utils/ocr';
 import { pagesToPdf } from '../../utils/scanner';
 import DocumentScanner from '../../components/documents/DocumentScanner';
 import DocumentDetailSheet from '../../components/documents/DocumentDetailSheet';
+import CollabSuggestionsSheet from '../../components/documents/CollabSuggestionsSheet';
+import { useQuickActions } from '../../context/QuickActionsContext';
 import { forgetThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -155,6 +157,7 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
     const [signStatus, setSignStatus] = useState('signed');
     const [date, setDate] = useState('');
     const [counterparty, setCounterparty] = useState('');
+    const [amount, setAmount] = useState('');
     const [saving, setSaving] = useState(false);
     const [text, setText] = useState(null); // recognised text, loaded on demand
     const [reading, setReading] = useState('');
@@ -166,6 +169,7 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
             setSignStatus(doc.status || 'signed');
             setDate(doc.doc_date || '');
             setCounterparty(doc.counterparty || '');
+            setAmount(doc.amount != null ? String(doc.amount).replace('.', ',') : '');
             setText(null);
             setReading('');
         }
@@ -225,7 +229,7 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
         if (!title.trim()) return;
         setSaving(true);
         try {
-            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date, counterparty });
+            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date, counterparty, amount: amount.trim() || null });
             toast.success('Zapisano');
             onSaved();
             onClose();
@@ -265,6 +269,9 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
                 </Field>
                 <Field label="Data dokumentu" hint="Np. data podpisania. Puste = data dodania.">
                     <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+                </Field>
+                <Field label="Kwota brutto" suffix="zł" hint="Z umowy lub rachunku — na jej podstawie powstają propozycje współprac.">
+                    <input className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="np. 5000" />
                 </Field>
                 <Field label="Notatka">
                     <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
@@ -313,6 +320,9 @@ export default function Documents() {
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [selectedId, setSelectedId] = useState(null); // document card
+    const [suggestions, setSuggestions] = useState([]);
+    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+    const { openCollab } = useQuickActions();
     const [filter, setFilter] = useState('all');
     const [sort, setSort] = useState('date_desc');
     const [year, setYear] = useState('all');
@@ -339,16 +349,85 @@ export default function Documents() {
         }
     }, []);
 
+    const loadSuggestions = useCallback(async () => {
+        try {
+            const data = await documentsService.collabSuggestions();
+            setSuggestions(Array.isArray(data) ? data : []);
+        } catch {
+            setSuggestions([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadSuggestions();
+    }, [loadSuggestions]);
+
+    const refreshAll = () => {
+        load(queryRef.current);
+        loadSuggestions();
+    };
+
+    // Confirmed in the collaboration form -> then the documents get linked to it
+    const createCollabFrom = (prefill, documentIds) => {
+        setSuggestionsOpen(false);
+        setSelectedId(null);
+        openCollab({
+            prefill,
+            onSaved: async (id) => {
+                if (!id) return;
+                try {
+                    await documentsService.linkCollab(documentIds, id);
+                    toast.success('Współpraca dodana i połączona z dokumentami');
+                } catch (err) {
+                    toast.error(err.message || 'Nie udało się połączyć dokumentów');
+                }
+                refreshAll();
+            },
+        });
+    };
+
+    const linkSuggestion = async (s) => {
+        try {
+            await documentsService.linkCollab(s.document_ids, s.collaboration.id);
+            toast.success(`Połączono ze współpracą ${s.collaboration.brand}`);
+            refreshAll();
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się połączyć');
+        }
+    };
+
+    const dismissSuggestion = async (s) => {
+        try {
+            await documentsService.dismissCollab(s.document_ids);
+            setSuggestions((prev) => prev.filter((x) => x.key !== s.key));
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się pominąć');
+        }
+    };
+
+    const unlinkDoc = async (doc) => {
+        try {
+            await documentsService.unlinkCollab([doc.id]);
+            toast.success('Odłączono od współpracy');
+            refreshAll();
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się odłączyć');
+        }
+    };
+
     // Server-side search (also inside document text), debounced while typing
     useEffect(() => {
         const timer = setTimeout(() => load(query), query ? 300 : 0);
         return () => clearTimeout(timer);
     }, [query, load]);
 
-    // "+" button on mobile opens the upload sheet via ?add=1
+    // "+" button on mobile opens the upload sheet via ?add=1; Współprace links to ?suggestions=1
     useEffect(() => {
         if (searchParams.get('add') === '1') {
             setUploadOpen(true);
+            navigate('/documents', { replace: true });
+        } else if (searchParams.get('suggestions') === '1') {
+            setSuggestionsOpen(true);
             navigate('/documents', { replace: true });
         }
     }, [searchParams, navigate]);
@@ -356,10 +435,17 @@ export default function Documents() {
     const years = useMemo(() => [...new Set(docs.map((d) => docDate(d).slice(0, 4)).filter(Boolean))].sort().reverse(), [docs]);
 
     // Counterparties of the current results, most documents first
+    // One entry per company: "XX sp. z o.o." and "XX Spółka z o.o." share the server-side key
     const counterparties = useMemo(() => {
-        const counts = new Map();
-        for (const d of docs) if (d.counterparty) counts.set(d.counterparty, (counts.get(d.counterparty) || 0) + 1);
-        return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pl')).map(([name, count]) => ({ name, count }));
+        const byKey = new Map();
+        for (const d of docs) {
+            if (!d.counterparty) continue;
+            const key = d.counterparty_key || d.counterparty;
+            const entry = byKey.get(key) || { key, name: d.counterparty, count: 0 };
+            entry.count += 1;
+            byKey.set(key, entry);
+        }
+        return [...byKey.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pl'));
     }, [docs]);
 
     // Year and counterparty filters first, so the status counts match what the list can show
@@ -368,7 +454,7 @@ export default function Documents() {
             docs.filter(
                 (d) =>
                     (year === 'all' || docDate(d).startsWith(year)) &&
-                    (counterparty === 'all' || (counterparty === 'none' ? !d.counterparty : d.counterparty === counterparty))
+                    (counterparty === 'all' || (counterparty === 'none' ? !d.counterparty : (d.counterparty_key || d.counterparty) === counterparty))
             ),
         [docs, year, counterparty]
     );
@@ -433,7 +519,10 @@ export default function Documents() {
                 setUploadRow(job.key, { error: err.message || 'Nie udało się dodać pliku' });
             }
         }
-        if (done) toast.success(done === 1 ? 'Dokument dodany' : `Dodano dokumenty: ${done}`);
+        if (done) {
+            toast.success(done === 1 ? 'Dokument dodany' : `Dodano dokumenty: ${done}`);
+            loadSuggestions();
+        }
     };
 
     const uploadFiles = (files, status = 'signed', ai = false) =>
@@ -572,12 +661,11 @@ export default function Documents() {
                     <select value={counterparty} onChange={(e) => setCounterparty(e.target.value)} className="input !py-2 !rounded-xl col-span-2 order-last sm:order-none min-w-0 sm:w-60" aria-label="Kontrahent">
                         <option value="all">Wszyscy kontrahenci</option>
                         {counterparties.map((c) => (
-                            <option key={c.name} value={c.name}>
+                            <option key={c.key} value={c.key}>
                                 {c.name} ({c.count})
                             </option>
                         ))}
                         <option value="none">Bez kontrahenta</option>
-                        {counterparty !== 'all' && counterparty !== 'none' && !counterparties.some((c) => c.name === counterparty) && <option value={counterparty}>{counterparty}</option>}
                     </select>
                     <select value={year} onChange={(e) => setYear(e.target.value)} className="input !py-2 !rounded-xl min-w-0 sm:w-40" aria-label="Rok">
                         <option value="all">Wszystkie lata</option>
@@ -589,6 +677,25 @@ export default function Documents() {
                     </select>
                 </div>
             </PageHeader>
+
+            {suggestions.length > 0 && (
+                <button
+                    type="button"
+                    onClick={() => setSuggestionsOpen(true)}
+                    className="w-full mb-3 flex items-center gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 hover:bg-primary-50 px-4 py-3 text-left transition-colors"
+                >
+                    <span className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center shrink-0">
+                        <Briefcase size={17} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold text-ink">
+                            Propozycje współprac: {suggestions.length}
+                        </span>
+                        <span className="block text-xs text-ink-soft truncate">Z umów i rachunków — sprawdź i potwierdź</span>
+                    </span>
+                    <ChevronRight size={18} className="text-primary-600 shrink-0" />
+                </button>
+            )}
 
             {uploads.length > 0 && (
                 <div className="card divide-y divide-line overflow-hidden mb-3">
@@ -701,14 +808,35 @@ export default function Documents() {
             }}
             onDelete={handleDelete}
             onToggleStatus={toggleStatus}
-            onFilterCounterparty={(name) => {
+            onFilterCounterparty={(doc) => {
                 setSelectedId(null);
-                setCounterparty(name);
+                setCounterparty(doc.counterparty_key || doc.counterparty);
             }}
+            onCreateCollab={(doc) =>
+                createCollabFrom(
+                    {
+                        brand: (doc.counterparty || '').replace(/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.[kj]\.)\s*$/u, '') || doc.counterparty,
+                        amount_gross: doc.amount || '',
+                        date: doc.doc_date || undefined,
+                        collab_type: doc.billing && doc.billing !== 'umowa_praca' ? doc.billing : undefined,
+                        notes: `Z dokumentu: ${doc.title}`,
+                    },
+                    [doc.id]
+                )
+            }
+            onUnlinkCollab={unlinkDoc}
+        />
+        <CollabSuggestionsSheet
+            open={suggestionsOpen}
+            suggestions={suggestions}
+            onClose={() => setSuggestionsOpen(false)}
+            onCreate={(s) => createCollabFrom(s.prefill, s.document_ids)}
+            onLink={linkSuggestion}
+            onDismiss={dismissSuggestion}
         />
         <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(status, ai) => setScan({ status, ai })} aiAvailable={aiAvailable} />
         {scan && <DocumentScanner onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status, scan.ai)} />}
-        <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={() => load(query)} aiAvailable={aiAvailable} />
+        <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={refreshAll} aiAvailable={aiAvailable} />
         </>
     );
 }

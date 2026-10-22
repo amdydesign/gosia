@@ -85,7 +85,9 @@ try {
     if ($parties) {
         $notes .= ($notes !== '' ? "\n" : '') . 'Strony: ' . implode(', ', $parties);
     }
-    $counterparty = trim((string) ($result['counterparty'] ?? ''));
+    $counterparty = documentsNormalizeCounterparty($result['counterparty'] ?? '');
+    $aiAmount = documentsParseMoney($result['amount_gross'] ?? '');
+    $aiKind = in_array($result['kind'] ?? '', DOCUMENTS_KINDS, true) ? $result['kind'] : null;
 
     $fields = ['status = :status', 'analyzed_at = NOW()'];
     $params = ['id' => $id, 'user_id' => $userId, 'status' => $status];
@@ -105,6 +107,14 @@ try {
         $fields[] = 'counterparty = :counterparty';
         $params['counterparty'] = mb_substr($counterparty, 0, 255);
     }
+    if ($aiAmount !== null) {
+        $fields[] = 'amount = :amount';
+        $params['amount'] = $aiAmount;
+    }
+    if ($aiKind !== null) {
+        $fields[] = 'doc_kind = :doc_kind';
+        $params['doc_kind'] = $aiKind;
+    }
     $text = $needsText ? documentsCleanText($result['text'] ?? '') : '';
     // keep the device OCR when the AI returned much less text
     if ($text !== '' && mb_strlen($text) >= mb_strlen((string) $document['content_text']) * 0.6) {
@@ -115,7 +125,7 @@ try {
     $conn->prepare("UPDATE documents SET " . implode(', ', $fields) . " WHERE id = :id AND user_id = :user_id")->execute($params);
 
     $stmt = $conn->prepare("
-        SELECT id, title, notes, status, doc_date, counterparty, analyzed_at, (content_text IS NOT NULL AND content_text <> '') AS has_text
+        SELECT id, title, notes, status, doc_date, counterparty, doc_kind, amount, analyzed_at, (content_text IS NOT NULL AND content_text <> '') AS has_text
         FROM documents WHERE id = :id AND user_id = :user_id
     ");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
@@ -150,6 +160,8 @@ Pola:
 - doc_date: data zawarcia lub podpisania (RRRR-MM-DD). Gdy jej brak - data sporządzenia z nagłówka. Pusty tekst, gdy nie ma żadnej daty.
 - status: "signed", jeśli widać podpisy (odręczne, elektroniczne, kwalifikowane, adnotację o podpisaniu) przynajmniej jednej strony i dokument wygląda na zawarty; "to_sign", jeśli to projekt/wzór, pola podpisów są puste albo dokument czeka na podpis. Gdy nie da się ocenić (np. faktura) - "signed".
 - parties: strony dokumentu (nazwy firm lub imiona i nazwiska), maksymalnie 4.
+- kind: "umowa" (umowa, aneks, porozumienie), "rachunek" (rachunek do umowy), "faktura" albo "inne".
+- amount_gross: łączna kwota wynagrodzenia BRUTTO w złotych jako liczba (z umowy albo rachunku/faktury: kwota brutto / do zapłaty). 0, gdy brak kwoty. Nie podawaj kwoty netto ani "do wypłaty".
 - counterparty: druga strona - firma lub osoba, z którą właścicielka archiwum zawiera dokument (nie ona sama). Pełna nazwa z formą prawną, np. "Zalando Polska sp. z o.o.". Pusty tekst, gdy nie wiadomo.
 - summary: 2-4 krótkie zdania po polsku: czego dotyczy, wynagrodzenie i terminy płatności, okres obowiązywania lub termin realizacji, najważniejsze obowiązki, kary umowne, poufność i wyłączność (do kiedy). Tylko to, co jest w dokumencie.
 {$textRule}
@@ -166,10 +178,12 @@ function documentsAnalyzeSchema()
             'status' => ['type' => 'string', 'enum' => DOCUMENTS_STATUSES],
             'parties' => ['type' => 'array', 'items' => ['type' => 'string']],
             'counterparty' => ['type' => 'string'],
+            'kind' => ['type' => 'string', 'enum' => DOCUMENTS_KINDS],
+            'amount_gross' => ['type' => 'number'],
             'summary' => ['type' => 'string'],
             'text' => ['type' => 'string'],
         ],
-        'required' => ['title', 'doc_date', 'status', 'parties', 'counterparty', 'summary', 'text'],
+        'required' => ['title', 'doc_date', 'status', 'parties', 'counterparty', 'kind', 'amount_gross', 'summary', 'text'],
         'additionalProperties' => false,
     ];
 }

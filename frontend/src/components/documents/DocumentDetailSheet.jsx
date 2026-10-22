@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Eye, Download, Share2, Pencil, Trash2, FileText, Building2, CalendarDays, CheckCircle2, PenLine, Loader2, File as FileIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Eye, Download, Share2, Pencil, Trash2, FileText, Building2, CalendarDays, CheckCircle2, PenLine, Loader2, File as FileIcon, Briefcase, Banknote, Unlink } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import documentsService from '../../services/documents';
 import { documentThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
+import { formatCurrency } from '../../utils/format';
 
 const PREVIEW_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
@@ -36,8 +38,9 @@ function Row({ icon, label, children }) {
 /**
  * Document card: first-page thumbnail, summary and all actions in one place.
  */
-export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty }) {
+export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onCreateCollab, onUnlinkCollab }) {
     const toast = useToast();
+    const navigate = useNavigate();
     const [thumb, setThumb] = useState({ loading: true, data: null });
     const [excerpt, setExcerpt] = useState('');
     const [sharing, setSharing] = useState(false);
@@ -103,7 +106,7 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                         {doc.counterparty && (
                             <button
                                 type="button"
-                                onClick={() => onFilterCounterparty(doc.counterparty)}
+                                onClick={() => onFilterCounterparty(doc)}
                                 className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-primary-700 text-left"
                                 title="Pokaż wszystkie dokumenty tego kontrahenta"
                             >
@@ -148,6 +151,38 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                     </button>
                 </div>
 
+                <div className="rounded-2xl border border-line p-3">
+                    <div className="flex items-center gap-2">
+                        <Briefcase size={16} className="text-primary-500 shrink-0" />
+                        <span className="text-sm font-semibold text-ink flex-1">Współpraca</span>
+                        {doc.collaboration_id && <span className="badge badge-success">Połączona</span>}
+                    </div>
+                    {doc.collaboration_id ? (
+                        <div className="flex gap-2 mt-2.5">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClose();
+                                    navigate(`/collaborations/${doc.collaboration_id}`);
+                                }}
+                                className="btn btn-soft btn-sm flex-1"
+                            >
+                                Otwórz współpracę
+                            </button>
+                            <button type="button" onClick={() => onUnlinkCollab(doc)} className="btn btn-ghost btn-sm" title="Odłącz od współpracy">
+                                <Unlink size={14} /> Odłącz
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <p className="text-xs text-ink-muted mt-1">Dokument nie jest jeszcze przypisany do żadnej współpracy.</p>
+                            <button type="button" onClick={() => onCreateCollab(doc)} className="btn btn-soft btn-sm w-full mt-2.5">
+                                <Briefcase size={14} /> Utwórz współpracę z tego dokumentu…
+                            </button>
+                        </>
+                    )}
+                </div>
+
                 {doc.notes && (
                     <div className="rounded-2xl bg-canvas border border-line p-3">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted mb-1">Podsumowanie / notatka</div>
@@ -158,6 +193,7 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                 <div className="divide-y divide-line">
                     <Row icon={CalendarDays} label="Data dokumentu">{formatDay(doc.doc_date) || '—'}</Row>
                     <Row icon={Building2} label="Kontrahent">{doc.counterparty || '—'}</Row>
+                    <Row icon={Banknote} label="Kwota brutto">{doc.amount ? formatCurrency(doc.amount) : '—'}</Row>
                     <Row icon={FileIcon} label="Plik">
                         {doc.original_name} · {formatSize(doc.size)}
                     </Row>
