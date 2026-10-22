@@ -20,6 +20,7 @@ export default function AppLayout() {
         if (meta.section === 'collaborations') openCollab();
         else if (meta.section === 'purchases') openPurchase();
         else if (meta.section === 'ideas') navigate('/ideas/new');
+        else if (meta.section === 'documents') navigate('/documents?add=1');
         else openQuickAdd();
     };
 

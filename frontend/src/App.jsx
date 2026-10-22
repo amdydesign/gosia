@@ -16,6 +16,7 @@ import SocialCallback from './pages/SocialCallback';
 import Collaborations from './pages/collaborations/Collaborations';
 import Purchases from './pages/purchases/Purchases';
 
+import Documents from './pages/documents/Documents';
 import IdeaList from './pages/ideas/IdeaList';
 import IdeaForm from './pages/ideas/IdeaForm';
 import IdeaView from './pages/ideas/IdeaView';
@@ -68,6 +69,8 @@ function App() {
                                             <Route path="/ideas/new" element={<IdeaForm />} />
                                             <Route path="/ideas/:id" element={<IdeaView />} />
                                             <Route path="/ideas/:id/edit" element={<IdeaForm />} />
+
+                                            <Route path="/documents" element={<Documents />} />
 
                                             <Route path="/statistics" element={<Statistics />} />
                                         </Route>

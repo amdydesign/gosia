@@ -10,6 +10,7 @@ const ROUTES = [
     { pattern: '/ideas/:id/edit', title: 'Edycja pomysłu', back: (p) => `/ideas/${p.id}` },
     { pattern: '/ideas/:id', title: 'Pomysł', back: '/ideas' },
     { pattern: '/ideas', title: 'Pomysły na rolki', subtitle: 'Scenariusze i prompter', root: true, section: 'ideas' },
+    { pattern: '/documents', title: 'Dokumenty', subtitle: 'Umowy i dokumenty poufne', root: true, section: 'documents' },
     { pattern: '/statistics', title: 'Statystyki', root: true, section: 'statistics' },
     { pattern: '/dashboard', title: 'Start', root: true, section: 'dashboard' },
     { pattern: '/', title: 'Start', root: true, section: 'dashboard' },

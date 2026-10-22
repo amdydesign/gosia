@@ -4,13 +4,16 @@
     Deny from all
 </FilesMatch>
 
+# pdf.js worker is an ES module - browsers refuse it without a JS mime type
+AddType text/javascript .mjs
+
 # PWA: browser must always revalidate the service worker,
 # hashed build assets are immutable
 <IfModule mod_headers.c>
     <FilesMatch "^sw\.js$">
         Header set Cache-Control "no-cache, must-revalidate"
     </FilesMatch>
-    <FilesMatch "\.(js|css)$">
+    <FilesMatch "\.(js|mjs|css)$">
         Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{REQUEST_URI} =~ m#^/assets/#"
     </FilesMatch>
 </IfModule>

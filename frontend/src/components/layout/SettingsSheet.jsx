@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
 import ExportModal from '../../pages/collaborations/ExportModal';
@@ -11,6 +12,7 @@ import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 
 export default function SettingsSheet({ open, onClose }) {
+    const navigate = useNavigate();
     const { user, logout } = useAuth();
     const push = usePush();
     const toast = useToast();
@@ -47,6 +49,23 @@ export default function SettingsSheet({ open, onClose }) {
                 </div>
 
                 <div className="card divide-y divide-line overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            onClose();
+                            navigate('/documents');
+                        }}
+                        className="row w-full text-left hover:bg-canvas"
+                    >
+                        <span className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
+                            <FolderLock size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Dokumenty</span>
+                            <span className="block text-xs text-ink-muted">Archiwum umów z wyszukiwarką</span>
+                        </span>
+                        <ChevronRight size={18} className="text-ink-muted" />
+                    </button>
                     {push.supported && (
                         <button type="button" onClick={handlePush} disabled={push.busy} className="row w-full text-left hover:bg-canvas">
                             <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${push.status === 'subscribed' ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
