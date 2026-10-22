@@ -14,11 +14,27 @@ import Field from '../../components/ui/Field';
 import ChoiceChips from '../../components/ui/ChoiceChips';
 import Segmented from '../../components/ui/Segmented';
 import { CardSkeleton } from '../../components/ui/Skeleton';
-import { formatDateShort } from '../../utils/format';
 
 const ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.webp,.heic';
 const MAX_SIZE = 20 * 1024 * 1024;
 const PREVIEW_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+const SORT_OPTIONS = [
+    { value: 'date_desc', label: 'Najnowsze' },
+    { value: 'date_asc', label: 'Najstarsze' },
+    { value: 'name', label: 'Nazwa A–Z' },
+];
+
+/** Date that counts for sorting / year filter: document date, else upload date. */
+function docDate(doc) {
+    return doc.doc_date || doc.created_at?.slice(0, 10) || '';
+}
+
+function formatDocDate(value) {
+    const [y, m, d] = value.split('-').map(Number);
+    if (!y || !m || !d) return '';
+    return new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(y, m - 1, d)).replace('.', '');
+}
 
 const STATUS_OPTIONS = [
     { value: 'signed', label: 'Podpisane', icon: CheckCircle2 },
@@ -62,6 +78,7 @@ function UploadSheet({ open, onClose, onUploaded }) {
     const [title, setTitle] = useState('');
     const [notes, setNotes] = useState('');
     const [signStatus, setSignStatus] = useState('signed');
+    const [date, setDate] = useState('');
     const [status, setStatus] = useState('');
     const [error, setError] = useState('');
 
@@ -71,6 +88,7 @@ function UploadSheet({ open, onClose, onUploaded }) {
             setTitle('');
             setNotes('');
             setSignStatus('signed');
+            setDate('');
             setStatus('');
             setError('');
         }
@@ -111,7 +129,7 @@ function UploadSheet({ open, onClose, onUploaded }) {
                 }
             }
             setStatus('Wysyłanie…');
-            const result = await documentsService.upload({ file, title: title.trim(), notes, status: signStatus, contentText });
+            const result = await documentsService.upload({ file, title: title.trim(), notes, status: signStatus, docDate: date, contentText });
             toast.success(result?.has_text ? 'Dokument dodany — treść przeszukiwalna' : 'Dokument dodany');
             onUploaded();
             onClose();
@@ -171,6 +189,10 @@ function UploadSheet({ open, onClose, onUploaded }) {
                     <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
                 </Field>
 
+                <Field label="Data dokumentu" hint="Np. data podpisania. Puste = data dodania.">
+                    <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+                </Field>
+
                 <Field label="Notatka" hint="Opcjonalnie: słowa kluczowe, strony, daty. Też są przeszukiwane.">
                     <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
                 </Field>
@@ -186,6 +208,7 @@ function EditSheet({ doc, onClose, onSaved }) {
     const [title, setTitle] = useState('');
     const [notes, setNotes] = useState('');
     const [signStatus, setSignStatus] = useState('signed');
+    const [date, setDate] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -193,6 +216,7 @@ function EditSheet({ doc, onClose, onSaved }) {
             setTitle(doc.title || '');
             setNotes(doc.notes || '');
             setSignStatus(doc.status || 'signed');
+            setDate(doc.doc_date || '');
         }
     }, [doc]);
 
@@ -201,7 +225,7 @@ function EditSheet({ doc, onClose, onSaved }) {
         if (!title.trim()) return;
         setSaving(true);
         try {
-            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus });
+            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date });
             toast.success('Zapisano');
             onSaved();
             onClose();
@@ -236,6 +260,9 @@ function EditSheet({ doc, onClose, onSaved }) {
                 <Field label="Status">
                     <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
                 </Field>
+                <Field label="Data dokumentu" hint="Np. data podpisania. Puste = data dodania.">
+                    <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+                </Field>
                 <Field label="Notatka">
                     <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
                 </Field>
@@ -256,6 +283,8 @@ export default function Documents() {
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [filter, setFilter] = useState('all');
+    const [sort, setSort] = useState('date_desc');
+    const [year, setYear] = useState('all');
     const requestId = useRef(0);
 
     const load = useCallback(async (q) => {
@@ -285,19 +314,26 @@ export default function Documents() {
         }
     }, [searchParams, navigate]);
 
+    const years = useMemo(() => [...new Set(docs.map((d) => docDate(d).slice(0, 4)).filter(Boolean))].sort().reverse(), [docs]);
+
+    // Year filter first, so the status counts match what the list can show
+    const inYear = useMemo(() => (year === 'all' ? docs : docs.filter((d) => docDate(d).startsWith(year))), [docs, year]);
+
     const counts = useMemo(
         () => ({
-            all: docs.length,
-            to_sign: docs.filter((d) => d.status === 'to_sign').length,
-            signed: docs.filter((d) => d.status !== 'to_sign').length,
+            all: inYear.length,
+            to_sign: inYear.filter((d) => d.status === 'to_sign').length,
+            signed: inYear.filter((d) => d.status !== 'to_sign').length,
         }),
-        [docs]
+        [inYear]
     );
 
-    const visible = useMemo(
-        () => (filter === 'all' ? docs : docs.filter((d) => (d.status === 'to_sign' ? 'to_sign' : 'signed') === filter)),
-        [docs, filter]
-    );
+    const visible = useMemo(() => {
+        const list = filter === 'all' ? [...inYear] : inYear.filter((d) => (d.status === 'to_sign' ? 'to_sign' : 'signed') === filter);
+        if (sort === 'name') return list.sort((a, b) => a.title.localeCompare(b.title, 'pl', { sensitivity: 'base', numeric: true }));
+        const dir = sort === 'date_asc' ? 1 : -1;
+        return list.sort((a, b) => dir * (docDate(a).localeCompare(docDate(b)) || a.id - b.id));
+    }, [inYear, filter, sort]);
 
     const toggleStatus = async (doc) => {
         const next = doc.status === 'to_sign' ? 'signed' : 'to_sign';
@@ -364,6 +400,23 @@ export default function Documents() {
                         ]}
                     />
                 </div>
+                <div className="flex gap-2.5">
+                    <select value={sort} onChange={(e) => setSort(e.target.value)} className="input !py-2 !rounded-xl flex-1 sm:flex-none sm:w-44" aria-label="Sortowanie">
+                        {SORT_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                                {o.label}
+                            </option>
+                        ))}
+                    </select>
+                    <select value={year} onChange={(e) => setYear(e.target.value)} className="input !py-2 !rounded-xl flex-1 sm:flex-none sm:w-44" aria-label="Rok">
+                        <option value="all">Wszystkie lata</option>
+                        {years.map((y) => (
+                            <option key={y} value={y}>
+                                {y}
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </PageHeader>
 
             {loading ? (
@@ -376,8 +429,8 @@ export default function Documents() {
                 <div className="card">
                     <EmptyState
                         icon={FolderLock}
-                        title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : 'Brak podpisanych dokumentów') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
-                        text={docs.length > 0 ? 'Zmień filtr, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę. Tekst z PDF i Worda będzie można przeszukiwać.'}
+                        title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : filter === 'signed' ? 'Brak podpisanych dokumentów' : 'Brak dokumentów z tego roku') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
+                        text={docs.length > 0 ? 'Zmień filtr lub rok, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę. Tekst z PDF i Worda będzie można przeszukiwać.'}
                         action={!query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
                     />
                 </div>
@@ -416,7 +469,7 @@ export default function Documents() {
                                         {doc.status === 'to_sign' ? 'Do podpisu' : 'Podpisane'}
                                     </span>
                                     <div className="text-xs text-ink-muted mt-1 truncate">
-                                        {doc.original_name} · {formatSize(doc.size)} · {formatDateShort(doc.created_at?.slice(0, 10))}
+                                        {formatDocDate(docDate(doc))} · {doc.original_name} · {formatSize(doc.size)}
                                         {!doc.has_text && ' · tylko nazwa'}
                                     </div>
                                     {doc.snippet ? (

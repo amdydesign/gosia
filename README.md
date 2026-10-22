@@ -166,6 +166,7 @@ I zaktualizuj w tabeli `users`.
 - ✅ Pliki serwowane tylko po autoryzacji (poza publicznym URL)
 
 ### Dokumenty (archiwum umów, NDA)
+- ✅ Data dokumentu (np. data podpisania), sortowanie: najnowsze / najstarsze / nazwa A–Z, filtr po roku
 - ✅ Status **Podpisane / Do podpisu** — wybór przy dodawaniu, filtr na liście, zmiana jednym kliknięciem w etykietę
 - ✅ Upload umowy + własna nazwa i notatka (PDF, Word, ODT, Excel, TXT, zdjęcia, do 20 MB)
 - ✅ Wyszukiwarka po nazwie, notatce, nazwie pliku **i treści** dokumentu (bez rozróżniania wielkości liter i polskich znaków)

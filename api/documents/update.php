@@ -1,7 +1,7 @@
 <?php
 /**
  * Rename a document / edit its notes / change signing status
- * PUT /api/documents/update.php?id=123   body: { title?, notes?, status? }
+ * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date? }
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -47,6 +47,11 @@ try {
         }
         $fields[] = 'status = :status';
         $params['status'] = $data['status'];
+    }
+
+    if (array_key_exists('doc_date', $data)) {
+        $fields[] = 'doc_date = :doc_date';
+        $params['doc_date'] = documentsParseDate($data['doc_date']);
     }
 
     if (!$fields) {
