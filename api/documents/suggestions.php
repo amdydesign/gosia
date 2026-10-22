@@ -6,6 +6,7 @@
  * Documents not yet linked to a collaboration, with a counterparty and a gross amount,
  * are grouped so a contract and its bill (both carry the amount) become ONE suggestion:
  * same company (legal form spelling ignored), same amount (±1 zł), dates within 120 days.
+ * At most one contract and one bill per group - several contracts are separate jobs.
  * Each group either matches an existing collaboration (same brand, amount and a close
  * date) -> action "link", or becomes a prefilled new one -> action "create".
  */
@@ -27,6 +28,15 @@ const SUGGEST_AMOUNT_TOLERANCE = 1.0;
 function suggestDays($a, $b)
 {
     return abs((strtotime($a) - strtotime($b)) / 86400);
+}
+
+/** Which half of a "contract + bill" pair a document is; null = unknown kind (never paired) */
+function suggestSlot($kind)
+{
+    if ($kind === 'umowa') {
+        return 'contract';
+    }
+    return in_array($kind, ['rachunek', 'faktura'], true) ? 'bill' : null;
 }
 
 /** "Zalando Polska sp. z o.o." -> "Zalando Polska" (brand-like name for a new collaboration) */
@@ -64,24 +74,47 @@ try {
     $stmt->execute(['user_id' => $userId]);
     $collabs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Group documents that describe the same job (contract + bill / invoice)
+    // collaborations that already have their contract / bill attached (a second contract is a new job)
+    $stmt = $conn->prepare("
+        SELECT collaboration_id, doc_kind FROM documents
+        WHERE user_id = :user_id AND collaboration_id IS NOT NULL AND doc_kind IN ('umowa', 'rachunek', 'faktura')
+    ");
+    $stmt->execute(['user_id' => $userId]);
+    $taken = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $taken[(int) $row['collaboration_id']][suggestSlot($row['doc_kind'])] = true;
+    }
+
+    // Group documents that describe the same job: ONE contract + its ONE bill / invoice.
+    // Every other document stays on its own - several contracts (even with the same
+    // company and amount) are separate jobs, never merged into one collaboration.
     $groups = [];
     foreach ($docs as $doc) {
         $doc['amount'] = (float) $doc['amount'];
         $doc['counterparty'] = documentsNormalizeCounterparty($doc['counterparty']);
+        $slot = suggestSlot($doc['doc_kind']);
         $placed = false;
         foreach ($groups as &$group) {
-            if (documentsSameParty($group['counterparty'], $doc['counterparty'])
+            if ($slot !== null && !isset($group['slots'][$slot]) && count($group['documents']) === 1
+                && suggestSlot($group['documents'][0]['doc_kind']) !== null
+                && documentsSameParty($group['counterparty'], $doc['counterparty'])
                 && abs($group['amount'] - $doc['amount']) <= SUGGEST_AMOUNT_TOLERANCE
                 && suggestDays($group['day'], $doc['day']) <= SUGGEST_MAX_DAYS) {
                 $group['documents'][] = $doc;
+                $group['slots'][$slot] = true;
                 $placed = true;
                 break;
             }
         }
         unset($group);
         if (!$placed) {
-            $groups[] = ['counterparty' => $doc['counterparty'], 'amount' => $doc['amount'], 'day' => $doc['day'], 'documents' => [$doc]];
+            $groups[] = [
+                'counterparty' => $doc['counterparty'],
+                'amount' => $doc['amount'],
+                'day' => $doc['day'],
+                'slots' => $slot !== null ? [$slot => true] : [],
+                'documents' => [$doc],
+            ];
         }
     }
 
@@ -108,10 +141,21 @@ try {
                 continue;
             }
             $known = $known ?: $collab;
-            if (abs((float) $collab['amount_gross'] - $group['amount']) <= SUGGEST_AMOUNT_TOLERANCE
+            $busy = false;
+            foreach (array_keys($group['slots']) as $slot) {
+                $busy = $busy || isset($taken[(int) $collab['id']][$slot]);
+            }
+            if (!$busy && abs((float) $collab['amount_gross'] - $group['amount']) <= SUGGEST_AMOUNT_TOLERANCE
                 && suggestDays($collab['date'], $day) <= SUGGEST_MAX_DAYS
                 && (!$match || suggestDays($collab['date'], $day) < suggestDays($match['date'], $day))) {
                 $match = $collab;
+            }
+        }
+
+        if ($match) {
+            // the next contract with the same brand and amount must not claim this one too
+            foreach (array_keys($group['slots']) as $slot) {
+                $taken[(int) $match['id']][$slot] = true;
             }
         }
 
