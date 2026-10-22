@@ -26,8 +26,12 @@ for (const file of ['index.html', 'sw.js', 'manifest.json', 'vite.svg']) {
     const src = path.join(buildDir, file);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(repoRoot, file));
 }
+// OCR engine + Polish model (self-hosted, see vite.config.js)
+if (fs.existsSync(path.join(buildDir, 'ocr'))) {
+    fs.cpSync(path.join(buildDir, 'ocr'), path.join(repoRoot, 'ocr'), { recursive: true });
+}
 if (fs.existsSync(path.join(buildDir, 'icons'))) {
     fs.cpSync(path.join(buildDir, 'icons'), path.join(repoRoot, 'icons'), { recursive: true });
 }
 
-console.log('Build skopiowany do katalogu głównego repo (index.html, assets/, sw.js, manifest.json, icons/).');
+console.log('Build skopiowany do katalogu głównego repo (index.html, assets/, sw.js, manifest.json, icons/, ocr/).');

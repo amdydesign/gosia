@@ -2,9 +2,9 @@
 /**
  * Upload a document to the archive
  * POST /api/documents/upload.php  (multipart/form-data)
- * Fields: file, title, notes (optional), status (signed|to_sign), doc_date (Y-m-d, optional),
- *         content_text (optional, text the
- *         browser extracted from a PDF - used for full-text search)
+ * Fields: file, title, notes, status (signed|to_sign), doc_date (Y-m-d), counterparty - all optional
+ *         content_text (optional) - text the browser read from a PDF or an image/scan (OCR),
+ *         used for search and to guess the name, date and counterparty
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -49,20 +49,32 @@ try {
     $title = trim($_POST['title'] ?? '');
     $notes = trim($_POST['notes'] ?? '');
     $docDate = documentsParseDate($_POST['doc_date'] ?? '');
+    $counterparty = trim($_POST['counterparty'] ?? '');
     $status = in_array($_POST['status'] ?? '', DOCUMENTS_STATUSES, true) ? $_POST['status'] : 'signed';
 
     // Detect real mime type from content (do not trust the client)
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = $finfo->file($file['tmp_name']) ?: 'application/octet-stream';
 
+    // Word/Excel/TXT are read here; PDFs and scans are read in the browser (pdf.js / OCR)
     $text = documentsExtractText($file['tmp_name'], $ext);
-    if ($text === '' && $ext === 'pdf') {
+    if ($text === '') {
         $text = documentsCleanText($_POST['content_text'] ?? '');
     }
 
-    // Quick upload sends only the file: name and date are guessed locally (no external services)
+    // Quick upload sends only the file: details are guessed locally (no external services)
+    if ($counterparty === '') {
+        $counterparty = documentsCounterpartyFromText($text);
+    }
     if ($title === '') {
-        $title = documentsTitleFromFileName($originalName) ?: documentsTitleFromText($text) ?: pathinfo($originalName, PATHINFO_FILENAME);
+        $title = documentsTitleFromFileName($originalName);
+        if ($title === '') {
+            $heading = documentsTitleFromText($text);
+            $title = $heading !== '' && $counterparty !== '' ? mb_substr($heading, 0, 140) . ' — ' . $counterparty : $heading;
+        }
+        if ($title === '') {
+            $title = $counterparty !== '' ? 'Dokument — ' . $counterparty : pathinfo($originalName, PATHINFO_FILENAME);
+        }
     }
     if ($docDate === null) {
         $docDate = documentsDateFromText($text);
@@ -86,8 +98,8 @@ try {
     @chmod($uploadDir . '/' . $storedName, 0640);
 
     $stmt = $conn->prepare("
-        INSERT INTO documents (user_id, title, notes, status, doc_date, original_name, stored_name, mime_type, size, content_text)
-        VALUES (:user_id, :title, :notes, :status, :doc_date, :original_name, :stored_name, :mime_type, :size, :content_text)
+        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, original_name, stored_name, mime_type, size, content_text)
+        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :original_name, :stored_name, :mime_type, :size, :content_text)
     ");
     $stmt->execute([
         'user_id' => $userId,
@@ -95,6 +107,7 @@ try {
         'notes' => $notes === '' ? null : $notes,
         'status' => $status,
         'doc_date' => $docDate,
+        'counterparty' => $counterparty === '' ? null : mb_substr($counterparty, 0, 255),
         'original_name' => mb_substr($originalName, 0, 255),
         'stored_name' => $storedName,
         'mime_type' => mb_substr($mime, 0, 100),
@@ -106,6 +119,7 @@ try {
         'id' => (int) $conn->lastInsertId(),
         'title' => $title,
         'doc_date' => $docDate,
+        'counterparty' => $counterparty,
         'has_text' => $text !== '',
     ], 'Dokument dodany', 201);
 

@@ -41,6 +41,7 @@ class Schema
                 content_text MEDIUMTEXT NULL,
                 status ENUM('signed', 'to_sign') NOT NULL DEFAULT 'signed',
                 doc_date DATE NULL,
+                counterparty VARCHAR(255) NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -103,6 +104,7 @@ class Schema
     private static $columns = [
         'purchases.kept_confirmed' => "ALTER TABLE purchases ADD COLUMN kept_confirmed TINYINT(1) NOT NULL DEFAULT 0",
         'purchases.returned_at' => "ALTER TABLE purchases ADD COLUMN returned_at TIMESTAMP NULL DEFAULT NULL",
+        'documents.counterparty' => "ALTER TABLE documents ADD COLUMN counterparty VARCHAR(255) NULL",
         'documents.doc_date' => "ALTER TABLE documents ADD COLUMN doc_date DATE NULL",
         'documents.status' => "ALTER TABLE documents ADD COLUMN status ENUM('signed', 'to_sign') NOT NULL DEFAULT 'signed'",
     ];
