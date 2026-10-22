@@ -12,11 +12,13 @@ async function fetchFile(id, inline = false) {
 export const documentsService = {
     search: (query = '') => apiRequest(`/documents/index.php${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`),
 
-    upload: async ({ file, title, notes, contentText }) => {
+    upload: async ({ file, title, notes, status, docDate, contentText }) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('title', title);
         formData.append('notes', notes || '');
+        formData.append('status', status || 'signed');
+        formData.append('doc_date', docDate || '');
         if (contentText) formData.append('content_text', contentText);
 
         let response;

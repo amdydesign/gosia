@@ -29,6 +29,29 @@ const DOCUMENTS_ALLOWED = [
     'heic' => 'image/heic',
 ];
 
+// Signing status: signed = "Podpisane", to_sign = "Do podpisu"
+const DOCUMENTS_STATUSES = ['signed', 'to_sign'];
+
+/**
+ * Create the table / columns added after the first release.
+ */
+function documentsEnsureSchema(PDO $conn)
+{
+    Schema::ensure($conn, 'documents');
+    Schema::ensureColumn($conn, 'documents', 'status');
+    Schema::ensureColumn($conn, 'documents', 'doc_date');
+}
+
+/**
+ * Document date (e.g. signing date) as Y-m-d, or null when empty/invalid.
+ */
+function documentsParseDate($value)
+{
+    $value = trim((string) $value);
+    $date = DateTime::createFromFormat('!Y-m-d', $value);
+    return $date && $date->format('Y-m-d') === $value ? $value : null;
+}
+
 function documentsUploadDir()
 {
     return __DIR__ . '/../uploads/documents';

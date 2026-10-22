@@ -1,7 +1,7 @@
 <?php
 /**
- * Rename a document / edit its notes
- * PUT /api/documents/update.php?id=123   body: { title?, notes? }
+ * Rename a document / edit its notes / change signing status
+ * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date? }
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     Response::error('Method not allowed', 405);
@@ -40,13 +41,26 @@ try {
         $params['notes'] = $notes === '' ? null : $notes;
     }
 
+    if (array_key_exists('status', $data)) {
+        if (!in_array($data['status'], DOCUMENTS_STATUSES, true)) {
+            Response::validationError(['status' => 'Must be "signed" or "to_sign"']);
+        }
+        $fields[] = 'status = :status';
+        $params['status'] = $data['status'];
+    }
+
+    if (array_key_exists('doc_date', $data)) {
+        $fields[] = 'doc_date = :doc_date';
+        $params['doc_date'] = documentsParseDate($data['doc_date']);
+    }
+
     if (!$fields) {
         Response::error('No fields to update', 400);
     }
 
     $db = new Database();
     $conn = $db->getConnection();
-    Schema::ensure($conn, 'documents');
+    documentsEnsureSchema($conn);
 
     $stmt = $conn->prepare("SELECT id FROM documents WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);

@@ -27,7 +27,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
-    Schema::ensure($conn, 'documents');
+    documentsEnsureSchema($conn);
 
     $stmt = $conn->prepare("SELECT original_name, stored_name, mime_type FROM documents WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
