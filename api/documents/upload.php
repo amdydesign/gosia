@@ -47,9 +47,6 @@ try {
     }
 
     $title = trim($_POST['title'] ?? '');
-    if ($title === '') {
-        $title = pathinfo($originalName, PATHINFO_FILENAME);
-    }
     $notes = trim($_POST['notes'] ?? '');
     $docDate = documentsParseDate($_POST['doc_date'] ?? '');
     $status = in_array($_POST['status'] ?? '', DOCUMENTS_STATUSES, true) ? $_POST['status'] : 'signed';
@@ -61,6 +58,14 @@ try {
     $text = documentsExtractText($file['tmp_name'], $ext);
     if ($text === '' && $ext === 'pdf') {
         $text = documentsCleanText($_POST['content_text'] ?? '');
+    }
+
+    // Quick upload sends only the file: name and date are guessed locally (no external services)
+    if ($title === '') {
+        $title = documentsTitleFromFileName($originalName) ?: documentsTitleFromText($text) ?: pathinfo($originalName, PATHINFO_FILENAME);
+    }
+    if ($docDate === null) {
+        $docDate = documentsDateFromText($text);
     }
 
     $db = new Database();
@@ -100,6 +105,7 @@ try {
     Response::success([
         'id' => (int) $conn->lastInsertId(),
         'title' => $title,
+        'doc_date' => $docDate,
         'has_text' => $text !== '',
     ], 'Dokument dodany', 201);
 

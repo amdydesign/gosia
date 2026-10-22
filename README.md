@@ -176,6 +176,7 @@ Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
 ### Dokumenty (archiwum umów, NDA)
 - ✅ Data dokumentu (np. data podpisania), sortowanie: najnowsze / najstarsze / nazwa A–Z, filtr po roku
 - ✅ Status **Podpisane / Do podpisu** — wybór przy dodawaniu, filtr na liście, zmiana jednym kliknięciem w etykietę
+- ✅ **Szybkie dodawanie**: „Podpisane” albo „Do podpisu” → wybór plików (kilka naraz) i gotowe; na komputerze można przeciągnąć pliki na listę. Nazwa z nazwy pliku albo nagłówka dokumentu, data z treści („zawarta w dniu…”) — rozpoznawane lokalnie na serwerze, bez zewnętrznych usług
 - ✅ Upload umowy + własna nazwa i notatka (PDF, Word, ODT, Excel, TXT, zdjęcia, do 20 MB)
 - ✅ Wyszukiwarka po nazwie, notatce, nazwie pliku **i treści** dokumentu (bez rozróżniania wielkości liter i polskich znaków)
 - ✅ Tekst z PDF odczytywany w przeglądarce (pdf.js), z DOCX/ODT/XLSX/TXT na serwerze — zero kosztów, bez zewnętrznych usług

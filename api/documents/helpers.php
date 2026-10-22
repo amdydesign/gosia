@@ -165,3 +165,91 @@ function documentsLikeEscape($word)
 {
     return '%' . addcslashes($word, '\\%_') . '%';
 }
+
+/**
+ * Readable name from the file name: "NDA_Zalando-2026_final.pdf" -> "NDA Zalando 2026 final".
+ * Returns '' for generic scanner/camera names (scan0001, IMG_2034, document(3)).
+ */
+function documentsTitleFromFileName($fileName)
+{
+    $name = pathinfo($fileName, PATHINFO_FILENAME);
+    $name = trim(preg_replace('/\s+/u', ' ', str_replace(['_', '+'], ' ', $name)));
+    $name = preg_replace('/\s*\(\d+\)$/u', '', $name);
+    $generic = '/^(scan|skan|img|image|dsc|pxl|photo|zdj(ę|e)cie|document|dokument|doc|plik|file|untitled|bez nazwy|cam|whatsapp image)(?:[\d\s\-_.:]+|\bat\b)*$/iu';
+    if ($name === '' || preg_match($generic, $name) || preg_match('/^[\d\s\-_.]+$/u', $name)) {
+        return '';
+    }
+    return mb_substr($name, 0, 255);
+}
+
+/**
+ * Document heading from its text, e.g. "Umowa o zachowaniu poufności" (first lines only).
+ */
+function documentsTitleFromText($text)
+{
+    $kinds = 'umowa|aneks|porozumienie|oświadczenie|oswiadczenie|faktura|zlecenie|pełnomocnictwo|pelnomocnictwo|regulamin|oferta|licencja|nda|non-disclosure|zamówienie|zamowienie|protokół|protokol|brief';
+    $lines = array_slice(preg_split('/\n+/u', (string) $text), 0, 25);
+    foreach ($lines as $line) {
+        $line = trim(preg_replace('/\s+/u', ' ', $line));
+        $length = mb_strlen($line);
+        if ($length < 4 || $length > 120 || !preg_match('/^(' . $kinds . ')\b/iu', $line)) {
+            continue;
+        }
+        // ALL CAPS headings -> sentence case
+        if ($line === mb_strtoupper($line)) {
+            $line = mb_strtoupper(mb_substr($line, 0, 1)) . mb_strtolower(mb_substr($line, 1));
+            $line = preg_replace_callback('/\b(nda|rodo|vat|nip|krs)\b/u', function ($m) {
+                return strtoupper($m[1]);
+            }, $line);
+        }
+        return rtrim($line, " .:,;");
+    }
+    return '';
+}
+
+/**
+ * Date of the document from its text (Y-m-d) or null.
+ * Prefers a date right after "zawarta w dniu", "z dnia", "dnia", "data"; otherwise the first date.
+ */
+function documentsDateFromText($text)
+{
+    $text = mb_substr((string) $text, 0, 5000);
+    $months = [
+        'stycznia' => 1, 'lutego' => 2, 'marca' => 3, 'kwietnia' => 4, 'maja' => 5, 'czerwca' => 6,
+        'lipca' => 7, 'sierpnia' => 8, 'września' => 9, 'wrzesnia' => 9, 'października' => 10,
+        'pazdziernika' => 10, 'listopada' => 11, 'grudnia' => 12,
+    ];
+    $date = '(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})|(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\s+(' . implode('|', array_keys($months)) . ')\s+(\d{4})';
+
+    $toYmd = function (array $m) use ($months) {
+        if (!empty($m[3])) {
+            [$d, $mo, $y] = [(int) $m[1], (int) $m[2], (int) $m[3]];
+        } elseif (!empty($m[4])) {
+            [$y, $mo, $d] = [(int) $m[4], (int) $m[5], (int) $m[6]];
+        } else {
+            [$d, $mo, $y] = [(int) $m[7], $months[mb_strtolower($m[8])] ?? 0, (int) $m[9]];
+        }
+        if ($y < 2000 || $y > (int) date('Y') + 1 || !checkdate($mo, $d, $y)) {
+            return null;
+        }
+        return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+    };
+
+    $patterns = [
+        '/(?:zawart[aey]|sporządzon[aey]|podpisan[aey])\s+(?:w\s+\S+\s+)?(?:w\s+dniu|dnia)\s*:?\s*(?:' . $date . ')/iu',
+        '/(?:z\s+dnia|w\s+dniu|dnia|data)\s*:?\s*(?:' . $date . ')/iu',
+        '/(?:' . $date . ')/iu',
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match_all($pattern, $text, $all, PREG_SET_ORDER)) {
+            foreach ($all as $m) {
+                // the keyword patterns capture the date groups after group 0
+                $ymd = $toYmd($m);
+                if ($ymd !== null) {
+                    return $ymd;
+                }
+            }
+        }
+    }
+    return null;
+}
