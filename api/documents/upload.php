@@ -86,6 +86,17 @@ try {
     $conn = $db->getConnection();
     documentsEnsureSchema($conn);
 
+    // The same document twice is refused (same file, or the same text saved as another file)
+    $fileHash = hash_file('sha256', $file['tmp_name']);
+    $textHash = documentsTextHash($text);
+    $duplicate = documentsFindDuplicate($conn, $userId, $fileHash, $textHash);
+    if ($duplicate) {
+        Response::error('Ten dokument już jest w archiwum', 409, [
+            'file' => 'Ten dokument już jest w archiwum: „' . $duplicate['title'] . '” (dodany ' . date('d.m.Y', strtotime($duplicate['created_at'])) . ')',
+            'duplicate_id' => (int) $duplicate['id'],
+        ]);
+    }
+
     // Store under a random name; never under the user-supplied one
     $storedName = bin2hex(random_bytes(16)) . '.' . $ext;
     $uploadDir = documentsUploadDir();
@@ -100,8 +111,8 @@ try {
     @chmod($uploadDir . '/' . $storedName, 0640);
 
     $stmt = $conn->prepare("
-        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, original_name, stored_name, mime_type, size, content_text)
-        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :doc_kind, :amount, :billing, :original_name, :stored_name, :mime_type, :size, :content_text)
+        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, original_name, stored_name, mime_type, size, content_text, file_hash, text_hash)
+        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :doc_kind, :amount, :billing, :original_name, :stored_name, :mime_type, :size, :content_text, :file_hash, :text_hash)
     ");
     $stmt->execute([
         'user_id' => $userId,
@@ -118,6 +129,8 @@ try {
         'mime_type' => mb_substr($mime, 0, 100),
         'size' => $file['size'],
         'content_text' => $text === '' ? null : $text,
+        'file_hash' => $fileHash,
+        'text_hash' => $textHash,
     ]);
 
     Response::success([
