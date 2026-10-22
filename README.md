@@ -165,6 +165,14 @@ I zaktualizuj w tabeli `users`.
 - ✅ Upload do 10 MB (zdjęcia, PDF, dokumenty)
 - ✅ Pliki serwowane tylko po autoryzacji (poza publicznym URL)
 
+### Dokumenty (archiwum umów, NDA)
+- ✅ Upload umowy + własna nazwa i notatka (PDF, Word, ODT, Excel, TXT, zdjęcia, do 20 MB)
+- ✅ Wyszukiwarka po nazwie, notatce, nazwie pliku **i treści** dokumentu (bez rozróżniania wielkości liter i polskich znaków)
+- ✅ Tekst z PDF odczytywany w przeglądarce (pdf.js), z DOCX/ODT/XLSX/TXT na serwerze — zero kosztów, bez zewnętrznych usług
+- ✅ Skany (PDF bez warstwy tekstu, zdjęcia) — szukane po nazwie i notatce
+- ✅ Pliki w `api/uploads/documents/` (zablokowane przez `.htaccess`, losowe nazwy), pobieranie tylko przez `api/documents/download.php` po zalogowaniu, `Cache-Control: no-store`
+- ✅ Tabela `documents` tworzy się sama przy pierwszym użyciu; na telefonie wejście przez Ustawienia → Dokumenty
+
 ### PWA i Powiadomienia Push
 - ✅ Aplikacja instalowalna na telefonie (manifest + service worker)
 - ✅ Działa offline (cache aplikacji)

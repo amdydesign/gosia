@@ -15,7 +15,7 @@ export default function MobileNav() {
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
             <div className="flex items-stretch h-[62px] max-w-lg mx-auto">
-                {NAV_ITEMS.map((item) => {
+                {NAV_ITEMS.filter((item) => item.mobile !== false).map((item) => {
                     const Icon = item.icon;
                     const badge = badges[item.key];
                     return (
