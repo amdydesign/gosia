@@ -176,7 +176,7 @@ Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
 ### Dokumenty (archiwum umów, NDA)
 - ✅ Data dokumentu (np. data podpisania), sortowanie: najnowsze / najstarsze / nazwa A–Z, filtr po roku
 - ✅ Status **Podpisane / Do podpisu** — wybór przy dodawaniu, filtr na liście, zmiana jednym kliknięciem w etykietę
-- ✅ **Skaner aparatem** (jak „Skanuj dokument” w iOS): zdjęcie → automatyczne wykrycie kartki z korektą rogów → wyprostowanie → filtr Skan/Kolor → kolejne strony → jeden PDF
+- ✅ **Skaner aparatem** (jak „Skanuj dokument” w iOS): podgląd kamery na żywo z obrysem kartki, automatyczne zdjęcie gdy kartka się nie rusza, samo prostowanie i kadrowanie, filtr Skan/Kolor (zachowuje szary druk i pismo odręczne), kolejne strony → jeden PDF; ręczna korekta rogów tylko gdy potrzeba
 - ✅ **OCR na telefonie** (Tesseract, polski model) dla skanów, zdjęć i PDF-ów bez tekstu — pliki silnika serwowane z `/ocr/` na własnym serwerze (bez CDN), nic nie trafia do zewnętrznych usług
 - ✅ **Kontrahent** rozpoznawany z treści (np. „Zalando Polska sp. z o.o.”, „LPP S.A.”, „Zleceniodawca: …”), widoczny na liście i przeszukiwany. Opcjonalnie w `api/.env`: `DOCUMENTS_OWN_NAMES=Imię Nazwisko,Nazwisko` — te nazwy nigdy nie zostaną uznane za kontrahenta
 - ✅ **Szybkie dodawanie**: „Podpisane” albo „Do podpisu” → wybór plików (kilka naraz) i gotowe; na komputerze można przeciągnąć pliki na listę. Nazwa z nazwy pliku albo nagłówka dokumentu, data z treści („zawarta w dniu…”) — rozpoznawane lokalnie na serwerze, bez zewnętrznych usług

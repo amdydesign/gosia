@@ -76,7 +76,6 @@ function Highlight({ text, query }) {
  */
 function UploadSheet({ open, onClose, onPick, onScan }) {
     const filesRef = useRef(null);
-    const cameraRef = useRef(null);
     const [status, setStatus] = useState('signed');
 
     const picked = (event) => {
@@ -87,14 +86,6 @@ function UploadSheet({ open, onClose, onPick, onScan }) {
         onPick(files, status);
     };
 
-    const photographed = (event) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-        onClose();
-        onScan(file, status);
-    };
-
     return (
         <Sheet open={open} onClose={onClose} title="Dodaj dokument">
             <Field label="Status">
@@ -103,7 +94,10 @@ function UploadSheet({ open, onClose, onPick, onScan }) {
             <div className="grid grid-cols-2 gap-3 mt-4">
                 <button
                     type="button"
-                    onClick={() => cameraRef.current?.click()}
+                    onClick={() => {
+                        onClose();
+                        onScan(status);
+                    }}
                     className="rounded-2xl border-2 border-primary-200 bg-primary-50/60 hover:border-primary-400 px-3 py-6 text-center transition-colors"
                 >
                     <ScanLine size={28} className="mx-auto text-primary-600 mb-2" />
@@ -120,7 +114,6 @@ function UploadSheet({ open, onClose, onPick, onScan }) {
                     <div className="text-[11px] text-ink-muted mt-0.5">PDF, Word, zdjęcia</div>
                 </button>
             </div>
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={photographed} className="hidden" />
             <input ref={filesRef} type="file" accept={ACCEPT} onChange={picked} className="hidden" multiple />
             <p className="text-xs text-ink-muted mt-4 leading-relaxed">
                 Tekst skanów i zdjęć rozpoznaje Twój telefon (OCR), a kontrahenta, nazwę i datę — Twój serwer.
@@ -219,7 +212,7 @@ export default function Documents() {
     const [year, setYear] = useState('all');
     const [uploads, setUploads] = useState([]); // files on their way to the server
     const [dragging, setDragging] = useState(false);
-    const [scan, setScan] = useState(null); // { photo, status } while the scanner is open
+    const [scan, setScan] = useState(null); // { status } while the scanner is open
     const requestId = useRef(0);
     const queryRef = useRef(query);
     queryRef.current = query;
@@ -569,8 +562,8 @@ export default function Documents() {
             )}
         </div>
 
-        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(photo, status) => setScan({ photo, status })} />
-        {scan && <DocumentScanner initialPhoto={scan.photo} onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status)} />}
+        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(status) => setScan({ status })} />
+        {scan && <DocumentScanner onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status)} />}
         <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={() => load(query)} />
         </>
     );

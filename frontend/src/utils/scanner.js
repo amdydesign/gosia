@@ -4,8 +4,8 @@
  * and clean it up so it looks like a scan.
  */
 
-const MAX_SIDE = 2400; // working resolution of a page photo
-const DETECT_SIDE = 360; // resolution used to look for the sheet
+const MAX_SIDE = 3200; // working resolution of a page photo (small print must stay readable)
+const DETECT_SIDE = 320; // resolution used to look for the sheet
 
 /** Load a photo (File/Blob) into a canvas, EXIF orientation applied, long side <= MAX_SIDE. */
 export async function loadPhoto(file) {
@@ -52,21 +52,58 @@ export function defaultCorners(width, height, inset = 0.06) {
     ];
 }
 
+let detectCanvas = null;
+
+/** Cross product sign check: corners form a convex, sensibly sized quadrilateral. */
+function isPlausibleQuad(corners, width, height) {
+    let sign = 0;
+    for (let i = 0; i < 4; i += 1) {
+        const a = corners[i];
+        const b = corners[(i + 1) % 4];
+        const c = corners[(i + 2) % 4];
+        const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+        if (Math.abs(cross) < 1e-6) return false;
+        const s = Math.sign(cross);
+        if (sign && s !== sign) return false;
+        sign = s;
+    }
+    let area = 0;
+    for (let i = 0; i < 4; i += 1) {
+        const a = corners[i];
+        const b = corners[(i + 1) % 4];
+        area += a.x * b.y - b.x * a.y;
+    }
+    area = Math.abs(area) / 2;
+    const ratio = area / (width * height);
+    if (ratio < 0.15 || ratio > 0.98) return false;
+    // every side at least 25% of the shorter frame side
+    const minSide = Math.min(width, height) * 0.25;
+    for (let i = 0; i < 4; i += 1) if (dist(corners[i], corners[(i + 1) % 4]) < minSide) return false;
+    return true;
+}
+
 /**
  * Find the sheet of paper: it is usually the largest bright area. Threshold the
- * downscaled photo (Otsu), keep the biggest bright blob and take its extreme points
- * as corners. Returns [tl, tr, br, bl] in canvas pixels.
+ * downscaled image (Otsu), keep the biggest bright blob and take its extreme points
+ * as corners. Works on a canvas, image or a live <video>.
+ * Returns [tl, tr, br, bl] in source pixels; when nothing convincing is found it
+ * returns inset default corners, or null with { fallback: false }.
  */
-export function detectCorners(canvas) {
-    const scale = Math.min(1, DETECT_SIDE / Math.max(canvas.width, canvas.height));
-    const w = Math.max(1, Math.round(canvas.width * scale));
-    const h = Math.max(1, Math.round(canvas.height * scale));
-    const small = document.createElement('canvas');
+export function detectCorners(source, { fallback = true } = {}) {
+    const srcW = source.videoWidth || source.width;
+    const srcH = source.videoHeight || source.height;
+    const notFound = () => (fallback ? defaultCorners(srcW, srcH) : null);
+    if (!srcW || !srcH) return notFound();
+    const scale = Math.min(1, DETECT_SIDE / Math.max(srcW, srcH));
+    const w = Math.max(1, Math.round(srcW * scale));
+    const h = Math.max(1, Math.round(srcH * scale));
+    detectCanvas = detectCanvas || document.createElement('canvas');
+    const small = detectCanvas;
     small.width = w;
     small.height = h;
     const sctx = small.getContext('2d', { willReadFrequently: true });
     sctx.filter = 'blur(2px)';
-    sctx.drawImage(canvas, 0, 0, w, h);
+    sctx.drawImage(source, 0, 0, w, h);
     const { data } = sctx.getImageData(0, 0, w, h);
 
     const gray = new Uint8Array(w * h);
@@ -132,9 +169,7 @@ export function detectCorners(canvas) {
     }
 
     // Too small or the whole frame -> probably not a sheet on a background
-    if (bestSize < total * 0.12 || bestSize > total * 0.97) {
-        return defaultCorners(canvas.width, canvas.height);
-    }
+    if (bestSize < total * 0.12 || bestSize > total * 0.97) return notFound();
 
     let tl = null;
     let tr = null;
@@ -149,7 +184,17 @@ export function detectCorners(canvas) {
         if (!tr || x - y > tr.x - tr.y) tr = { x, y };
         if (!bl || x - y < bl.x - bl.y) bl = { x, y };
     }
-    return [tl, tr, br, bl].map((c) => ({ x: (c.x + 0.5) / scale, y: (c.y + 0.5) / scale }));
+    const corners = [tl, tr, br, bl].map((c) => ({ x: (c.x + 0.5) / scale, y: (c.y + 0.5) / scale }));
+    return isPlausibleQuad(corners, srcW, srcH) ? corners : notFound();
+}
+
+/** Copy the current video frame (full camera resolution) into a canvas. */
+export function grabFrame(video) {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    return canvas;
 }
 
 /** Solve the 8x8 system for the homography mapping 4 src points onto 4 dst points. */
@@ -235,9 +280,28 @@ export function warpPerspective(source, corners) {
     return out;
 }
 
+/** Gentle unsharp mask on the luminance (3x3), makes small print crisper. */
+function sharpen(ctx, w, h, amount = 0.6) {
+    const img = ctx.getImageData(0, 0, w, h);
+    const p = img.data;
+    const src = new Uint8ClampedArray(p);
+    for (let y = 1; y < h - 1; y += 1) {
+        for (let x = 1; x < w - 1; x += 1) {
+            const i = (y * w + x) * 4;
+            for (let c = 0; c < 3; c += 1) {
+                const blur = (src[i - 4 + c] + src[i + 4 + c] + src[i - w * 4 + c] + src[i + w * 4 + c]) / 4;
+                p[i + c] = src[i + c] + (src[i + c] - blur) * amount;
+            }
+        }
+    }
+    ctx.putImageData(img, 0, 0);
+}
+
 /**
- * Make the page look scanned. "scan": grey, background flattened to white
- * (removes shadows), text darkened. "color": same flattening, colours kept.
+ * Make the page look scanned without losing faint print or handwriting.
+ * The paper brightness is estimated per area (removes shadows and uneven light),
+ * each pixel is divided by it, then a soft levels curve maps paper to white and
+ * keeps grey text grey. "scan" = greyscale, "color" = colours kept.
  */
 export function enhance(source, mode = 'scan') {
     const w = source.width;
@@ -249,41 +313,61 @@ export function enhance(source, mode = 'scan') {
     ctx.drawImage(source, 0, 0);
     if (mode === 'original') return out;
 
-    // Background estimate: heavy blur of a small copy, scaled back up
+    // Paper brightness: max-ish of a small copy, blurred, scaled back up
     const bg = document.createElement('canvas');
-    bg.width = Math.max(1, Math.round(w / 16));
-    bg.height = Math.max(1, Math.round(h / 16));
+    bg.width = Math.max(1, Math.round(w / 24));
+    bg.height = Math.max(1, Math.round(h / 24));
     const bctx = bg.getContext('2d', { willReadFrequently: true });
-    bctx.filter = 'blur(4px)';
     bctx.drawImage(source, 0, 0, bg.width, bg.height);
+    // lift the background estimate over thin dark strokes (3x3 max filter)
+    const bimg = bctx.getImageData(0, 0, bg.width, bg.height);
+    const bsrc = new Uint8ClampedArray(bimg.data);
+    for (let y = 0; y < bg.height; y += 1) {
+        for (let x = 0; x < bg.width; x += 1) {
+            const o = (y * bg.width + x) * 4;
+            for (let c = 0; c < 3; c += 1) {
+                let m = 0;
+                for (let dy = -1; dy <= 1; dy += 1) {
+                    for (let dx = -1; dx <= 1; dx += 1) {
+                        const xx = Math.min(bg.width - 1, Math.max(0, x + dx));
+                        const yy = Math.min(bg.height - 1, Math.max(0, y + dy));
+                        m = Math.max(m, bsrc[(yy * bg.width + xx) * 4 + c]);
+                    }
+                }
+                bimg.data[o + c] = m;
+            }
+        }
+    }
+    bctx.putImageData(bimg, 0, 0);
     const big = document.createElement('canvas');
     big.width = w;
     big.height = h;
     const gctx = big.getContext('2d', { willReadFrequently: true });
+    gctx.filter = 'blur(6px)';
     gctx.imageSmoothingQuality = 'high';
     gctx.drawImage(bg, 0, 0, w, h);
 
     const img = ctx.getImageData(0, 0, w, h);
     const p = img.data;
     const b = gctx.getImageData(0, 0, w, h).data;
+    const BLACK = 0.25; // ratio that becomes full black
+    const WHITE = 0.93; // ratio that becomes paper white
+    const level = (r) => {
+        const v = Math.min(1, Math.max(0, (r - BLACK) / (WHITE - BLACK)));
+        return Math.round(Math.pow(v, 1.15) * 255);
+    };
 
     for (let i = 0; i < p.length; i += 4) {
         if (mode === 'scan') {
             const g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
             const bgG = Math.max(1, 0.299 * b[i] + 0.587 * b[i + 1] + 0.114 * b[i + 2]);
-            let v = Math.min(1, g / bgG);
-            // contrast curve: paper -> white, ink -> dark
-            v = v > 0.9 ? 1 : Math.pow(Math.max(0, (v - 0.15) / 0.75), 1.6);
-            const out8 = Math.round(v * 255);
-            p[i] = p[i + 1] = p[i + 2] = out8;
+            p[i] = p[i + 1] = p[i + 2] = level(g / bgG);
         } else {
-            for (let c = 0; c < 3; c += 1) {
-                const v = Math.min(1, p[i + c] / Math.max(1, b[i + c]));
-                p[i + c] = Math.round((v > 0.93 ? 1 : v) * 255);
-            }
+            for (let c = 0; c < 3; c += 1) p[i + c] = level(p[i + c] / Math.max(1, b[i + c]));
         }
     }
     ctx.putImageData(img, 0, 0);
+    sharpen(ctx, w, h);
     return out;
 }
 
@@ -292,7 +376,7 @@ export async function pagesToPdf(pages, fileName) {
     const { PDFDocument } = await import('pdf-lib');
     const pdf = await PDFDocument.create();
     for (const canvas of pages) {
-        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
         const jpg = await pdf.embedJpg(await blob.arrayBuffer());
         const width = 595; // A4 width in points
         const height = (canvas.height / canvas.width) * width;
