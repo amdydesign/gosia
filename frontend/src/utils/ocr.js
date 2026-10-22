@@ -4,6 +4,7 @@
  * so a scanned contract never leaves the phone except as the upload to our server.
  */
 import { extractPdfText } from './pdfText';
+import { loadPdfjs } from './pdfjs';
 
 const MAX_OCR_PAGES = 12;
 let workerPromise = null;
@@ -60,11 +61,7 @@ export async function ocrImage(source, onProgress) {
 
 /** OCR the first pages of a scanned PDF (rendered with pdf.js). */
 async function ocrPdf(file, onStatus) {
-    const [pdfjs, { default: workerUrl }] = await Promise.all([
-        import('pdfjs-dist'),
-        import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-    ]);
-    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+    const pdfjs = await loadPdfjs();
     const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
     try {
         const total = Math.min(pdf.numPages, MAX_OCR_PAGES);

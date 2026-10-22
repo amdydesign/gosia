@@ -4,15 +4,13 @@
  * Scanned PDFs have no text layer - they come back as an empty string.
  */
 
+import { loadPdfjs } from './pdfjs';
+
 const MAX_PAGES = 200;
 const MAX_CHARS = 1000000;
 
 export async function extractPdfText(file) {
-    const [pdfjs, { default: workerUrl }] = await Promise.all([
-        import('pdfjs-dist'),
-        import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-    ]);
-    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+    const pdfjs = await loadPdfjs();
 
     const data = new Uint8Array(await file.arrayBuffer());
     const pdf = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;

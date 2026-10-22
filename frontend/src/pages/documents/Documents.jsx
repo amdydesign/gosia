@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2, Sparkles } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2, Sparkles, ChevronRight } from 'lucide-react';
 import documentsService from '../../services/documents';
 import { documentText, ocrImage } from '../../utils/ocr';
 import { pagesToPdf } from '../../utils/scanner';
 import DocumentScanner from '../../components/documents/DocumentScanner';
+import DocumentDetailSheet from '../../components/documents/DocumentDetailSheet';
+import { forgetThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -43,12 +45,6 @@ const STATUS_OPTIONS = [
     { value: 'signed', label: 'Podpisane', icon: CheckCircle2 },
     { value: 'to_sign', label: 'Do podpisu', icon: PenLine },
 ];
-
-function formatSize(bytes) {
-    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
-    return bytes + ' B';
-}
 
 function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -316,9 +312,11 @@ export default function Documents() {
     const [query, setQuery] = useState('');
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [selectedId, setSelectedId] = useState(null); // document card
     const [filter, setFilter] = useState('all');
     const [sort, setSort] = useState('date_desc');
     const [year, setYear] = useState('all');
+    const [counterparty, setCounterparty] = useState('all');
     const [uploads, setUploads] = useState([]); // files on their way to the server
     const [dragging, setDragging] = useState(false);
     const [scan, setScan] = useState(null); // { status, ai } while the scanner is open
@@ -357,8 +355,23 @@ export default function Documents() {
 
     const years = useMemo(() => [...new Set(docs.map((d) => docDate(d).slice(0, 4)).filter(Boolean))].sort().reverse(), [docs]);
 
-    // Year filter first, so the status counts match what the list can show
-    const inYear = useMemo(() => (year === 'all' ? docs : docs.filter((d) => docDate(d).startsWith(year))), [docs, year]);
+    // Counterparties of the current results, most documents first
+    const counterparties = useMemo(() => {
+        const counts = new Map();
+        for (const d of docs) if (d.counterparty) counts.set(d.counterparty, (counts.get(d.counterparty) || 0) + 1);
+        return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pl')).map(([name, count]) => ({ name, count }));
+    }, [docs]);
+
+    // Year and counterparty filters first, so the status counts match what the list can show
+    const inYear = useMemo(
+        () =>
+            docs.filter(
+                (d) =>
+                    (year === 'all' || docDate(d).startsWith(year)) &&
+                    (counterparty === 'all' || (counterparty === 'none' ? !d.counterparty : d.counterparty === counterparty))
+            ),
+        [docs, year, counterparty]
+    );
 
     const counts = useMemo(
         () => ({
@@ -507,6 +520,8 @@ export default function Documents() {
         try {
             await documentsService.delete(doc.id);
             setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+            forgetThumbnail(doc.id);
+            setSelectedId((id) => (id === doc.id ? null : id));
             toast.success('Dokument usunięty');
         } catch (err) {
             toast.error(err.message || 'Nie udało się usunąć dokumentu');
@@ -546,15 +561,25 @@ export default function Documents() {
                         ]}
                     />
                 </div>
-                <div className="flex gap-2.5">
-                    <select value={sort} onChange={(e) => setSort(e.target.value)} className="input !py-2 !rounded-xl flex-1 sm:flex-none sm:w-44" aria-label="Sortowanie">
+                <div className="grid grid-cols-2 gap-2.5 sm:flex">
+                    <select value={sort} onChange={(e) => setSort(e.target.value)} className="input !py-2 !rounded-xl min-w-0 sm:w-44" aria-label="Sortowanie">
                         {SORT_OPTIONS.map((o) => (
                             <option key={o.value} value={o.value}>
                                 {o.label}
                             </option>
                         ))}
                     </select>
-                    <select value={year} onChange={(e) => setYear(e.target.value)} className="input !py-2 !rounded-xl flex-1 sm:flex-none sm:w-44" aria-label="Rok">
+                    <select value={counterparty} onChange={(e) => setCounterparty(e.target.value)} className="input !py-2 !rounded-xl col-span-2 order-last sm:order-none min-w-0 sm:w-60" aria-label="Kontrahent">
+                        <option value="all">Wszyscy kontrahenci</option>
+                        {counterparties.map((c) => (
+                            <option key={c.name} value={c.name}>
+                                {c.name} ({c.count})
+                            </option>
+                        ))}
+                        <option value="none">Bez kontrahenta</option>
+                        {counterparty !== 'all' && counterparty !== 'none' && !counterparties.some((c) => c.name === counterparty) && <option value={counterparty}>{counterparty}</option>}
+                    </select>
+                    <select value={year} onChange={(e) => setYear(e.target.value)} className="input !py-2 !rounded-xl min-w-0 sm:w-40" aria-label="Rok">
                         <option value="all">Wszystkie lata</option>
                         {years.map((y) => (
                             <option key={y} value={y}>
@@ -596,8 +621,8 @@ export default function Documents() {
                 <div className="card">
                     <EmptyState
                         icon={FolderLock}
-                        title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : filter === 'signed' ? 'Brak podpisanych dokumentów' : 'Brak dokumentów z tego roku') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
-                        text={docs.length > 0 ? 'Zmień filtr lub rok, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę — wystarczy wybrać plik (na komputerze możesz go też przeciągnąć tutaj).'}
+                        title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : filter === 'signed' ? 'Brak podpisanych dokumentów' : 'Brak dokumentów dla tych filtrów') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
+                        text={docs.length > 0 ? 'Zmień filtr, rok lub kontrahenta, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę — wystarczy wybrać plik (na komputerze możesz go też przeciągnąć tutaj).'}
                         action={!query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
                     />
                 </div>
@@ -606,60 +631,39 @@ export default function Documents() {
                     {visible.map((doc) => {
                         const isImage = (doc.mime_type || '').startsWith('image/');
                         const Icon = isImage ? ImageIcon : FileText;
+                        const toSign = doc.status === 'to_sign';
+                        const meta = [doc.counterparty, formatDocDate(docDate(doc))].filter(Boolean);
                         return (
-                            <div key={doc.id} className="flex items-start gap-3 px-4 sm:px-5 py-3.5">
-                                <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center shrink-0 mt-0.5">
-                                    <Icon size={19} />
-                                </div>
-                                <button type="button" onClick={() => handleOpen(doc)} className="flex-1 min-w-0 text-left">
-                                    <div className="text-[15px] font-semibold text-ink leading-snug break-words hover:text-primary-700">
-                                        <Highlight text={doc.title} query={query} />
-                                    </div>
-                                    {doc.counterparty && (
-                                        <div className="flex items-center gap-1 text-[13px] font-medium text-ink-soft mt-0.5 min-w-0">
-                                            <Building2 size={13} className="shrink-0 text-ink-muted" />
-                                            <span className="truncate">
-                                                <Highlight text={doc.counterparty} query={query} />
-                                            </span>
-                                        </div>
-                                    )}
-                                    <span
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleStatus(doc);
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                toggleStatus(doc);
-                                            }
-                                        }}
-                                        title={doc.status === 'to_sign' ? 'Kliknij, gdy podpisane' : 'Kliknij, aby oznaczyć jako do podpisu'}
-                                        className={`badge mt-1 cursor-pointer ${doc.status === 'to_sign' ? 'badge-warning' : 'badge-success'}`}
-                                    >
-                                        {doc.status === 'to_sign' ? <PenLine size={11} strokeWidth={2.5} /> : <CheckCircle2 size={11} strokeWidth={2.5} />}
-                                        {doc.status === 'to_sign' ? 'Do podpisu' : 'Podpisane'}
+                            <div key={doc.id} className="flex items-center gap-3 pl-3 pr-2 sm:px-5 py-2.5 hover:bg-canvas/70 transition-colors">
+                                <button type="button" onClick={() => setSelectedId(doc.id)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+                                    <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${toSign ? 'bg-amber-50 text-amber-600' : 'bg-primary-50 text-primary-600'}`}>
+                                        <Icon size={17} />
                                     </span>
-                                    <div className="text-xs text-ink-muted mt-1 truncate">
-                                        {formatDocDate(docDate(doc))} · {doc.original_name} · {formatSize(doc.size)}
-                                        {!doc.has_text && ' · tylko nazwa'}
-                                    </div>
-                                    {doc.snippet ? (
-                                        <p className="text-sm text-ink-soft mt-1.5 line-clamp-3">
-                                            <Highlight text={doc.snippet} query={query} />
-                                        </p>
-                                    ) : doc.notes ? (
-                                        <p className="text-sm text-ink-soft mt-1.5 line-clamp-2">
-                                            <Highlight text={doc.notes} query={query} />
-                                        </p>
-                                    ) : null}
+                                    <span className="min-w-0 flex-1">
+                                        <span className="flex items-center gap-2 min-w-0">
+                                            <span className="text-[15px] font-semibold text-ink truncate">
+                                                <Highlight text={doc.title} query={query} />
+                                            </span>
+                                            {toSign ? (
+                                                <span className="badge badge-warning shrink-0 !text-[10px]">Do podpisu</span>
+                                            ) : (
+                                                <CheckCircle2 size={14} className="text-emerald-500 shrink-0" aria-label="Podpisane" />
+                                            )}
+                                        </span>
+                                        <span className="block text-[13px] text-ink-muted truncate mt-0.5">
+                                            {meta.length ? <Highlight text={meta.join(' · ')} query={query} /> : doc.original_name}
+                                        </span>
+                                        {query && doc.snippet && (
+                                            <span className="block text-xs text-ink-soft mt-1 line-clamp-2">
+                                                <Highlight text={doc.snippet} query={query} />
+                                            </span>
+                                        )}
+                                    </span>
+                                    <ChevronRight size={18} className="text-ink-muted shrink-0 sm:hidden" />
                                 </button>
-                                <div className="flex items-center shrink-0 -mr-2">
+                                <div className="hidden sm:flex items-center shrink-0 -mr-2">
                                     {PREVIEW_TYPES.includes(doc.mime_type) && (
-                                        <button type="button" onClick={() => handleOpen(doc)} className="hidden sm:inline-flex p-2 text-ink-muted hover:text-primary-700 hover:bg-primary-50 rounded-lg" title="Podgląd" aria-label="Podgląd">
+                                        <button type="button" onClick={() => handleOpen(doc)} className="p-2 text-ink-muted hover:text-primary-700 hover:bg-primary-50 rounded-lg" title="Podgląd" aria-label="Podgląd">
                                             <Eye size={17} />
                                         </button>
                                     )}
@@ -686,6 +690,22 @@ export default function Documents() {
             )}
         </div>
 
+        <DocumentDetailSheet
+            doc={docs.find((d) => d.id === selectedId) || null}
+            onClose={() => setSelectedId(null)}
+            onPreview={handleOpen}
+            onDownload={handleDownload}
+            onEdit={(doc) => {
+                setSelectedId(null);
+                setEditing(doc);
+            }}
+            onDelete={handleDelete}
+            onToggleStatus={toggleStatus}
+            onFilterCounterparty={(name) => {
+                setSelectedId(null);
+                setCounterparty(name);
+            }}
+        />
         <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(status, ai) => setScan({ status, ai })} aiAvailable={aiAvailable} />
         {scan && <DocumentScanner onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status, scan.ai)} />}
         <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={() => load(query)} aiAvailable={aiAvailable} />
