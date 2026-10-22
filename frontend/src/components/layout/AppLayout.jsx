@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import SettingsSheet from './SettingsSheet';
+import PullToRefresh from './PullToRefresh';
 import { getRouteMeta } from './routeMeta';
 import { useQuickActions } from '../../context/QuickActionsContext';
 
@@ -50,6 +51,7 @@ export default function AppLayout() {
             )}
 
             <MobileNav />
+            <PullToRefresh />
             <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );
