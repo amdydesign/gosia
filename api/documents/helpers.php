@@ -29,6 +29,18 @@ const DOCUMENTS_ALLOWED = [
     'heic' => 'image/heic',
 ];
 
+// Signing status: signed = "Podpisane", to_sign = "Do podpisu"
+const DOCUMENTS_STATUSES = ['signed', 'to_sign'];
+
+/**
+ * Create the table / columns added after the first release.
+ */
+function documentsEnsureSchema(PDO $conn)
+{
+    Schema::ensure($conn, 'documents');
+    Schema::ensureColumn($conn, 'documents', 'status');
+}
+
 function documentsUploadDir()
 {
     return __DIR__ . '/../uploads/documents';

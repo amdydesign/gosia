@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine } from 'lucide-react';
 import documentsService from '../../services/documents';
 import { extractPdfText } from '../../utils/pdfText';
 import { useToast } from '../../context/ToastContext';
@@ -11,12 +11,19 @@ import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
 import Sheet from '../../components/ui/Sheet';
 import Field from '../../components/ui/Field';
+import ChoiceChips from '../../components/ui/ChoiceChips';
+import Segmented from '../../components/ui/Segmented';
 import { CardSkeleton } from '../../components/ui/Skeleton';
 import { formatDateShort } from '../../utils/format';
 
 const ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.webp,.heic';
 const MAX_SIZE = 20 * 1024 * 1024;
 const PREVIEW_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+const STATUS_OPTIONS = [
+    { value: 'signed', label: 'Podpisane', icon: CheckCircle2 },
+    { value: 'to_sign', label: 'Do podpisu', icon: PenLine },
+];
 
 function formatSize(bytes) {
     if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -54,6 +61,7 @@ function UploadSheet({ open, onClose, onUploaded }) {
     const [file, setFile] = useState(null);
     const [title, setTitle] = useState('');
     const [notes, setNotes] = useState('');
+    const [signStatus, setSignStatus] = useState('signed');
     const [status, setStatus] = useState('');
     const [error, setError] = useState('');
 
@@ -62,6 +70,7 @@ function UploadSheet({ open, onClose, onUploaded }) {
             setFile(null);
             setTitle('');
             setNotes('');
+            setSignStatus('signed');
             setStatus('');
             setError('');
         }
@@ -102,7 +111,7 @@ function UploadSheet({ open, onClose, onUploaded }) {
                 }
             }
             setStatus('Wysyłanie…');
-            const result = await documentsService.upload({ file, title: title.trim(), notes, contentText });
+            const result = await documentsService.upload({ file, title: title.trim(), notes, status: signStatus, contentText });
             toast.success(result?.has_text ? 'Dokument dodany — treść przeszukiwalna' : 'Dokument dodany');
             onUploaded();
             onClose();
@@ -158,6 +167,10 @@ function UploadSheet({ open, onClose, onUploaded }) {
                     <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="np. Umowa NDA — Marka X 2026" maxLength={255} />
                 </Field>
 
+                <Field label="Status">
+                    <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
+                </Field>
+
                 <Field label="Notatka" hint="Opcjonalnie: słowa kluczowe, strony, daty. Też są przeszukiwane.">
                     <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
                 </Field>
@@ -172,12 +185,14 @@ function EditSheet({ doc, onClose, onSaved }) {
     const toast = useToast();
     const [title, setTitle] = useState('');
     const [notes, setNotes] = useState('');
+    const [signStatus, setSignStatus] = useState('signed');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (doc) {
             setTitle(doc.title || '');
             setNotes(doc.notes || '');
+            setSignStatus(doc.status || 'signed');
         }
     }, [doc]);
 
@@ -186,7 +201,7 @@ function EditSheet({ doc, onClose, onSaved }) {
         if (!title.trim()) return;
         setSaving(true);
         try {
-            await documentsService.update(doc.id, { title: title.trim(), notes });
+            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus });
             toast.success('Zapisano');
             onSaved();
             onClose();
@@ -218,6 +233,9 @@ function EditSheet({ doc, onClose, onSaved }) {
                 <Field label="Nazwa dokumentu" required>
                     <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={255} />
                 </Field>
+                <Field label="Status">
+                    <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
+                </Field>
                 <Field label="Notatka">
                     <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
                 </Field>
@@ -237,6 +255,7 @@ export default function Documents() {
     const [query, setQuery] = useState('');
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [filter, setFilter] = useState('all');
     const requestId = useRef(0);
 
     const load = useCallback(async (q) => {
@@ -265,6 +284,32 @@ export default function Documents() {
             navigate('/documents', { replace: true });
         }
     }, [searchParams, navigate]);
+
+    const counts = useMemo(
+        () => ({
+            all: docs.length,
+            to_sign: docs.filter((d) => d.status === 'to_sign').length,
+            signed: docs.filter((d) => d.status !== 'to_sign').length,
+        }),
+        [docs]
+    );
+
+    const visible = useMemo(
+        () => (filter === 'all' ? docs : docs.filter((d) => (d.status === 'to_sign' ? 'to_sign' : 'signed') === filter)),
+        [docs, filter]
+    );
+
+    const toggleStatus = async (doc) => {
+        const next = doc.status === 'to_sign' ? 'signed' : 'to_sign';
+        setDocs((prev) => prev.map((d) => (d.id === doc.id ? { ...d, status: next } : d)));
+        try {
+            await documentsService.update(doc.id, { status: next });
+            toast.success(next === 'signed' ? `„${doc.title}” — podpisane ✍️` : `„${doc.title}” — do podpisu`);
+        } catch (err) {
+            setDocs((prev) => prev.map((d) => (d.id === doc.id ? { ...d, status: doc.status } : d)));
+            toast.error(err.message || 'Nie udało się zmienić statusu');
+        }
+    };
 
     const handleOpen = async (doc) => {
         try {
@@ -307,7 +352,18 @@ export default function Documents() {
                     </Button>
                 }
             >
-                <SearchInput value={query} onChange={setQuery} placeholder="Szukaj po nazwie lub treści umowy…" />
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                    <SearchInput value={query} onChange={setQuery} placeholder="Szukaj po nazwie lub treści umowy…" className="flex-1" />
+                    <Segmented
+                        value={filter}
+                        onChange={setFilter}
+                        options={[
+                            { value: 'all', label: 'Wszystkie', count: counts.all },
+                            { value: 'to_sign', label: 'Do podpisu', count: counts.to_sign, tone: 'warning' },
+                            { value: 'signed', label: 'Podpisane', count: counts.signed },
+                        ]}
+                    />
+                </div>
             </PageHeader>
 
             {loading ? (
@@ -316,18 +372,18 @@ export default function Documents() {
                 </div>
             ) : error ? (
                 <EmptyState icon={FolderLock} title="Nie udało się pobrać dokumentów" text={error} />
-            ) : docs.length === 0 ? (
+            ) : visible.length === 0 ? (
                 <div className="card">
                     <EmptyState
                         icon={FolderLock}
-                        title={query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
-                        text={query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę. Tekst z PDF i Worda będzie można przeszukiwać.'}
-                        action={!query && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
+                        title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : 'Brak podpisanych dokumentów') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
+                        text={docs.length > 0 ? 'Zmień filtr, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę. Tekst z PDF i Worda będzie można przeszukiwać.'}
+                        action={!query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
                     />
                 </div>
             ) : (
                 <div className="card divide-y divide-line overflow-hidden">
-                    {docs.map((doc) => {
+                    {visible.map((doc) => {
                         const isImage = (doc.mime_type || '').startsWith('image/');
                         const Icon = isImage ? ImageIcon : FileText;
                         return (
@@ -339,7 +395,27 @@ export default function Documents() {
                                     <div className="text-[15px] font-semibold text-ink leading-snug break-words hover:text-primary-700">
                                         <Highlight text={doc.title} query={query} />
                                     </div>
-                                    <div className="text-xs text-ink-muted mt-0.5 truncate">
+                                    <span
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleStatus(doc);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleStatus(doc);
+                                            }
+                                        }}
+                                        title={doc.status === 'to_sign' ? 'Kliknij, gdy podpisane' : 'Kliknij, aby oznaczyć jako do podpisu'}
+                                        className={`badge mt-1 cursor-pointer ${doc.status === 'to_sign' ? 'badge-warning' : 'badge-success'}`}
+                                    >
+                                        {doc.status === 'to_sign' ? <PenLine size={11} strokeWidth={2.5} /> : <CheckCircle2 size={11} strokeWidth={2.5} />}
+                                        {doc.status === 'to_sign' ? 'Do podpisu' : 'Podpisane'}
+                                    </span>
+                                    <div className="text-xs text-ink-muted mt-1 truncate">
                                         {doc.original_name} · {formatSize(doc.size)} · {formatDateShort(doc.created_at?.slice(0, 10))}
                                         {!doc.has_text && ' · tylko nazwa'}
                                     </div>

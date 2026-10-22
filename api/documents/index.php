@@ -4,6 +4,7 @@
  * GET /api/documents/index.php            -> all documents, newest first
  * GET /api/documents/index.php?q=umowa nda -> every word must appear in the
  *     title, notes, file name or document text (case and accent insensitive)
+ * Each document carries status: signed | to_sign
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -23,7 +24,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
-    Schema::ensure($conn, 'documents');
+    documentsEnsureSchema($conn);
 
     $where = ['user_id = :user_id'];
     $params = ['user_id' => $userId];
@@ -45,7 +46,7 @@ try {
     $textColumn = $words ? 'content_text' : 'NULL AS content_text';
 
     $stmt = $conn->prepare("
-        SELECT id, title, notes, original_name, mime_type, size, created_at, updated_at,
+        SELECT id, title, notes, status, original_name, mime_type, size, created_at, updated_at,
                (content_text IS NOT NULL AND content_text <> '') AS has_text,
                {$textColumn}
         FROM documents

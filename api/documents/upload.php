@@ -2,7 +2,8 @@
 /**
  * Upload a document to the archive
  * POST /api/documents/upload.php  (multipart/form-data)
- * Fields: file, title, notes (optional), content_text (optional, text the
+ * Fields: file, title, notes (optional), status (signed|to_sign),
+ *         content_text (optional, text the
  *         browser extracted from a PDF - used for full-text search)
  */
 
@@ -50,6 +51,7 @@ try {
         $title = pathinfo($originalName, PATHINFO_FILENAME);
     }
     $notes = trim($_POST['notes'] ?? '');
+    $status = in_array($_POST['status'] ?? '', DOCUMENTS_STATUSES, true) ? $_POST['status'] : 'signed';
 
     // Detect real mime type from content (do not trust the client)
     $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -62,7 +64,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
-    Schema::ensure($conn, 'documents');
+    documentsEnsureSchema($conn);
 
     // Store under a random name; never under the user-supplied one
     $storedName = bin2hex(random_bytes(16)) . '.' . $ext;
@@ -78,13 +80,14 @@ try {
     @chmod($uploadDir . '/' . $storedName, 0640);
 
     $stmt = $conn->prepare("
-        INSERT INTO documents (user_id, title, notes, original_name, stored_name, mime_type, size, content_text)
-        VALUES (:user_id, :title, :notes, :original_name, :stored_name, :mime_type, :size, :content_text)
+        INSERT INTO documents (user_id, title, notes, status, original_name, stored_name, mime_type, size, content_text)
+        VALUES (:user_id, :title, :notes, :status, :original_name, :stored_name, :mime_type, :size, :content_text)
     ");
     $stmt->execute([
         'user_id' => $userId,
         'title' => mb_substr($title, 0, 255),
         'notes' => $notes === '' ? null : $notes,
+        'status' => $status,
         'original_name' => mb_substr($originalName, 0, 255),
         'stored_name' => $storedName,
         'mime_type' => mb_substr($mime, 0, 100),
