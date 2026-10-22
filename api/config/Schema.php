@@ -104,9 +104,6 @@ class Schema
     private static $columns = [
         'purchases.kept_confirmed' => "ALTER TABLE purchases ADD COLUMN kept_confirmed TINYINT(1) NOT NULL DEFAULT 0",
         'purchases.returned_at' => "ALTER TABLE purchases ADD COLUMN returned_at TIMESTAMP NULL DEFAULT NULL",
-        'documents.counterparty' => "ALTER TABLE documents ADD COLUMN counterparty VARCHAR(255) NULL",
-        'documents.doc_date' => "ALTER TABLE documents ADD COLUMN doc_date DATE NULL",
-        'documents.status' => "ALTER TABLE documents ADD COLUMN status ENUM('signed', 'to_sign') NOT NULL DEFAULT 'signed'",
     ];
 
     /**

@@ -32,15 +32,31 @@ const DOCUMENTS_ALLOWED = [
 // Signing status: signed = "Podpisane", to_sign = "Do podpisu"
 const DOCUMENTS_STATUSES = ['signed', 'to_sign'];
 
+// Columns added after the first release of the archive
+const DOCUMENTS_LATE_COLUMNS = [
+    'status' => "ALTER TABLE documents ADD COLUMN status ENUM('signed', 'to_sign') NOT NULL DEFAULT 'signed'",
+    'doc_date' => "ALTER TABLE documents ADD COLUMN doc_date DATE NULL",
+    'counterparty' => "ALTER TABLE documents ADD COLUMN counterparty VARCHAR(255) NULL",
+];
+
 /**
- * Create the table / columns added after the first release.
+ * Create the table and add any missing column. Reads the real column list on
+ * every request (one cheap query), so it never trusts a stale flag.
  */
 function documentsEnsureSchema(PDO $conn)
 {
+    static $done = false;
+    if ($done) {
+        return;
+    }
     Schema::ensure($conn, 'documents');
-    Schema::ensureColumn($conn, 'documents', 'status');
-    Schema::ensureColumn($conn, 'documents', 'doc_date');
-    Schema::ensureColumn($conn, 'documents', 'counterparty');
+    $have = array_column($conn->query("SHOW COLUMNS FROM documents")->fetchAll(PDO::FETCH_ASSOC), 'Field');
+    foreach (DOCUMENTS_LATE_COLUMNS as $column => $sql) {
+        if (!in_array($column, $have, true)) {
+            $conn->exec($sql);
+        }
+    }
+    $done = true;
 }
 
 /**
