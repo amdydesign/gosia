@@ -47,6 +47,8 @@ const DOCUMENTS_LATE_COLUMNS = [
     // duplicate check: the same file, or the same text (the same PDF saved again)
     'file_hash' => "ALTER TABLE documents ADD COLUMN file_hash CHAR(64) NULL",
     'text_hash' => "ALTER TABLE documents ADD COLUMN text_hash CHAR(64) NULL",
+    // the brand the job is for - the counterparty is often an agency
+    'brand' => "ALTER TABLE documents ADD COLUMN brand VARCHAR(100) NULL",
 ];
 
 const DOCUMENTS_KINDS = ['umowa', 'rachunek', 'faktura', 'inne'];

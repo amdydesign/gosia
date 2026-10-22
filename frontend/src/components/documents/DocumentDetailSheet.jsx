@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Download, Share2, Pencil, Trash2, FileText, Building2, CalendarDays, CheckCircle2, PenLine, Loader2, File as FileIcon, Briefcase, Banknote, Unlink } from 'lucide-react';
+import { Eye, Download, Share2, Pencil, Trash2, FileText, Building2, CalendarDays, CheckCircle2, PenLine, Loader2, File as FileIcon, Briefcase, Banknote, Unlink, Tag } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import documentsService from '../../services/documents';
 import { documentThumbnail } from '../../utils/thumbnail';
@@ -103,6 +103,12 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                         )}
                     </button>
                     <div className="min-w-0 flex-1 space-y-2">
+                        {doc.brand && (
+                            <div className="flex items-center gap-1.5 text-sm font-bold text-primary-700">
+                                <Tag size={14} className="shrink-0" />
+                                <span className="break-words">{doc.brand}</span>
+                            </div>
+                        )}
                         {doc.counterparty && (
                             <button
                                 type="button"
@@ -193,6 +199,7 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                 <div className="divide-y divide-line">
                     <Row icon={CalendarDays} label="Data dokumentu">{formatDay(doc.doc_date) || '—'}</Row>
                     <Row icon={Building2} label="Kontrahent">{doc.counterparty || '—'}</Row>
+                    <Row icon={Tag} label="Marka">{doc.brand || '—'}</Row>
                     <Row icon={Banknote} label="Kwota brutto">{doc.amount ? formatCurrency(doc.amount) : '—'}</Row>
                     <Row icon={FileIcon} label="Plik">
                         {doc.original_name} · {formatSize(doc.size)}

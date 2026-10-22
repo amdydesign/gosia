@@ -152,13 +152,14 @@ function UploadSheet({ open, onClose, onPick, onScan, aiAvailable }) {
     );
 }
 
-function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
+function EditSheet({ doc, onClose, onSaved, aiAvailable, brands = [] }) {
     const toast = useToast();
     const [title, setTitle] = useState('');
     const [notes, setNotes] = useState('');
     const [signStatus, setSignStatus] = useState('signed');
     const [date, setDate] = useState('');
     const [counterparty, setCounterparty] = useState('');
+    const [brand, setBrand] = useState('');
     const [amount, setAmount] = useState('');
     const [saving, setSaving] = useState(false);
     const [text, setText] = useState(null); // recognised text, loaded on demand
@@ -171,6 +172,7 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
             setSignStatus(doc.status || 'signed');
             setDate(doc.doc_date || '');
             setCounterparty(doc.counterparty || '');
+            setBrand(doc.brand || '');
             setAmount(doc.amount != null ? String(doc.amount).replace('.', ',') : '');
             setText(null);
             setReading('');
@@ -231,7 +233,7 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
         if (!title.trim()) return;
         setSaving(true);
         try {
-            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date, counterparty, amount: amount.trim() || null });
+            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date, counterparty, brand, amount: amount.trim() || null });
             toast.success('Zapisano');
             onSaved();
             onClose();
@@ -265,6 +267,12 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable }) {
                 </Field>
                 <Field label="Kontrahent">
                     <input className="input" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="np. Zalando Polska sp. z o.o." maxLength={255} />
+                </Field>
+                <Field label="Marka" hint="Dla jakiej marki jest współpraca — przydaje się, gdy kontrahentem jest agencja.">
+                    <input className="input" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="np. Reserved" maxLength={100} list="document-brands" />
+                    <datalist id="document-brands">
+                        {brands.map((b) => <option key={b} value={b} />)}
+                    </datalist>
                 </Field>
                 <Field label="Status">
                     <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
@@ -467,6 +475,9 @@ export default function Documents() {
             navigate('/documents', { replace: true });
         }
     }, [searchParams, navigate]);
+
+    // brands already typed on documents - suggested in the "Marka" field
+    const brands = useMemo(() => [...new Set(docs.map((d) => (d.brand || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pl')), [docs]);
 
     const years = useMemo(() => [...new Set(docs.map((d) => docDate(d).slice(0, 4)).filter(Boolean))].sort().reverse(), [docs]);
 
@@ -807,7 +818,13 @@ export default function Documents() {
                                             )}
                                         </span>
                                         <span className="block text-[13px] text-ink-muted truncate mt-0.5">
-                                            {meta.length ? <Highlight text={meta.join(' · ')} query={query} /> : doc.original_name}
+                                            {doc.brand && (
+                                                <span className="font-semibold text-primary-700">
+                                                    <Highlight text={doc.brand} query={query} />
+                                                    {meta.length ? ' · ' : ''}
+                                                </span>
+                                            )}
+                                            {meta.length ? <Highlight text={meta.join(' · ')} query={query} /> : !doc.brand && doc.original_name}
                                         </span>
                                         {query && doc.snippet && (
                                             <span className="block text-xs text-ink-soft mt-1 line-clamp-2">
@@ -864,7 +881,7 @@ export default function Documents() {
             onCreateCollab={(doc) =>
                 createCollabFrom(
                     {
-                        brand: (doc.counterparty || '').replace(/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.[kj]\.)\s*$/u, '') || doc.counterparty,
+                        brand: doc.brand || (doc.counterparty || '').replace(/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.[kj]\.)\s*$/u, '') || doc.counterparty,
                         amount_gross: doc.amount || '',
                         date: doc.doc_date || undefined,
                         collab_type: doc.billing && doc.billing !== 'umowa_praca' ? doc.billing : undefined,
@@ -885,7 +902,7 @@ export default function Documents() {
         />
         <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(status, ai) => setScan({ status, ai })} aiAvailable={aiAvailable} />
         {scan && <DocumentScanner onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status, scan.ai)} />}
-        <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={refreshAll} aiAvailable={aiAvailable} />
+        <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={refreshAll} aiAvailable={aiAvailable} brands={brands} />
         </>
     );
 }

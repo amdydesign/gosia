@@ -44,6 +44,7 @@ export default function CollabSuggestionsSheet({ open, suggestions, onClose, onC
                                         <div className="text-sm text-ink-soft">
                                             {formatCurrency(s.amount)} brutto · {formatDay(s.date)}
                                         </div>
+                                        {s.brand && <div className="text-xs text-ink-muted truncate">przez {s.counterparty}</div>}
                                     </div>
                                     <span className={`badge shrink-0 ${link ? 'badge-info' : 'badge-brand'}`}>{link ? 'Już jest' : 'Nowa'}</span>
                                 </div>

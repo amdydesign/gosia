@@ -32,10 +32,11 @@ try {
 
     foreach ($words as $i => $word) {
         $like = documentsLikeEscape($word);
-        $where[] = "(title LIKE :t{$i} OR notes LIKE :n{$i} OR counterparty LIKE :k{$i} OR original_name LIKE :o{$i} OR content_text LIKE :c{$i})";
+        $where[] = "(title LIKE :t{$i} OR notes LIKE :n{$i} OR counterparty LIKE :k{$i} OR brand LIKE :b{$i} OR original_name LIKE :o{$i} OR content_text LIKE :c{$i})";
         $params["t{$i}"] = $like;
         $params["n{$i}"] = $like;
         $params["k{$i}"] = $like;
+        $params["b{$i}"] = $like;
         $params["o{$i}"] = $like;
         $params["c{$i}"] = $like;
         $params["s{$i}"] = $like;
@@ -47,7 +48,7 @@ try {
     $textColumn = $words ? 'content_text' : 'NULL AS content_text';
 
     $stmt = $conn->prepare("
-        SELECT id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, collaboration_id, original_name, mime_type, size, created_at, updated_at,
+        SELECT id, title, notes, status, doc_date, counterparty, brand, doc_kind, amount, billing, collaboration_id, original_name, mime_type, size, created_at, updated_at,
                (content_text IS NOT NULL AND content_text <> '') AS has_text,
                {$textColumn}
         FROM documents

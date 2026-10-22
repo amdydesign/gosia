@@ -56,7 +56,7 @@ try {
     documentsEnsureSchema($conn);
 
     $stmt = $conn->prepare("
-        SELECT d.id, d.title, d.counterparty, d.doc_kind, d.amount, d.billing,
+        SELECT d.id, d.title, d.counterparty, d.brand, d.doc_kind, d.amount, d.billing,
                COALESCE(d.doc_date, DATE(d.created_at)) AS day
         FROM documents d
         LEFT JOIN collaborations c ON c.id = d.collaboration_id AND c.user_id = d.user_id
@@ -93,12 +93,15 @@ try {
     foreach ($docs as $doc) {
         $doc['amount'] = (float) $doc['amount'];
         $doc['counterparty'] = documentsNormalizeCounterparty($doc['counterparty']);
+        $doc['brand'] = trim((string) $doc['brand']);
         $slot = suggestSlot($doc['doc_kind']);
         $other = $slot === 'bill' ? 'contract' : ($slot === 'contract' ? 'bill' : null);
         $best = null; // the closest job: dated within a week first, then a contract / bill pair
         $bestScore = null;
         foreach ($groups as $i => $group) {
-            if (!documentsSameParty($group['counterparty'], $doc['counterparty'])
+            // one agency, two brands = two jobs
+            $otherBrand = $group['brand'] !== '' && $doc['brand'] !== '' && !documentsSameParty($group['brand'], $doc['brand']);
+            if ($otherBrand || !documentsSameParty($group['counterparty'], $doc['counterparty'])
                 || abs($group['amount'] - $doc['amount']) > SUGGEST_AMOUNT_TOLERANCE) {
                 continue;
             }
@@ -115,12 +118,16 @@ try {
         }
         if ($best !== null) {
             $groups[$best]['documents'][] = $doc;
+            if ($groups[$best]['brand'] === '') {
+                $groups[$best]['brand'] = $doc['brand'];
+            }
             if ($slot !== null) {
                 $groups[$best]['slots'][$slot] = true;
             }
         } else {
             $groups[] = [
                 'counterparty' => $doc['counterparty'],
+                'brand' => $doc['brand'],
                 'amount' => $doc['amount'],
                 'day' => $doc['day'],
                 'slots' => $slot !== null ? [$slot => true] : [],
@@ -148,7 +155,8 @@ try {
         $match = null;
         $known = null; // most recent collaboration with this brand ("jak ostatnio")
         foreach ($collabs as $collab) {
-            if (!documentsSameParty($collab['brand'], $group['counterparty'])) {
+            // the brand typed on the document, else the counterparty (when it is the brand itself)
+            if (!documentsSameParty($collab['brand'], $group['brand'] !== '' ? $group['brand'] : $group['counterparty'])) {
                 continue;
             }
             $known = $known ?: $collab;
@@ -181,6 +189,7 @@ try {
             'key' => implode('-', array_column($group['documents'], 'id')),
             'action' => $match ? 'link' : 'create',
             'counterparty' => $group['counterparty'],
+            'brand' => $group['brand'] !== '' ? $group['brand'] : null,
             'amount' => $group['amount'],
             'date' => $day,
             'document_ids' => array_map('intval', array_column($group['documents'], 'id')),
@@ -195,7 +204,7 @@ try {
             ] : null,
             'prefill' => $match ? null : [
                 // reuse the brand spelling already used in collaborations ("reszta jak ostatnio")
-                'brand' => $known ? $known['brand'] : suggestBrand($group['counterparty']),
+                'brand' => $known ? $known['brand'] : ($group['brand'] !== '' ? $group['brand'] : suggestBrand($group['counterparty'])),
                 'amount_gross' => $group['amount'],
                 'date' => $day,
                 // from the contract, else as last time with this brand, else UoD 50%

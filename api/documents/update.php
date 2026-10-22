@@ -54,6 +54,11 @@ try {
         $fields[] = 'counterparty = :counterparty';
         $params['counterparty'] = $counterparty === '' ? null : mb_substr($counterparty, 0, 255);
     }
+    if (array_key_exists('brand', $data)) {
+        $brand = trim(preg_replace('/\s+/u', ' ', (string) $data['brand']));
+        $fields[] = 'brand = :brand';
+        $params['brand'] = $brand === '' ? null : mb_substr($brand, 0, 100);
+    }
     if (array_key_exists('amount', $data)) {
         $fields[] = 'amount = :amount';
         $params['amount'] = $data['amount'] === null || $data['amount'] === '' ? null : documentsParseMoney($data['amount']);
