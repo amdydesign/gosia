@@ -265,7 +265,7 @@ try {
             'active_returns_value' => floatval($activeReturns['total']),
             'ideas_drafts' => $ideasDrafts,
         ],
-        'ai' => ['enabled' => AiClient::provider() !== null, 'provider' => AiClient::provider()],
+        'ai' => ['enabled' => AiClient::provider() !== null, 'provider' => AiClient::provider(), 'documents' => AiClient::key('claude') !== ''],
         'social' => $social,
         'social_stale' => $socialStale,
         'urgent_returns_count' => $urgentReturnsCount,

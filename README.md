@@ -175,6 +175,7 @@ Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
 
 ### Dokumenty (archiwum umów, NDA)
 - ✅ Data dokumentu (np. data podpisania), sortowanie: najnowsze / najstarsze / nazwa A–Z, filtr po roku
+- ✅ **AI (Claude Haiku 5.5)**: wystarczy wrzucić plik (można kilka naraz) — AI ustawia nazwę, datę, status i streszczenie, a skany zamienia na tekst do wyszukiwania. Przycisk ✨ przy dokumencie czyta go ponownie. Dokumenty idą tylko do Claude (nigdy do Gemini); model: `ANTHROPIC_DOCS_MODEL` w `api/.env`
 - ✅ Status **Podpisane / Do podpisu** — wybór przy dodawaniu, filtr na liście, zmiana jednym kliknięciem w etykietę
 - ✅ Upload umowy + własna nazwa i notatka (PDF, Word, ODT, Excel, TXT, zdjęcia, do 20 MB)
 - ✅ Wyszukiwarka po nazwie, notatce, nazwie pliku **i treści** dokumentu (bez rozróżniania wielkości liter i polskich znaków)

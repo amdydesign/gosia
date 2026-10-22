@@ -46,7 +46,7 @@ try {
     $textColumn = $words ? 'content_text' : 'NULL AS content_text';
 
     $stmt = $conn->prepare("
-        SELECT id, title, notes, status, doc_date, original_name, mime_type, size, created_at, updated_at,
+        SELECT id, title, notes, status, doc_date, analyzed_at, original_name, mime_type, size, created_at, updated_at,
                (content_text IS NOT NULL AND content_text <> '') AS has_text,
                {$textColumn}
         FROM documents
