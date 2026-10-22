@@ -1,6 +1,6 @@
 /* Service Worker: app-shell cache + Web Push */
 
-const CACHE_NAME = 'gosia-v5';
+const CACHE_NAME = 'gosia-v6';
 const SHARE_CACHE = 'gosia-share';
 const PRECACHE = ['/', '/index.html', '/manifest.json'];
 
@@ -73,8 +73,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Hashed build assets + icons: cache first
-    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || PRECACHE.includes(url.pathname)) {
+    // Hashed build assets, icons and the OCR engine (~7 MB, downloaded once): cache first
+    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/ocr/') || PRECACHE.includes(url.pathname)) {
         event.respondWith(
             caches.match(request).then((cached) =>
                 cached ||

@@ -40,6 +40,7 @@ function documentsEnsureSchema(PDO $conn)
     Schema::ensure($conn, 'documents');
     Schema::ensureColumn($conn, 'documents', 'status');
     Schema::ensureColumn($conn, 'documents', 'doc_date');
+    Schema::ensureColumn($conn, 'documents', 'counterparty');
 }
 
 /**
@@ -252,4 +253,71 @@ function documentsDateFromText($text)
         }
     }
     return null;
+}
+
+/**
+ * The other party of a contract (brand / company) from the document text, or ''.
+ * Looks for labelled parties ("Zleceniodawca: ...") and company legal forms
+ * (sp. z o.o., S.A., GmbH ...). Names listed in DOCUMENTS_OWN_NAMES (.env,
+ * comma separated) are skipped, so the archive owner is never picked.
+ */
+function documentsCounterpartyFromText($text)
+{
+    $text = mb_substr((string) $text, 0, 8000);
+    if (trim($text) === '') {
+        return '';
+    }
+    $own = array_filter(array_map(function ($n) {
+        return documentsFold(trim($n));
+    }, explode(',', $_ENV['DOCUMENTS_OWN_NAMES'] ?? '')));
+
+    $isOwn = function ($name) use ($own) {
+        $folded = documentsFold($name);
+        foreach ($own as $o) {
+            if ($o !== '' && mb_strpos($folded, $o) !== false) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    $clean = function ($name) {
+        $name = preg_replace('/\s+/u', ' ', $name);
+        // drop leading connectors / numbering: "pomiędzy:", "a", "1.", "firmą", "spółką"
+        $name = preg_replace('/^(?:\d+[.)]\s*|pomi[eę]dzy\s*:?\s*|oraz\s+|a\s+|firm[aąy]\s+|sp[oó][lł]k[aąi]\s+|przez\s+|z\s+)+/iu', '', trim($name));
+        $name = trim($name, " \t,;:-–—\"'„”«»()");
+        // normalise legal forms
+        $name = preg_replace('/(?<![\p{L}])sp(?:[oó][lł]k[aąię])?\.?\s*z\s*(?:ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|o\.?\s*o\.?)/iu', 'sp. z o.o.', $name);
+        $name = preg_replace('/\bsp[oó][lł]ka\s+akcyjna\b/iu', 'S.A.', $name);
+        return mb_substr(trim($name), 0, 120);
+    };
+
+    // 1. Labelled party: "Zleceniodawca: Marka sp. z o.o." / "Zamawiający - ..."
+    $labels = 'zleceniodawc[aą]|zamawiaj[aą]c[ya]|klient|nabywc[aą]|licencjobiorc[aą]|kontrahent|marka|reklamodawc[aą]|partner|agencj[aą]';
+    if (preg_match_all('/(?:^|\n)\s*(?:' . $labels . ')\s*[:\-–]\s*([^\n]{3,120})/iu', $text, $m)) {
+        foreach ($m[1] as $candidate) {
+            $candidate = preg_split('/\s*(?:,\s*(?:ul\.|z siedzib|NIP|KRS|adres)|\bz siedzib[aą]|\bNIP\b|\bKRS\b|\bREGON\b)/iu', $candidate)[0];
+            $name = $clean($candidate);
+            if (mb_strlen($name) >= 2 && !$isOwn($name)) {
+                return $name;
+            }
+        }
+    }
+
+    // 2. Company with a legal form; take the words before it on the same line
+    $forms = '(?i:sp\.?\s*z\s*o\.?\s*o\.?(?:\s*sp\.?\s*k\.?)?|sp[oó][lł]k[aąię]\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|sp[oó][lł]k[aąię]\s+akcyjn[aąe]|sp\.\s?k\.|sp\.\s?j\.)|S\.\s?A\.|GmbH|Ltd\.?|LLC|Inc\.?|B\.V\.|S\.r\.l\.|S\.L\.|SE\b|AB\b|ApS\b|AG\b';
+    if (preg_match_all('/([^\n:;]{2,70}?)\s*(' . $forms . ')/u', $text, $m, PREG_SET_ORDER)) {
+        foreach ($m as $match) {
+            // keep at most the last 6 words before the legal form
+            $words = preg_split('/\s+/u', trim($match[1]));
+            $before = implode(' ', array_slice($words, -6));
+            $before = preg_replace('/^.*(?<![\p{L}\d])(?:pomi[eę]dzy|oraz|a|firm[aąy]|sp[oó][lł]k[aąi]|przez|z|between|and|with|by)(?![\p{L}\d])\s*:?\s*/iu', '', $before);
+            $name = $clean($before . ' ' . $match[2]);
+            if (mb_strlen($name) >= 4 && !$isOwn($name) && !preg_match('/^(sp\.|S\.A\.)/u', $name)) {
+                return $name;
+            }
+        }
+    }
+
+    return '';
 }

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2 } from 'lucide-react';
 import documentsService from '../../services/documents';
-import { extractPdfText } from '../../utils/pdfText';
+import { documentText, ocrImage } from '../../utils/ocr';
+import { pagesToPdf } from '../../utils/scanner';
+import DocumentScanner from '../../components/documents/DocumentScanner';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import PageHeader from '../../components/ui/PageHeader';
@@ -67,28 +69,15 @@ function Highlight({ text, query }) {
     );
 }
 
-/** Text layer of a PDF for search; empty for other files or scans. */
-async function pdfTextOf(file) {
-    if (!/\.pdf$/i.test(file.name)) return '';
-    try {
-        return await extractPdfText(file);
-    } catch {
-        return '';
-    }
-}
-
 /**
- * Upload is one step: pick the files and they go up right away.
- * Name and date are taken from the file name / document text on the server.
+ * Adding is one step: scan with the camera or pick files - they go up right away.
+ * Name, date and counterparty are read from the document (OCR on the device,
+ * guesses on our server); nothing is sent to outside services.
  */
-function UploadSheet({ open, onClose, onPick }) {
-    const inputRef = useRef(null);
+function UploadSheet({ open, onClose, onPick, onScan }) {
+    const filesRef = useRef(null);
+    const cameraRef = useRef(null);
     const [status, setStatus] = useState('signed');
-
-    const choose = (value) => {
-        setStatus(value);
-        inputRef.current?.click();
-    };
 
     const picked = (event) => {
         const files = Array.from(event.target.files || []);
@@ -98,30 +87,44 @@ function UploadSheet({ open, onClose, onPick }) {
         onPick(files, status);
     };
 
+    const photographed = (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        onClose();
+        onScan(file, status);
+    };
+
     return (
-        <Sheet open={open} onClose={onClose} title="Dodaj dokumenty" description="Wybierz pliki — można kilka naraz.">
-            <div className="grid grid-cols-2 gap-3">
+        <Sheet open={open} onClose={onClose} title="Dodaj dokument">
+            <Field label="Status">
+                <ChoiceChips options={STATUS_OPTIONS} value={status} onChange={setStatus} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3 mt-4">
                 <button
                     type="button"
-                    onClick={() => choose('signed')}
-                    className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 hover:border-emerald-400 px-3 py-6 text-center transition-colors"
+                    onClick={() => cameraRef.current?.click()}
+                    className="rounded-2xl border-2 border-primary-200 bg-primary-50/60 hover:border-primary-400 px-3 py-6 text-center transition-colors"
                 >
-                    <CheckCircle2 size={26} className="mx-auto text-emerald-600 mb-2" />
-                    <div className="text-[15px] font-bold text-ink">Podpisane</div>
+                    <ScanLine size={28} className="mx-auto text-primary-600 mb-2" />
+                    <div className="text-[15px] font-bold text-ink">Skanuj aparatem</div>
+                    <div className="text-[11px] text-ink-muted mt-0.5">kilka stron → PDF</div>
                 </button>
                 <button
                     type="button"
-                    onClick={() => choose('to_sign')}
-                    className="rounded-2xl border-2 border-amber-200 bg-amber-50/60 hover:border-amber-400 px-3 py-6 text-center transition-colors"
+                    onClick={() => filesRef.current?.click()}
+                    className="rounded-2xl border-2 border-line bg-canvas hover:border-primary-300 px-3 py-6 text-center transition-colors"
                 >
-                    <PenLine size={26} className="mx-auto text-amber-600 mb-2" />
-                    <div className="text-[15px] font-bold text-ink">Do podpisu</div>
+                    <FolderOpen size={28} className="mx-auto text-ink-soft mb-2" />
+                    <div className="text-[15px] font-bold text-ink">Wybierz pliki</div>
+                    <div className="text-[11px] text-ink-muted mt-0.5">PDF, Word, zdjęcia</div>
                 </button>
             </div>
-            <input ref={inputRef} type="file" accept={ACCEPT} onChange={picked} className="hidden" multiple />
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={photographed} className="hidden" />
+            <input ref={filesRef} type="file" accept={ACCEPT} onChange={picked} className="hidden" multiple />
             <p className="text-xs text-ink-muted mt-4 leading-relaxed">
-                Nazwa i data ustawią się same z nazwy pliku i treści dokumentu. Wszystko odbywa się na Twoim serwerze —
-                pliki nigdzie dalej nie trafiają. Poprawić możesz potem ołówkiem przy dokumencie.
+                Tekst skanów i zdjęć rozpoznaje Twój telefon (OCR), a kontrahenta, nazwę i datę — Twój serwer.
+                Dokumenty nie trafiają do żadnych zewnętrznych usług. Poprawić możesz potem ołówkiem przy dokumencie.
             </p>
         </Sheet>
     );
@@ -133,6 +136,7 @@ function EditSheet({ doc, onClose, onSaved }) {
     const [notes, setNotes] = useState('');
     const [signStatus, setSignStatus] = useState('signed');
     const [date, setDate] = useState('');
+    const [counterparty, setCounterparty] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -141,6 +145,7 @@ function EditSheet({ doc, onClose, onSaved }) {
             setNotes(doc.notes || '');
             setSignStatus(doc.status || 'signed');
             setDate(doc.doc_date || '');
+            setCounterparty(doc.counterparty || '');
         }
     }, [doc]);
 
@@ -149,7 +154,7 @@ function EditSheet({ doc, onClose, onSaved }) {
         if (!title.trim()) return;
         setSaving(true);
         try {
-            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date });
+            await documentsService.update(doc.id, { title: title.trim(), notes, status: signStatus, doc_date: date, counterparty });
             toast.success('Zapisano');
             onSaved();
             onClose();
@@ -181,6 +186,9 @@ function EditSheet({ doc, onClose, onSaved }) {
                 <Field label="Nazwa dokumentu" required>
                     <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={255} />
                 </Field>
+                <Field label="Kontrahent">
+                    <input className="input" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="np. Zalando Polska sp. z o.o." maxLength={255} />
+                </Field>
                 <Field label="Status">
                     <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
                 </Field>
@@ -211,6 +219,7 @@ export default function Documents() {
     const [year, setYear] = useState('all');
     const [uploads, setUploads] = useState([]); // files on their way to the server
     const [dragging, setDragging] = useState(false);
+    const [scan, setScan] = useState(null); // { photo, status } while the scanner is open
     const requestId = useRef(0);
     const queryRef = useRef(query);
     queryRef.current = query;
@@ -275,29 +284,70 @@ export default function Documents() {
         }
     };
 
-    // Files go up one by one; each shows a row with progress until it lands in the list
-    const uploadFiles = async (files, status = 'signed') => {
-        const items = files.map((file, i) => ({ key: `${Date.now()}-${i}`, name: file.name, file }));
-        const tooBig = items.filter((item) => item.file.size > MAX_SIZE);
-        const ok = items.filter((item) => item.file.size <= MAX_SIZE);
-        setUploads((prev) => [
-            ...ok.map(({ key, name }) => ({ key, name, error: '' })),
-            ...tooBig.map(({ key, name }) => ({ key, name, error: 'Za duży plik (max 20 MB)' })),
-            ...prev,
-        ]);
+    const setUploadRow = (key, patch) => setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, ...patch } : u)));
+
+    /**
+     * Each job: { key, name, prepare(onStatus) -> { file, text } }. Jobs run one by one
+     * (OCR is heavy); each shows a row with its progress until it lands in the list.
+     */
+    const runUploads = async (jobs, status) => {
+        setUploads((prev) => [...jobs.map(({ key, name, error }) => ({ key, name, error: error || '', stage: 'Czekam…' })), ...prev]);
         let done = 0;
-        for (const item of ok) {
+        for (const job of jobs.filter((j) => !j.error)) {
             try {
-                const contentText = await pdfTextOf(item.file);
-                await documentsService.upload({ file: item.file, title: '', status, contentText });
-                setUploads((prev) => prev.filter((u) => u.key !== item.key));
+                const { file, text } = await job.prepare((stage) => setUploadRow(job.key, { stage }));
+                setUploadRow(job.key, { stage: 'Wysyłanie…' });
+                await documentsService.upload({ file, title: '', status, contentText: text });
+                setUploads((prev) => prev.filter((u) => u.key !== job.key));
                 done += 1;
                 load(queryRef.current);
             } catch (err) {
-                setUploads((prev) => prev.map((u) => (u.key === item.key ? { ...u, error: err.message || 'Nie udało się dodać pliku' } : u)));
+                setUploadRow(job.key, { error: err.message || 'Nie udało się dodać pliku' });
             }
         }
         if (done) toast.success(done === 1 ? 'Dokument dodany' : `Dodano dokumenty: ${done}`);
+    };
+
+    const uploadFiles = (files, status = 'signed') =>
+        runUploads(
+            files.map((file, i) => ({
+                key: `${Date.now()}-${i}`,
+                name: file.name,
+                error: file.size > MAX_SIZE ? 'Za duży plik (max 20 MB)' : '',
+                prepare: async (onStatus) => ({ file, text: await documentText(file, onStatus) }),
+            })),
+            status
+        );
+
+    // Scanner finished: OCR the cleaned pages, join them into one PDF and upload it
+    const uploadScan = (pages, status) => {
+        const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '-');
+        const name = `Skan ${stamp}.pdf`;
+        setScan(null);
+        runUploads(
+            [
+                {
+                    key: `scan-${Date.now()}`,
+                    name,
+                    prepare: async (onStatus) => {
+                        const texts = [];
+                        for (let i = 0; i < pages.length; i += 1) {
+                            onStatus(`Rozpoznaję tekst… strona ${i + 1}/${pages.length}`);
+                            try {
+                                texts.push(await ocrImage(pages[i]));
+                            } catch {
+                                texts.push('');
+                            }
+                        }
+                        onStatus('Tworzę PDF…');
+                        const file = await pagesToPdf(pages, name);
+                        if (file.size > MAX_SIZE) throw new Error('Skan jest za duży (max 20 MB) — podziel go na mniej stron');
+                        return { file, text: texts.join('\n\n') };
+                    },
+                },
+            ],
+            status
+        );
     };
 
     // Desktop: drop files anywhere on the page
@@ -368,7 +418,7 @@ export default function Documents() {
                 }
             >
                 <div className="flex flex-col sm:flex-row gap-2.5">
-                    <SearchInput value={query} onChange={setQuery} placeholder="Szukaj po nazwie lub treści umowy…" className="flex-1" />
+                    <SearchInput value={query} onChange={setQuery} placeholder="Szukaj po nazwie, kontrahencie lub treści…" className="flex-1" />
                     <Segmented
                         value={filter}
                         onChange={setFilter}
@@ -407,7 +457,7 @@ export default function Documents() {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm font-semibold text-ink truncate">{u.name}</div>
-                                <div className={`text-xs ${u.error ? 'text-red-700' : 'text-ink-muted'}`}>{u.error || 'Wysyłanie…'}</div>
+                                <div className={`text-xs ${u.error ? 'text-red-700' : 'text-ink-muted'}`}>{u.error || u.stage || 'Wysyłanie…'}</div>
                             </div>
                             {u.error && (
                                 <button type="button" onClick={() => setUploads((prev) => prev.filter((x) => x.key !== u.key))} className="p-2 text-ink-muted hover:bg-black/5 rounded-lg" aria-label="Ukryj">
@@ -448,6 +498,14 @@ export default function Documents() {
                                     <div className="text-[15px] font-semibold text-ink leading-snug break-words hover:text-primary-700">
                                         <Highlight text={doc.title} query={query} />
                                     </div>
+                                    {doc.counterparty && (
+                                        <div className="flex items-center gap-1 text-[13px] font-medium text-ink-soft mt-0.5 min-w-0">
+                                            <Building2 size={13} className="shrink-0 text-ink-muted" />
+                                            <span className="truncate">
+                                                <Highlight text={doc.counterparty} query={query} />
+                                            </span>
+                                        </div>
+                                    )}
                                     <span
                                         role="button"
                                         tabIndex={0}
@@ -511,7 +569,8 @@ export default function Documents() {
             )}
         </div>
 
-        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} />
+        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(photo, status) => setScan({ photo, status })} />
+        {scan && <DocumentScanner initialPhoto={scan.photo} onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status)} />}
         <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={() => load(query)} />
         </>
     );

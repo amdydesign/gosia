@@ -4,7 +4,7 @@
  * GET /api/documents/index.php            -> all documents, newest first
  * GET /api/documents/index.php?q=umowa nda -> every word must appear in the
  *     title, notes, file name or document text (case and accent insensitive)
- * Each document carries status: signed | to_sign
+ * Each document carries status: signed | to_sign and counterparty (also searched)
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -32,9 +32,10 @@ try {
 
     foreach ($words as $i => $word) {
         $like = documentsLikeEscape($word);
-        $where[] = "(title LIKE :t{$i} OR notes LIKE :n{$i} OR original_name LIKE :o{$i} OR content_text LIKE :c{$i})";
+        $where[] = "(title LIKE :t{$i} OR notes LIKE :n{$i} OR counterparty LIKE :k{$i} OR original_name LIKE :o{$i} OR content_text LIKE :c{$i})";
         $params["t{$i}"] = $like;
         $params["n{$i}"] = $like;
+        $params["k{$i}"] = $like;
         $params["o{$i}"] = $like;
         $params["c{$i}"] = $like;
         $params["s{$i}"] = $like;
@@ -46,7 +47,7 @@ try {
     $textColumn = $words ? 'content_text' : 'NULL AS content_text';
 
     $stmt = $conn->prepare("
-        SELECT id, title, notes, status, doc_date, original_name, mime_type, size, created_at, updated_at,
+        SELECT id, title, notes, status, doc_date, counterparty, original_name, mime_type, size, created_at, updated_at,
                (content_text IS NOT NULL AND content_text <> '') AS has_text,
                {$textColumn}
         FROM documents

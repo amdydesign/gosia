@@ -1,7 +1,7 @@
 <?php
 /**
  * Rename a document / edit its notes / change signing status
- * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date? }
+ * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date?, counterparty? }
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -49,6 +49,11 @@ try {
         $params['status'] = $data['status'];
     }
 
+    if (array_key_exists('counterparty', $data)) {
+        $counterparty = trim((string) $data['counterparty']);
+        $fields[] = 'counterparty = :counterparty';
+        $params['counterparty'] = $counterparty === '' ? null : mb_substr($counterparty, 0, 255);
+    }
     if (array_key_exists('doc_date', $data)) {
         $fields[] = 'doc_date = :doc_date';
         $params['doc_date'] = documentsParseDate($data['doc_date']);
