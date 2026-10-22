@@ -177,7 +177,7 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                         <>
                             <p className="text-xs text-ink-muted mt-1">Dokument nie jest jeszcze przypisany do żadnej współpracy.</p>
                             <button type="button" onClick={() => onCreateCollab(doc)} className="btn btn-soft btn-sm w-full mt-2.5">
-                                <Briefcase size={14} /> Utwórz współpracę z tego dokumentu…
+                                <Briefcase size={14} /> Utwórz współpracę z tego dokumentu
                             </button>
                         </>
                     )}

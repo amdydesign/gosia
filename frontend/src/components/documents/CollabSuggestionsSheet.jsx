@@ -13,7 +13,7 @@ function formatDay(value) {
 
 /**
  * Collaboration suggestions built from contracts and bills. Nothing is saved without
- * a tap: "Utwórz" opens the prefilled collaboration form, "Połącz" links the documents
+ * a tap: "Utwórz" saves the collaboration from the documents' data, "Połącz" links the documents
  * with the matching existing collaboration, "Pomiń" stops suggesting them.
  */
 export default function CollabSuggestionsSheet({ open, suggestions, onClose, onCreate, onLink, onDismiss }) {
@@ -67,8 +67,8 @@ export default function CollabSuggestionsSheet({ open, suggestions, onClose, onC
                                             <Link2 size={14} /> Połącz
                                         </button>
                                     ) : (
-                                        <button type="button" disabled={busy === s.key} onClick={() => onCreate(s)} className="btn btn-primary btn-sm flex-1">
-                                            <Briefcase size={14} /> Utwórz współpracę…
+                                        <button type="button" disabled={busy === s.key} onClick={() => run(s.key, () => onCreate(s))} className="btn btn-primary btn-sm flex-1">
+                                            <Briefcase size={14} /> Utwórz współpracę
                                         </button>
                                     )}
                                     <button type="button" disabled={busy === s.key} onClick={() => run(s.key, () => onDismiss(s))} className="btn btn-ghost btn-sm">
