@@ -552,7 +552,7 @@ export default function Documents() {
                 done += 1;
                 load(queryRef.current);
             } catch (err) {
-                setUploadRow(job.key, { error: err.message || 'Nie udało się dodać pliku' });
+                setUploadRow(job.key, { error: err.message || 'Nie udało się dodać pliku', duplicateId: err.duplicateId || null });
             }
         }
         if (done) {
@@ -744,6 +744,19 @@ export default function Documents() {
                                 <div className="text-sm font-semibold text-ink truncate">{u.name}</div>
                                 <div className={`text-xs ${u.error ? 'text-red-700' : 'text-ink-muted'}`}>{u.error || u.stage || 'Wysyłanie…'}</div>
                             </div>
+                            {u.duplicateId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setQuery('');
+                                        setSelectedId(u.duplicateId);
+                                        setUploads((prev) => prev.filter((x) => x.key !== u.key));
+                                    }}
+                                    className="btn btn-soft btn-sm shrink-0"
+                                >
+                                    Pokaż
+                                </button>
+                            )}
                             {u.error && (
                                 <button type="button" onClick={() => setUploads((prev) => prev.filter((x) => x.key !== u.key))} className="p-2 text-ink-muted hover:bg-black/5 rounded-lg" aria-label="Ukryj">
                                     <X size={16} />

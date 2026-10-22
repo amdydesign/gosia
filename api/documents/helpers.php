@@ -44,6 +44,9 @@ const DOCUMENTS_LATE_COLUMNS = [
     'billing' => "ALTER TABLE documents ADD COLUMN billing VARCHAR(20) NULL",
     'collaboration_id' => "ALTER TABLE documents ADD COLUMN collaboration_id INT NULL",
     'collab_dismissed' => "ALTER TABLE documents ADD COLUMN collab_dismissed TINYINT(1) NOT NULL DEFAULT 0",
+    // duplicate check: the same file, or the same text (the same PDF saved again)
+    'file_hash' => "ALTER TABLE documents ADD COLUMN file_hash CHAR(64) NULL",
+    'text_hash' => "ALTER TABLE documents ADD COLUMN text_hash CHAR(64) NULL",
 ];
 
 const DOCUMENTS_KINDS = ['umowa', 'rachunek', 'faktura', 'inne'];
@@ -82,6 +85,49 @@ function documentsParseDate($value)
 function documentsUploadDir()
 {
     return __DIR__ . '/../uploads/documents';
+}
+
+/**
+ * Fingerprint of a document's text: letters and digits only, lower case, so the same
+ * contract saved again as another PDF (other file bytes, the same words) is recognised.
+ * Null for short texts - a few words are not enough to call two documents the same.
+ */
+function documentsTextHash($text)
+{
+    $plain = preg_replace('/[^\p{L}\p{N}]+/u', '', mb_strtolower((string) $text, 'UTF-8'));
+    return mb_strlen($plain) >= 300 ? hash('sha256', $plain) : null;
+}
+
+/**
+ * A document of this user that is the same file or has the same text, or null.
+ * Documents added before the check existed get their fingerprints filled in here once.
+ */
+function documentsFindDuplicate($conn, $userId, $fileHash, $textHash)
+{
+    $stmt = $conn->prepare("SELECT id, stored_name, content_text FROM documents WHERE user_id = :user_id AND file_hash IS NULL");
+    $stmt->execute(['user_id' => $userId]);
+    $fill = $conn->prepare("UPDATE documents SET file_hash = :file_hash, text_hash = :text_hash WHERE id = :id");
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $old) {
+        $path = documentsUploadDir() . '/' . basename($old['stored_name']);
+        $fill->execute([
+            'file_hash' => is_file($path) ? hash_file('sha256', $path) : '',
+            'text_hash' => documentsTextHash($old['content_text']),
+            'id' => $old['id'],
+        ]);
+    }
+
+    $stmt = $conn->prepare("
+        SELECT id, title, created_at FROM documents
+        WHERE user_id = :user_id AND (file_hash = :file_hash OR (:has_text = 1 AND text_hash = :text_hash))
+        ORDER BY id ASC LIMIT 1
+    ");
+    $stmt->execute([
+        'user_id' => $userId,
+        'file_hash' => $fileHash,
+        'has_text' => $textHash ? 1 : 0,
+        'text_hash' => (string) $textHash,
+    ]);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
 /**

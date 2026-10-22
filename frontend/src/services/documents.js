@@ -34,7 +34,9 @@ export const documentsService = {
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.success) {
             const firstError = data.errors ? Object.values(data.errors).filter(Boolean)[0] : null;
-            throw new Error(firstError || data.message || 'Błąd przesyłania pliku');
+            const error = new Error(firstError || data.message || 'Błąd przesyłania pliku');
+            error.duplicateId = data.errors?.duplicate_id || null; // the same document is already in the archive
+            throw error;
         }
         return data.data;
     },
