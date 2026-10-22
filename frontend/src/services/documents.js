@@ -42,6 +42,13 @@ export const documentsService = {
     // OPTIONAL AI (Claude Haiku): fills name, counterparty, date, status, summary
     analyze: (id) => apiRequest(`/documents/analyze.php?id=${id}`, 'POST'),
 
+    // Collaboration suggestions from contracts / bills (contract + its bill = one suggestion)
+    collabSuggestions: () => apiRequest('/documents/suggestions.php'),
+    linkCollab: (documentIds, collaborationId) =>
+        apiRequest('/documents/link.php', 'POST', { document_ids: documentIds, collaboration_id: collaborationId }),
+    dismissCollab: (documentIds) => apiRequest('/documents/link.php', 'POST', { document_ids: documentIds, dismiss: true }),
+    unlinkCollab: (documentIds) => apiRequest('/documents/link.php', 'POST', { document_ids: documentIds, unlink: true }),
+
     getText: (id) => apiRequest(`/documents/text.php?id=${id}`),
 
     // Text read again in the browser (OCR); the server re-guesses date and counterparty

@@ -192,15 +192,17 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
             team: form.team.filter((m) => m.name.trim()).map((m) => ({ name: m.name.trim(), amount: parseAmount(m.amount), is_paid: !!m.is_paid })),
         };
         try {
+            let savedId = collabId;
             if (isEdit) {
                 await apiRequest(`/collaborations/update.php?id=${collabId}`, 'PUT', payload);
                 toast.success('Zapisano zmiany');
             } else {
-                await apiRequest('/collaborations/create.php', 'POST', payload);
+                const created = await apiRequest('/collaborations/create.php', 'POST', payload);
+                savedId = created?.id;
                 toast.success(`Dodano: ${payload.brand} · ${formatCurrency(amount)}`);
             }
             refresh();
-            onSaved?.();
+            onSaved?.(savedId);
             onClose();
         } catch (err) {
             setError(err.message || 'Nie udało się zapisać');
@@ -437,6 +439,7 @@ function normalizePrefill(prefill) {
         type: prefill.type || 'reel',
         paid: prefill.collab_type === 'gotowka',
         notes: prefill.notes || '',
+        ...(prefill.date ? { date: prefill.date } : {}),
         team: (prefill.team || []).map((m) => ({ name: m.name, amount: m.amount ? String(Number(m.amount)) : '', is_paid: false })),
     };
 }

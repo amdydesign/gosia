@@ -47,7 +47,7 @@ try {
     $textColumn = $words ? 'content_text' : 'NULL AS content_text';
 
     $stmt = $conn->prepare("
-        SELECT id, title, notes, status, doc_date, counterparty, original_name, mime_type, size, created_at, updated_at,
+        SELECT id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, collaboration_id, original_name, mime_type, size, created_at, updated_at,
                (content_text IS NOT NULL AND content_text <> '') AS has_text,
                {$textColumn}
         FROM documents
@@ -62,6 +62,11 @@ try {
         $row['id'] = (int) $row['id'];
         $row['size'] = (int) $row['size'];
         $row['has_text'] = (bool) $row['has_text'];
+        $row['amount'] = $row['amount'] === null ? null : (float) $row['amount'];
+        $row['collaboration_id'] = $row['collaboration_id'] === null ? null : (int) $row['collaboration_id'];
+        // one spelling per company + a key so "sp. z o.o." and the long form group together
+        $row['counterparty'] = $row['counterparty'] === null ? null : documentsNormalizeCounterparty($row['counterparty']);
+        $row['counterparty_key'] = $row['counterparty'] ? documentsPartyKey($row['counterparty']) : null;
         $row['snippet'] = $words ? documentsSnippet($row['content_text'], $words) : null;
         unset($row['content_text']);
         $documents[] = $row;

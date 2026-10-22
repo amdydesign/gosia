@@ -38,7 +38,16 @@ const DOCUMENTS_LATE_COLUMNS = [
     'doc_date' => "ALTER TABLE documents ADD COLUMN doc_date DATE NULL",
     'counterparty' => "ALTER TABLE documents ADD COLUMN counterparty VARCHAR(255) NULL",
     'analyzed_at' => "ALTER TABLE documents ADD COLUMN analyzed_at TIMESTAMP NULL DEFAULT NULL",
+    // link to collaborations (suggested from contracts / bills, confirmed by the user)
+    'doc_kind' => "ALTER TABLE documents ADD COLUMN doc_kind VARCHAR(20) NULL",
+    'amount' => "ALTER TABLE documents ADD COLUMN amount DECIMAL(10, 2) NULL",
+    'billing' => "ALTER TABLE documents ADD COLUMN billing VARCHAR(20) NULL",
+    'collaboration_id' => "ALTER TABLE documents ADD COLUMN collaboration_id INT NULL",
+    'collab_dismissed' => "ALTER TABLE documents ADD COLUMN collab_dismissed TINYINT(1) NOT NULL DEFAULT 0",
 ];
+
+const DOCUMENTS_KINDS = ['umowa', 'rachunek', 'faktura', 'inne'];
+const DOCUMENTS_BILLINGS = ['umowa_50', 'umowa_20', 'useme_50', 'useme_20', 'umowa_praca', 'gotowka'];
 
 /**
  * Create the table and add any missing column. Reads the real column list on
@@ -213,7 +222,10 @@ function documentsTitleFromText($text)
         if ($length < 4 || $length > 120 || !preg_match('/^(' . $kinds . ')\b/iu', $line)) {
             continue;
         }
-        // ALL CAPS headings -> sentence case
+        // ALL CAPS headings (or an ALL CAPS first word: "RACHUNEK nr 3/2026") -> sentence case
+        if (preg_match('/^(\p{Lu}{4,})\b/u', $line, $first) && $line !== mb_strtoupper($line)) {
+            $line = mb_substr($first[1], 0, 1) . mb_strtolower(mb_substr($first[1], 1)) . mb_substr($line, mb_strlen($first[1]));
+        }
         if ($line === mb_strtoupper($line)) {
             $line = mb_strtoupper(mb_substr($line, 0, 1)) . mb_strtolower(mb_substr($line, 1));
             $line = preg_replace_callback('/\b(nda|rodo|vat|nip|krs)\b/u', function ($m) {
@@ -356,4 +368,182 @@ function documentsCounterpartyFromText($text)
     }
 
     return '';
+}
+
+/**
+ * Kind of document from its text: umowa (contract / annex), rachunek (bill to a
+ * contract), faktura (invoice) or inne.
+ */
+function documentsKindFromText($text)
+{
+    $head = documentsFold(mb_substr((string) $text, 0, 1500));
+    if (preg_match('/\bfaktura\b|\bfaktury vat\b|\binvoice\b/u', $head)) {
+        return 'faktura';
+    }
+    if (preg_match('/\brachunek\b|\brachunku\b/u', $head)) {
+        return 'rachunek';
+    }
+    if (preg_match('/\bumow[ayie]\b|\baneks\b|\bporozumienie\b|\bagreement\b/u', $head)) {
+        return 'umowa';
+    }
+    return $head === '' ? null : 'inne';
+}
+
+/** "5 000,00" / "5.000,00" / "5000.50" -> 5000.5 (or null). */
+function documentsParseMoney($value)
+{
+    $v = preg_replace('/[\s\x{00A0}]/u', '', (string) $value);
+    if (preg_match('/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/', $v)) {
+        $v = str_replace('.', '', $v);
+    }
+    $v = str_replace(',', '.', $v);
+    if (!is_numeric($v)) {
+        return null;
+    }
+    $amount = round((float) $v, 2);
+    return $amount >= 100 && $amount <= 1000000 ? $amount : null;
+}
+
+/**
+ * Gross amount of a contract / bill / invoice from its text, or null.
+ * Labelled gross totals win ("brutto", "do zapłaty", "razem"), then the
+ * remuneration of a contract ("wynagrodzenie ... X zł"); net-only amounts
+ * ("do wypłaty", "netto") are ignored so a bill and its contract match.
+ */
+function documentsAmountFromText($text)
+{
+    $text = mb_substr((string) $text, 0, 20000);
+    // a number that is not a percentage or part of a longer number
+    $num = '(\d{1,3}(?:[ \x{00A0}.]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?![\d%]|\s%)';
+    $currency = '\s*(?:zł|zl|pln|złotych)';
+    $rules = [
+        // "5 000,00 zł brutto" - the most explicit form
+        3 => '/' . $num . $currency . '\s*\(?\s*brutto/iu',
+        // "kwota brutto: 5 000,00", "razem do zapłaty 6 150,00 zł", "wartość brutto 1230,00"
+        2 => '/(?:brutto|do\s+zap[lł]aty|razem|suma|og[oó][lł]em|warto[sś][cć]\s+brutto)[^\d\n]{0,40}' . $num . '/iu',
+        // "wynagrodzenie ... w kwocie 5000 zł"
+        1 => '/wynagrodzeni[ea][^\n]{0,120}?' . $num . $currency . '/iu',
+    ];
+    $best = null;
+    $bestRank = 0;
+    foreach ($rules as $rank => $pattern) {
+        if (!preg_match_all($pattern, $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            continue;
+        }
+        foreach ($all as $match) {
+            $m = array_map(function ($g) {
+                return $g[0];
+            }, $match);
+            // look a little past the amount too ("2500 zł netto")
+            $after = strtok(substr($text, $match[0][1] + strlen($match[0][0]), 25) . "\n", "\n");
+            $context = mb_strtolower($m[0] . ($after === false ? '' : $after));
+            if (preg_match('/netto|do\s+wyp[lł]aty|podatek|vat\s+\d|zaliczk/u', $context) && $rank !== 3) {
+                continue;
+            }
+            $amount = documentsParseMoney($m[1]);
+            // the largest labelled total of the best rule is the document total
+            if ($amount !== null && ($rank > $bestRank || ($rank === $bestRank && $amount > $best))) {
+                $best = $amount;
+                $bestRank = $rank;
+            }
+        }
+        if ($best !== null) {
+            break;
+        }
+    }
+    return $best;
+}
+
+/**
+ * How a contract is settled, in the collaboration's terms, or null:
+ * umowa o dzieło 50% / 20% costs, Use.me, umowa o pracę.
+ */
+function documentsBillingFromText($text)
+{
+    $t = documentsFold(mb_substr((string) $text, 0, 20000));
+    if ($t === '') {
+        return null;
+    }
+    $fifty = (bool) preg_match('/50\s?%|praw(a|ami|o)? autorsk|przeniesieni[ae] (autorskich )?praw|licencj/u', $t);
+    if (strpos($t, 'useme') !== false || strpos($t, 'use.me') !== false) {
+        return $fifty ? 'useme_50' : 'useme_20';
+    }
+    if (preg_match('/umow[ayie] o dzielo/u', $t)) {
+        return preg_match('/20\s?%/u', $t) && !$fifty ? 'umowa_20' : 'umowa_50';
+    }
+    if (preg_match('/umow[ayie] o prace/u', $t)) {
+        return 'umowa_praca';
+    }
+    return null;
+}
+
+/**
+ * One spelling for company legal forms, so "XX Spółka z ograniczoną odpowiedzialnością",
+ * "XX SP. Z O.O." and "XX sp. z o.o." are stored and shown the same way.
+ */
+function documentsNormalizeCounterparty($name)
+{
+    $name = trim(preg_replace('/\s+/u', ' ', (string) $name), " \t,;:-–—\"'„”");
+    if ($name === '') {
+        return '';
+    }
+    $forms = [
+        '/\bsp(?:[oó][lł]k[aąię])?\.?\s*z\s*(?:ograniczon[aąej]{1,2}\s+odpowiedzialno[sś]ci[aą]|o\.?\s*o\.?)(?:\s*sp(?:[oó][lł]k[aąię])?\.?\s*k(?:omandytow[aąej]{1,2})?\.?)?/iu' => null,
+        '/\bsp[oó][lł]k[aąię]\s+akcyjn[aąej]{1,2}\b|\bS\.\s?A\.?(?=\s|$)/iu' => 'S.A.',
+        '/\bsp[oó][lł]k[aąię]\s+komandytow[aąej]{1,2}\b|\bsp\.\s?k\.?(?=\s|$)/iu' => 'sp.k.',
+        '/\bsp[oó][lł]k[aąię]\s+jawn[aąej]{1,2}\b|\bsp\.\s?j\.?(?=\s|$)/iu' => 'sp.j.',
+    ];
+    foreach ($forms as $pattern => $short) {
+        $name = preg_replace_callback($pattern, function ($m) use ($short) {
+            if ($short !== null) {
+                return $short;
+            }
+            return preg_match('/k(omandytow|\.)|\bk$/iu', mb_substr($m[0], -14)) ? 'sp. z o.o. sp.k.' : 'sp. z o.o.';
+        }, $name);
+    }
+    // ALL CAPS names -> Title Case (legal forms keep their spelling)
+    $letters = preg_replace('/sp\. z o\.o\.|S\.A\.|sp\.[kj]\./u', '', $name);
+    if ($letters === mb_strtoupper($letters) && preg_match('/\p{L}{4,}/u', $letters)) {
+        $name = preg_replace_callback('/\p{L}[\p{L}\-]*/u', function ($m) {
+            $word = $m[0];
+            return in_array($word, ['sp', 'z', 'o', 'S', 'A', 'k', 'j'], true) ? $word : mb_convert_case($word, MB_CASE_TITLE);
+        }, $name);
+    }
+    return mb_substr(trim($name), 0, 255);
+}
+
+/** Key for matching a counterparty with a collaboration brand: "Zalando Polska sp. z o.o." -> "zalando polska". */
+function documentsPartyKey($name)
+{
+    $k = documentsFold((string) $name);
+    $k = preg_replace('/\b(sp\.?\s*z\s*o\.?\s*o\.?|spolka(\s+z\s+ograniczona\s+odpowiedzialnoscia|\s+akcyjna|\s+komandytowa|\s+jawna)?|s\.?\s?a\.?|sp\.?\s?k\.?|sp\.?\s?j\.?|gmbh|ltd\.?|llc|inc\.?|b\.?v\.?|s\.?r\.?l\.?|ag|se)\b/u', ' ', $k);
+    $k = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $k);
+    return trim(preg_replace('/\s+/u', ' ', $k));
+}
+
+/** Do two party names mean the same company? ("Zalando" vs "Zalando Polska sp. z o.o.") */
+function documentsSameParty($a, $b)
+{
+    $ka = documentsPartyKey($a);
+    $kb = documentsPartyKey($b);
+    if ($ka === '' || $kb === '') {
+        return false;
+    }
+    if ($ka === $kb) {
+        return true;
+    }
+    $first = function ($k) {
+        return explode(' ', $k)[0];
+    };
+    return mb_strlen($first($ka)) >= 3 && $first($ka) === $first($kb);
+}
+
+/** Collaboration details guessed from the document text (no external services). */
+function documentsCollabFields($text)
+{
+    return [
+        'doc_kind' => documentsKindFromText($text),
+        'amount' => documentsAmountFromText($text),
+        'billing' => documentsBillingFromText($text),
+    ];
 }

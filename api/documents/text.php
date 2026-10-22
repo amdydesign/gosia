@@ -30,7 +30,7 @@ try {
     $conn = $db->getConnection();
     documentsEnsureSchema($conn);
 
-    $stmt = $conn->prepare("SELECT id, content_text, doc_date, counterparty FROM documents WHERE id = :id AND user_id = :user_id");
+    $stmt = $conn->prepare("SELECT id, content_text, doc_date, counterparty, doc_kind, amount, billing FROM documents WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
     $document = $stmt->fetch();
     if (!$document) {
@@ -44,15 +44,23 @@ try {
     $data = json_decode(file_get_contents('php://input'), true) ?: [];
     $text = documentsCleanText($data['content_text'] ?? '');
     $docDate = documentsDateFromText($text) ?: $document['doc_date'];
-    $counterparty = documentsCounterpartyFromText($text) ?: $document['counterparty'];
+    $counterparty = documentsNormalizeCounterparty(documentsCounterpartyFromText($text) ?: $document['counterparty']) ?: null;
+    $collab = documentsCollabFields($text);
+    $kind = $collab['doc_kind'] ?: $document['doc_kind'];
+    $amount = $collab['amount'] ?? $document['amount'];
+    $billing = $collab['billing'] ?: $document['billing'];
 
     $conn->prepare("
-        UPDATE documents SET content_text = :content_text, doc_date = :doc_date, counterparty = :counterparty
+        UPDATE documents SET content_text = :content_text, doc_date = :doc_date, counterparty = :counterparty,
+               doc_kind = :doc_kind, amount = :amount, billing = :billing
         WHERE id = :id AND user_id = :user_id
     ")->execute([
         'content_text' => $text === '' ? null : $text,
         'doc_date' => $docDate,
         'counterparty' => $counterparty,
+        'doc_kind' => $kind,
+        'amount' => $amount,
+        'billing' => $billing,
         'id' => $id,
         'user_id' => $userId,
     ]);
@@ -62,6 +70,9 @@ try {
         'content_text' => $text,
         'doc_date' => $docDate,
         'counterparty' => $counterparty,
+        'doc_kind' => $kind,
+        'amount' => $amount === null ? null : (float) $amount,
+        'billing' => $billing,
         'has_text' => $text !== '',
     ], 'Tekst zapisany');
 

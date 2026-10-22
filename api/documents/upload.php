@@ -79,6 +79,8 @@ try {
     if ($docDate === null) {
         $docDate = documentsDateFromText($text);
     }
+    $counterparty = documentsNormalizeCounterparty($counterparty);
+    $collab = documentsCollabFields($text);
 
     $db = new Database();
     $conn = $db->getConnection();
@@ -98,8 +100,8 @@ try {
     @chmod($uploadDir . '/' . $storedName, 0640);
 
     $stmt = $conn->prepare("
-        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, original_name, stored_name, mime_type, size, content_text)
-        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :original_name, :stored_name, :mime_type, :size, :content_text)
+        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, original_name, stored_name, mime_type, size, content_text)
+        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :doc_kind, :amount, :billing, :original_name, :stored_name, :mime_type, :size, :content_text)
     ");
     $stmt->execute([
         'user_id' => $userId,
@@ -108,6 +110,9 @@ try {
         'status' => $status,
         'doc_date' => $docDate,
         'counterparty' => $counterparty === '' ? null : mb_substr($counterparty, 0, 255),
+        'doc_kind' => $collab['doc_kind'],
+        'amount' => $collab['amount'],
+        'billing' => $collab['billing'],
         'original_name' => mb_substr($originalName, 0, 255),
         'stored_name' => $storedName,
         'mime_type' => mb_substr($mime, 0, 100),
