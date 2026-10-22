@@ -41,13 +41,6 @@ function suggestSlot($kind)
     return in_array($kind, ['rachunek', 'faktura'], true) ? 'bill' : null;
 }
 
-/** "Zalando Polska sp. z o.o." -> "Zalando Polska" (brand-like name for a new collaboration) */
-function suggestBrand($counterparty)
-{
-    $name = preg_replace('/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.k\.|sp\.j\.|GmbH|Ltd\.?|LLC|Inc\.?|B\.V\.|AG|SE)\s*$/u', '', $counterparty);
-    return mb_substr(trim($name) ?: $counterparty, 0, 100);
-}
-
 try {
     $userId = getCurrentUserId();
 
@@ -204,7 +197,10 @@ try {
             ] : null,
             'prefill' => $match ? null : [
                 // reuse the brand spelling already used in collaborations ("reszta jak ostatnio")
-                'brand' => $known ? $known['brand'] : ($group['brand'] !== '' ? $group['brand'] : suggestBrand($group['counterparty'])),
+                // "Marka – Agencja" when the document names the brand; else the spelling used last time
+                'brand' => $group['brand'] !== ''
+                    ? documentsCollabName($group['brand'], $group['counterparty'])
+                    : ($known ? $known['brand'] : documentsCollabName('', $group['counterparty'])),
                 'amount_gross' => $group['amount'],
                 'date' => $day,
                 // from the contract, else as last time with this brand, else UoD 50%

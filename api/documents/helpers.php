@@ -586,6 +586,31 @@ function documentsSameParty($a, $b)
     return mb_strlen($first($ka)) >= 3 && $first($ka) === $first($kb);
 }
 
+/** "Zalando Polska sp. z o.o." -> "Zalando Polska" (a name without the legal form) */
+function documentsShortName($name)
+{
+    $short = preg_replace('/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.k\.|sp\.j\.|GmbH|Ltd\.?|LLC|Inc\.?|B\.V\.|AG|SE)\s*$/u', '', (string) $name);
+    return trim($short) ?: trim((string) $name);
+}
+
+/**
+ * Name of a collaboration made from a document: the brand first, then the agency
+ * ("Reserved – Agencja Gwiazd"); just the company when there is no separate brand.
+ */
+function documentsCollabName($brand, $counterparty)
+{
+    $brand = trim((string) $brand);
+    $party = documentsShortName($counterparty);
+    if ($brand === '') {
+        $name = $party;
+    } elseif ($party === '' || documentsSameParty($brand, $party)) {
+        $name = $brand;
+    } else {
+        $name = $brand . ' – ' . $party;
+    }
+    return mb_substr($name, 0, 100);
+}
+
 /** Collaboration details guessed from the document text (no external services). */
 function documentsCollabFields($text)
 {

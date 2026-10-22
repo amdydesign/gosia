@@ -39,6 +39,16 @@ function docDate(doc) {
     return doc.doc_date || doc.created_at?.slice(0, 10) || '';
 }
 
+/** Collaboration name from a document: "Marka – Agencja", or just the company (like the server). */
+function collabName(doc) {
+    const party = (doc.counterparty || '').replace(/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.[kj]\.|GmbH|Ltd\.?|LLC|Inc\.?|B\.V\.|AG|SE)\s*$/u, '').trim() || doc.counterparty || '';
+    const brand = (doc.brand || '').trim();
+    if (!brand) return party;
+    const firstWord = (s) => s.toLowerCase().split(/\s+/)[0];
+    if (!party || firstWord(party) === firstWord(brand)) return brand;
+    return `${brand} – ${party}`.slice(0, 100);
+}
+
 function formatDocDate(value) {
     const [y, m, d] = value.split('-').map(Number);
     if (!y || !m || !d) return '';
@@ -881,7 +891,7 @@ export default function Documents() {
             onCreateCollab={(doc) =>
                 createCollabFrom(
                     {
-                        brand: doc.brand || (doc.counterparty || '').replace(/\s*(sp\. z o\.o\.( sp\.k\.)?|S\.A\.|sp\.[kj]\.)\s*$/u, '') || doc.counterparty,
+                        brand: collabName(doc),
                         amount_gross: doc.amount || '',
                         date: doc.doc_date || undefined,
                         collab_type: doc.billing && doc.billing !== 'umowa_praca' ? doc.billing : undefined,

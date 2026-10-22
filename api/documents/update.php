@@ -93,6 +93,24 @@ try {
     $stmt = $conn->prepare("UPDATE documents SET " . implode(', ', $fields) . " WHERE id = :id AND user_id = :user_id");
     $stmt->execute($params);
 
+    // Brand added to a document already in a collaboration: the brand goes to the front of its name
+    if (!empty($params['brand'])) {
+        $stmt = $conn->prepare("
+            SELECT c.id, c.brand, d.counterparty FROM documents d
+            JOIN collaborations c ON c.id = d.collaboration_id AND c.user_id = d.user_id
+            WHERE d.id = :id AND d.user_id = :user_id
+        ");
+        $stmt->execute(['id' => $id, 'user_id' => $userId]);
+        $collab = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($collab && mb_strpos(documentsPartyKey($collab['brand']), documentsPartyKey($params['brand'])) !== 0) {
+            $conn->prepare("UPDATE collaborations SET brand = :brand WHERE id = :cid AND user_id = :user_id")->execute([
+                'brand' => documentsCollabName($params['brand'], $collab['counterparty'] ?: $collab['brand']),
+                'cid' => $collab['id'],
+                'user_id' => $userId,
+            ]);
+        }
+    }
+
     Response::success(null, 'Zapisano');
 
 } catch (Exception $e) {
