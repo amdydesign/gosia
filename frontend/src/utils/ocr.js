@@ -31,12 +31,27 @@ async function getWorker() {
     return workerPromise;
 }
 
+// Tesseract reads best at ~300 dpi: small pages (camera frames) are enlarged first
+const OCR_MIN_WIDTH = 2200;
+
+function enlargeForOcr(source) {
+    if (!(source instanceof HTMLCanvasElement) || source.width >= OCR_MIN_WIDTH) return source;
+    const factor = Math.min(2.5, OCR_MIN_WIDTH / source.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(source.width * factor);
+    canvas.height = Math.round(source.height * factor);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return canvas;
+}
+
 /** OCR one image (canvas, Blob or File). onProgress(0..1) is optional. */
 export async function ocrImage(source, onProgress) {
     const worker = await getWorker();
     progressListener = onProgress || null;
     try {
-        const { data } = await worker.recognize(source);
+        const { data } = await worker.recognize(enlargeForOcr(source));
         return (data.text || '').trim();
     } finally {
         progressListener = null;

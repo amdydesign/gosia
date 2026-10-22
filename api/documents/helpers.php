@@ -37,6 +37,7 @@ const DOCUMENTS_LATE_COLUMNS = [
     'status' => "ALTER TABLE documents ADD COLUMN status ENUM('signed', 'to_sign') NOT NULL DEFAULT 'signed'",
     'doc_date' => "ALTER TABLE documents ADD COLUMN doc_date DATE NULL",
     'counterparty' => "ALTER TABLE documents ADD COLUMN counterparty VARCHAR(255) NULL",
+    'analyzed_at' => "ALTER TABLE documents ADD COLUMN analyzed_at TIMESTAMP NULL DEFAULT NULL",
 ];
 
 /**
@@ -204,7 +205,7 @@ function documentsTitleFromFileName($fileName)
  */
 function documentsTitleFromText($text)
 {
-    $kinds = 'umowa|aneks|porozumienie|oświadczenie|oswiadczenie|faktura|zlecenie|pełnomocnictwo|pelnomocnictwo|regulamin|oferta|licencja|nda|non-disclosure|zamówienie|zamowienie|protokół|protokol|brief';
+    $kinds = 'umowa|aneks|porozumienie|kwestionariusz|formularz|wniosek|deklaracja|zaświadczenie|zaswiadczenie|potwierdzenie|certyfikat|rachunek|nota|oświadczenie|oswiadczenie|faktura|zlecenie|pełnomocnictwo|pelnomocnictwo|regulamin|oferta|licencja|nda|non-disclosure|zamówienie|zamowienie|protokół|protokol|brief';
     $lines = array_slice(preg_split('/\n+/u', (string) $text), 0, 25);
     foreach ($lines as $line) {
         $line = trim(preg_replace('/\s+/u', ' ', $line));
@@ -226,17 +227,23 @@ function documentsTitleFromText($text)
 
 /**
  * Date of the document from its text (Y-m-d) or null.
- * Prefers a date right after "zawarta w dniu", "z dnia", "dnia", "data"; otherwise the first date.
+ * Only dates that clearly describe the document are used, in this order:
+ *   1. "zawarta / podpisana w dniu ...", "sporządzona dnia ..."
+ *   2. "Kraków, 14.10.2026" - place and date, how documents are signed
+ *   3. "z dnia ...", "dnia ...", "data: ..." - except birth dates, payment
+ *      deadlines and validity dates
+ * No date is better than a wrong one: random dates in the text are ignored.
  */
 function documentsDateFromText($text)
 {
-    $text = mb_substr((string) $text, 0, 5000);
+    $text = mb_substr((string) $text, 0, 12000);
     $months = [
         'stycznia' => 1, 'lutego' => 2, 'marca' => 3, 'kwietnia' => 4, 'maja' => 5, 'czerwca' => 6,
         'lipca' => 7, 'sierpnia' => 8, 'września' => 9, 'wrzesnia' => 9, 'października' => 10,
         'pazdziernika' => 10, 'listopada' => 11, 'grudnia' => 12,
     ];
-    $date = '(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})|(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\s+(' . implode('|', array_keys($months)) . ')\s+(\d{4})';
+    // OCR often adds spaces around the separators ("14. 10. 2026")
+    $date = '(\d{1,2})\s?[.\-\/]\s?(\d{1,2})\s?[.\-\/]\s?(\d{4})|(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\s+(' . implode('|', array_keys($months)) . ')\s+(\d{4})';
 
     $toYmd = function (array $m) use ($months) {
         if (!empty($m[3])) {
@@ -252,19 +259,32 @@ function documentsDateFromText($text)
         return sprintf('%04d-%02d-%02d', $y, $mo, $d);
     };
 
+    // Dates that describe something else than the document itself
+    $excluded = '/(urodz|p[lł]atno|termin|wa[zż]n|wyga[sś]|obowi[aą]zuje\s+do|do\s+dnia|nie\s+p[oó][zź]niej|zap[lł]at|wydan|PESEL)/iu';
+
     $patterns = [
-        '/(?:zawart[aey]|sporządzon[aey]|podpisan[aey])\s+(?:w\s+\S+\s+)?(?:w\s+dniu|dnia)\s*:?\s*(?:' . $date . ')/iu',
-        '/(?:z\s+dnia|w\s+dniu|dnia|data)\s*:?\s*(?:' . $date . ')/iu',
-        '/(?:' . $date . ')/iu',
+        '/(?:zawart[aey]|sporz[aą]dzon[aey]|podpisan[aey])[^\n\d]{0,40}?(?:w\s+dniu|dnia|dn\.)\s*:?\s*(?:' . $date . ')/iu',
+        '/(?:^|\n)[^\S\n]*[\p{Lu}][\p{L}\-]{2,}(?:[^\S\n]+[\p{Lu}][\p{L}\-]+)?[^\S\n]*,[^\S\n]*(?:dnia[^\S\n]*|dn\.[^\S\n]*)?(?:' . $date . ')/u',
+        '/(?:z\s+dnia|w\s+dniu|dnia|data(?:\s+(?:wystawienia|zawarcia|podpisania|sporz[aą]dzenia|dokumentu))?)\s*:?\s*(?:' . $date . ')/iu',
     ];
     foreach ($patterns as $pattern) {
-        if (preg_match_all($pattern, $text, $all, PREG_SET_ORDER)) {
-            foreach ($all as $m) {
-                // the keyword patterns capture the date groups after group 0
-                $ymd = $toYmd($m);
-                if ($ymd !== null) {
-                    return $ymd;
-                }
+        if (!preg_match_all($pattern, $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            continue;
+        }
+        foreach ($all as $match) {
+            // only the same line counts as context ("Data urodzenia" above must not block it)
+            $offset = $match[0][1] + strspn($match[0][0], "\n");
+            $lineStart = strrpos(substr($text, 0, $offset), "\n");
+            $before = substr($text, $lineStart === false ? 0 : $lineStart + 1, $offset - ($lineStart === false ? 0 : $lineStart + 1));
+            if (preg_match($excluded, $before . $match[0][0])) {
+                continue;
+            }
+            $groups = array_map(function ($g) {
+                return is_array($g) ? $g[0] : $g;
+            }, $match);
+            $ymd = $toYmd($groups);
+            if ($ymd !== null) {
+                return $ymd;
             }
         }
     }

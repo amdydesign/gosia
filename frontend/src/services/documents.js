@@ -39,6 +39,17 @@ export const documentsService = {
         return data.data;
     },
 
+    // OPTIONAL AI (Claude Haiku): fills name, counterparty, date, status, summary
+    analyze: (id) => apiRequest(`/documents/analyze.php?id=${id}`, 'POST'),
+
+    getText: (id) => apiRequest(`/documents/text.php?id=${id}`),
+
+    // Text read again in the browser (OCR); the server re-guesses date and counterparty
+    saveText: (id, contentText) => apiRequest(`/documents/text.php?id=${id}`, 'POST', { content_text: contentText }),
+
+    /** The stored file as a File object (for reading it again on the device). */
+    file: async (doc) => new File([await fetchFile(doc.id)], doc.original_name, { type: doc.mime_type }),
+
     update: (id, data) => apiRequest(`/documents/update.php?id=${id}`, 'PUT', data),
 
     delete: (id) => apiRequest(`/documents/delete.php?id=${id}`, 'DELETE'),

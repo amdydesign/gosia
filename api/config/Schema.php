@@ -42,6 +42,7 @@ class Schema
                 status ENUM('signed', 'to_sign') NOT NULL DEFAULT 'signed',
                 doc_date DATE NULL,
                 counterparty VARCHAR(255) NULL,
+                analyzed_at TIMESTAMP NULL DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

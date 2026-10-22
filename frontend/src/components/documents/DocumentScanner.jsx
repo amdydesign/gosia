@@ -3,8 +3,8 @@ import { X, Camera, RotateCw, Check, Trash2, Crop, Loader2, Zap, ZapOff, Images 
 import { loadPhoto, detectCorners, defaultCorners, warpPerspective, enhance, rotateCanvas, grabFrame } from '../../utils/scanner';
 
 const FILTERS = [
-    { value: 'scan', label: 'Skan' },
     { value: 'color', label: 'Kolor' },
+    { value: 'scan', label: 'Szary' },
     { value: 'original', label: 'Oryginał' },
 ];
 
@@ -180,8 +180,10 @@ function LiveCamera({ auto, onCapture, onFallback }) {
                 const diag = Math.hypot(video.videoWidth, video.videoHeight);
                 const still = found && prev && found.every((c, i) => Math.hypot(c.x - prev[i].x, c.y - prev[i].y) < diag * 0.02);
                 stableRef.current = found ? (still ? stableRef.current + 1 : 1) : 0;
-                quadRef.current = found;
-                setQuad(found);
+                // smooth the outline between frames so it does not jitter
+                const shown = found && still ? found.map((c, i) => ({ x: (c.x + prev[i].x) / 2, y: (c.y + prev[i].y) / 2 })) : found;
+                quadRef.current = shown;
+                setQuad(shown);
                 setStable(stableRef.current);
             }, DETECT_EVERY_MS);
         })();
@@ -256,7 +258,7 @@ export default function DocumentScanner({ onCancel, onDone }) {
     const [photo, setPhoto] = useState(null);
     const [corners, setCorners] = useState(null);
     const [warped, setWarped] = useState(null);
-    const [filter, setFilter] = useState('scan');
+    const [filter, setFilter] = useState('color');
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState('');
     const [cameraKey, setCameraKey] = useState(0);
