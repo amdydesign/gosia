@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Sparkles, Loader2, AlertCircle, X } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine } from 'lucide-react';
 import documentsService from '../../services/documents';
 import { extractPdfText } from '../../utils/pdfText';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
-import { useDashboard } from '../../context/DashboardContext';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import SearchInput from '../../components/ui/SearchInput';
@@ -72,21 +71,9 @@ function Highlight({ text, query }) {
     );
 }
 
-/** Text layer of a PDF for search; empty for other files or scans. */
-async function pdfTextOf(file) {
-    if (!/\.pdf$/i.test(file.name)) return '';
-    try {
-        return await extractPdfText(file);
-    } catch {
-        return '';
-    }
-}
-
-function UploadSheet({ open, onClose, onUploaded, aiEnabled, onAutoAdd }) {
+function UploadSheet({ open, onClose, onUploaded }) {
     const toast = useToast();
     const inputRef = useRef(null);
-    const autoInputRef = useRef(null);
-    const [manual, setManual] = useState(false);
     const [file, setFile] = useState(null);
     const [title, setTitle] = useState('');
     const [notes, setNotes] = useState('');
@@ -97,7 +84,6 @@ function UploadSheet({ open, onClose, onUploaded, aiEnabled, onAutoAdd }) {
 
     useEffect(() => {
         if (open) {
-            setManual(false);
             setFile(null);
             setTitle('');
             setNotes('');
@@ -133,8 +119,15 @@ function UploadSheet({ open, onClose, onUploaded, aiEnabled, onAutoAdd }) {
         }
         setError('');
         try {
-            setStatus('Odczytuję tekst…');
-            const contentText = await pdfTextOf(file);
+            let contentText = '';
+            if (/\.pdf$/i.test(file.name)) {
+                setStatus('Odczytuję tekst z PDF…');
+                try {
+                    contentText = await extractPdfText(file);
+                } catch {
+                    contentText = '';
+                }
+            }
             setStatus('Wysyłanie…');
             const result = await documentsService.upload({ file, title: title.trim(), notes, status: signStatus, docDate: date, contentText });
             toast.success(result?.has_text ? 'Dokument dodany — treść przeszukiwalna' : 'Dokument dodany');
@@ -148,42 +141,6 @@ function UploadSheet({ open, onClose, onUploaded, aiEnabled, onAutoAdd }) {
     };
 
     const busy = Boolean(status);
-
-    const pickAuto = (event) => {
-        const files = Array.from(event.target.files || []);
-        event.target.value = '';
-        const tooBig = files.filter((f) => f.size > MAX_SIZE);
-        if (tooBig.length) toast.error(`${tooBig.map((f) => f.name).join(', ')}: maksymalny rozmiar to 20 MB`);
-        const ok = files.filter((f) => f.size <= MAX_SIZE);
-        if (!ok.length) return;
-        onClose();
-        onAutoAdd(ok);
-    };
-
-    // Only the file is needed - AI fills in the name, date, status and summary
-    if (aiEnabled && !manual) {
-        return (
-            <Sheet open={open} onClose={onClose} title="Nowy dokument" description="Wrzuć plik — resztę uzupełni AI.">
-                <button
-                    type="button"
-                    onClick={() => autoInputRef.current?.click()}
-                    className="w-full rounded-2xl border-2 border-dashed border-primary-200 hover:border-primary-400 bg-primary-50/40 px-4 py-8 text-center transition-colors"
-                >
-                    <Sparkles size={26} className="mx-auto text-primary-500 mb-2" />
-                    <div className="text-[15px] font-bold text-ink">Wybierz pliki</div>
-                    <div className="text-xs text-ink-muted mt-1">PDF, Word, zdjęcie · do 20 MB · można kilka naraz</div>
-                </button>
-                <input ref={autoInputRef} type="file" accept={ACCEPT} onChange={pickAuto} className="hidden" multiple />
-                <p className="text-xs text-ink-muted mt-3 leading-relaxed">
-                    AI (Claude Haiku) przeczyta dokument i ustawi nazwę, datę, status „Podpisane / Do podpisu” i krótkie streszczenie.
-                    Skany też staną się przeszukiwalne. Wszystko możesz potem poprawić.
-                </p>
-                <button type="button" onClick={() => setManual(true)} className="mt-3 text-sm font-semibold text-primary-700 hover:text-primary-800">
-                    Wolę wpisać dane sama →
-                </button>
-            </Sheet>
-        );
-    }
 
     return (
         <Sheet
@@ -328,13 +285,7 @@ export default function Documents() {
     const [filter, setFilter] = useState('all');
     const [sort, setSort] = useState('date_desc');
     const [year, setYear] = useState('all');
-    const [processing, setProcessing] = useState([]); // files being uploaded / read by AI
-    const [analyzing, setAnalyzing] = useState({}); // doc id -> true while AI re-reads it
-    const { data: dashboard } = useDashboard();
-    const aiEnabled = Boolean(dashboard?.ai?.documents);
     const requestId = useRef(0);
-    const queryRef = useRef(query);
-    queryRef.current = query;
 
     const load = useCallback(async (q) => {
         const id = ++requestId.current;
@@ -393,51 +344,6 @@ export default function Documents() {
         } catch (err) {
             setDocs((prev) => prev.map((d) => (d.id === doc.id ? { ...d, status: doc.status } : d)));
             toast.error(err.message || 'Nie udało się zmienić statusu');
-        }
-    };
-
-    const setStage = (key, patch) => setProcessing((prev) => prev.map((p) => (p.key === key ? { ...p, ...patch } : p)));
-
-    // Upload each file, then let AI fill in its details. Files go one by one to keep the server light.
-    const autoAdd = async (files) => {
-        const items = files.map((file, i) => ({ key: `${Date.now()}-${i}`, name: file.name, stage: 'upload', file }));
-        setProcessing((prev) => [...items.map(({ key, name, stage }) => ({ key, name, stage })), ...prev]);
-        let done = 0;
-        for (const item of items) {
-            let uploaded = null;
-            try {
-                const contentText = await pdfTextOf(item.file);
-                uploaded = await documentsService.upload({ file: item.file, title: baseName(item.name), contentText });
-                load(queryRef.current);
-                setStage(item.key, { stage: 'ai' });
-                await documentsService.analyze(uploaded.id);
-                setProcessing((prev) => prev.filter((p) => p.key !== item.key));
-                done += 1;
-            } catch (err) {
-                setStage(item.key, {
-                    stage: 'error',
-                    error: uploaded ? `Plik zapisany, ale AI go nie odczytało: ${err.message}` : err.message || 'Nie udało się dodać pliku',
-                });
-            }
-            load(queryRef.current);
-        }
-        if (done) toast.success(done === 1 ? 'Dokument dodany i rozpoznany ✨' : `Dodano i rozpoznano ${done} dokumenty ✨`);
-    };
-
-    const reanalyze = async (doc) => {
-        setAnalyzing((prev) => ({ ...prev, [doc.id]: true }));
-        try {
-            const updated = await documentsService.analyze(doc.id);
-            setDocs((prev) => prev.map((d) => (d.id === doc.id ? { ...d, ...updated } : d)));
-            toast.success('Dane uzupełnione przez AI ✨');
-        } catch (err) {
-            toast.error(err.message || 'AI nie odczytało dokumentu');
-        } finally {
-            setAnalyzing((prev) => {
-                const next = { ...prev };
-                delete next[doc.id];
-                return next;
-            });
         }
     };
 
@@ -513,29 +419,6 @@ export default function Documents() {
                 </div>
             </PageHeader>
 
-            {processing.length > 0 && (
-                <div className="card divide-y divide-line overflow-hidden mb-3">
-                    {processing.map((p) => (
-                        <div key={p.key} className="flex items-center gap-3 px-4 sm:px-5 py-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${p.stage === 'error' ? 'bg-red-50 text-red-600' : 'bg-primary-50 text-primary-600'}`}>
-                                {p.stage === 'error' ? <AlertCircle size={19} /> : <Loader2 size={19} className="animate-spin" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-sm font-semibold text-ink truncate">{p.name}</div>
-                                <div className={`text-xs ${p.stage === 'error' ? 'text-red-700' : 'text-ink-muted'}`}>
-                                    {p.stage === 'upload' ? 'Wysyłanie…' : p.stage === 'ai' ? 'AI czyta dokument…' : p.error}
-                                </div>
-                            </div>
-                            {p.stage === 'error' && (
-                                <button type="button" onClick={() => setProcessing((prev) => prev.filter((x) => x.key !== p.key))} className="p-2 text-ink-muted hover:bg-black/5 rounded-lg" aria-label="Ukryj">
-                                    <X size={16} />
-                                </button>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-
             {loading ? (
                 <div className="space-y-3">
                     {[0, 1, 2].map((i) => <CardSkeleton key={i} className="h-20" />)}
@@ -600,18 +483,6 @@ export default function Documents() {
                                     ) : null}
                                 </button>
                                 <div className="flex items-center shrink-0 -mr-2">
-                                    {aiEnabled && (
-                                        <button
-                                            type="button"
-                                            onClick={() => reanalyze(doc)}
-                                            disabled={Boolean(analyzing[doc.id])}
-                                            className="p-2 text-ink-muted hover:text-primary-700 hover:bg-primary-50 rounded-lg disabled:opacity-60"
-                                            title="Uzupełnij dane z AI"
-                                            aria-label="Uzupełnij dane z AI"
-                                        >
-                                            {analyzing[doc.id] ? <Loader2 size={17} className="animate-spin text-primary-600" /> : <Sparkles size={17} />}
-                                        </button>
-                                    )}
                                     {PREVIEW_TYPES.includes(doc.mime_type) && (
                                         <button type="button" onClick={() => handleOpen(doc)} className="hidden sm:inline-flex p-2 text-ink-muted hover:text-primary-700 hover:bg-primary-50 rounded-lg" title="Podgląd" aria-label="Podgląd">
                                             <Eye size={17} />
@@ -640,7 +511,7 @@ export default function Documents() {
             )}
         </div>
 
-        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={() => load(query)} aiEnabled={aiEnabled} onAutoAdd={autoAdd} />
+        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={() => load(query)} />
         <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={() => load(query)} />
         </>
     );

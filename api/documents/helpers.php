@@ -40,7 +40,6 @@ function documentsEnsureSchema(PDO $conn)
     Schema::ensure($conn, 'documents');
     Schema::ensureColumn($conn, 'documents', 'status');
     Schema::ensureColumn($conn, 'documents', 'doc_date');
-    Schema::ensureColumn($conn, 'documents', 'analyzed_at');
 }
 
 /**

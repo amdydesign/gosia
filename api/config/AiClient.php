@@ -20,8 +20,6 @@ class AiClient
     const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
     const CLAUDE_MODEL = 'claude-sonnet-5-5';
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
-    // Contracts are read by the cheap Haiku (ANTHROPIC_DOCS_MODEL overrides it)
-    const CLAUDE_DOCS_MODEL = 'claude-haiku-5-5';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
     const GEMINI_MODEL = 'gemini-flash-latest';
     const TIMEOUT = 90;
@@ -93,41 +91,14 @@ class AiClient
         throw new RuntimeException('Rozpoznawanie screenów jest wyłączone - brak klucza AI na serwerze.');
     }
 
-    /**
-     * Read a document (contract) with Claude only - documents may be under NDA,
-     * so they are never sent to Gemini (its free tier may train on inputs).
-     *
-     * @param array $parts [['media_type' => 'application/pdf'|'image/*', 'data' => '<base64>'] | ['text' => '...'], ...]
-     */
-    public static function extractDocument($prompt, array $parts, array $schema)
-    {
-        if (self::key('claude') === '') {
-            throw new RuntimeException('Rozpoznawanie dokumentów wymaga klucza Claude (Ustawienia -> Czytanie screenów).');
-        }
-        return self::extractWithClaude($prompt, $parts, $schema, [
-            'model' => trim($_ENV['ANTHROPIC_DOCS_MODEL'] ?? '') ?: self::CLAUDE_DOCS_MODEL,
-            'max_tokens' => 32000,
-            'timeout' => 240,
-        ]);
-    }
-
     // ---------------------------------------------------------------- Claude
 
-    /**
-     * @param array $images  image parts; a PDF (media_type application/pdf) becomes a document
-     *                       block and ['text' => ...] a text block
-     * @param array $options model, max_tokens (defaults: ANTHROPIC_MODEL / Sonnet, 16000)
-     */
-    public static function buildClaudeBody($prompt, array $images, array $schema, $withFallbacks = true, array $options = [])
+    public static function buildClaudeBody($prompt, array $images, array $schema, $withFallbacks = true)
     {
         $content = [];
         foreach ($images as $image) {
-            if (isset($image['text'])) {
-                $content[] = ['type' => 'text', 'text' => $image['text']];
-                continue;
-            }
             $content[] = [
-                'type' => $image['media_type'] === 'application/pdf' ? 'document' : 'image',
+                'type' => 'image',
                 'source' => [
                     'type' => 'base64',
                     'media_type' => $image['media_type'],
@@ -138,8 +109,8 @@ class AiClient
         $content[] = ['type' => 'text', 'text' => $prompt];
 
         $body = [
-            'model' => $options['model'] ?? (trim($_ENV['ANTHROPIC_MODEL'] ?? '') ?: self::CLAUDE_MODEL),
-            'max_tokens' => $options['max_tokens'] ?? 16000,
+            'model' => trim($_ENV['ANTHROPIC_MODEL'] ?? '') ?: self::CLAUDE_MODEL,
+            'max_tokens' => 16000,
             // Reading a screenshot is simple - low effort keeps it fast
             'output_config' => [
                 'effort' => 'low',
@@ -170,7 +141,7 @@ class AiClient
         throw new RuntimeException('AI nie zwróciło danych. Spróbuj ponownie.');
     }
 
-    private static function extractWithClaude($prompt, array $images, array $schema, array $options = [])
+    private static function extractWithClaude($prompt, array $images, array $schema)
     {
         $key = self::key('claude');
         $headers = [
@@ -178,24 +149,16 @@ class AiClient
             'x-api-key: ' . $key,
             'anthropic-version: 2023-06-01',
         ];
-        $timeout = $options['timeout'] ?? self::TIMEOUT;
 
-        // Haiku has no server-side refusal fallback - send the beta only for the default (Sonnet) model
-        $model = $options['model'] ?? null;
-        $withFallbacks = $model === null || strpos($model, 'haiku') === false;
-
-        if ($withFallbacks) {
-            [$status, $data] = self::post(
-                static::CLAUDE_URL,
-                array_merge($headers, ['anthropic-beta: ' . self::CLAUDE_FALLBACK_BETA]),
-                self::buildClaudeBody($prompt, $images, $schema, true, $options),
-                $timeout
-            );
-        }
+        [$status, $data] = self::post(
+            static::CLAUDE_URL,
+            array_merge($headers, ['anthropic-beta: ' . self::CLAUDE_FALLBACK_BETA]),
+            self::buildClaudeBody($prompt, $images, $schema, true)
+        );
 
         // The fallback beta is optional - if the API rejects it, retry once without it
-        if (!$withFallbacks || ($status === 400 && stripos(json_encode($data['error'] ?? []), 'fallback') !== false)) {
-            [$status, $data] = self::post(static::CLAUDE_URL, $headers, self::buildClaudeBody($prompt, $images, $schema, false, $options), $timeout);
+        if ($status === 400 && stripos(json_encode($data['error'] ?? []), 'fallback') !== false) {
+            [$status, $data] = self::post(static::CLAUDE_URL, $headers, self::buildClaudeBody($prompt, $images, $schema, false));
         }
 
         if ($status !== 200) {
@@ -327,7 +290,7 @@ class AiClient
 
     // ---------------------------------------------------------------- shared
 
-    private static function post($url, array $headers, array $body, $timeout = self::TIMEOUT)
+    private static function post($url, array $headers, array $body)
     {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -336,7 +299,7 @@ class AiClient
             CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 15,
-            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_TIMEOUT => self::TIMEOUT,
         ]);
         $raw = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);

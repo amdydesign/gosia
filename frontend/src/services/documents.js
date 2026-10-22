@@ -39,9 +39,6 @@ export const documentsService = {
         return data.data;
     },
 
-    // AI (Claude Haiku) reads the stored file and fills title, date, status and summary
-    analyze: (id) => apiRequest(`/documents/analyze.php?id=${id}`, 'POST'),
-
     update: (id, data) => apiRequest(`/documents/update.php?id=${id}`, 'PUT', data),
 
     delete: (id) => apiRequest(`/documents/delete.php?id=${id}`, 'DELETE'),
