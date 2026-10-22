@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Lock, Pencil, RotateCcw, Trash2, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Check, ChevronRight, Copy, FileText, Lock, Pencil, RotateCcw, Trash2, Loader2 } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Attachments from '../common/Attachments';
@@ -11,6 +12,8 @@ import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { formatCurrency, formatDateLong, getBillingLabel, getCollabTypeLabel, getTaxBreakdown } from '../../utils/format';
 import { daysWaiting, grossOf, isLate, isPaid, netOf, WAGE_TYPE } from '../../utils/collabs';
+
+const DOC_KINDS = { umowa: 'Umowa', rachunek: 'Rachunek', faktura: 'Faktura', inne: 'Dokument' };
 
 /**
  * Collaboration details with the actions that matter: paid / unpaid, team payouts,
@@ -210,6 +213,32 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     <div className="rounded-2xl bg-canvas border border-line px-4 py-3">
                         <div className="section-label mb-1">Notatka</div>
                         <p className="text-sm text-ink-soft whitespace-pre-line leading-relaxed">{collab.notes}</p>
+                    </div>
+                )}
+
+                {collab.documents?.length > 0 && (
+                    <div className="rounded-2xl border border-line overflow-hidden">
+                        <div className="px-4 py-2.5 bg-canvas border-b border-line">
+                            <span className="section-label">Umowy i rachunki</span>
+                        </div>
+                        <div className="divide-y divide-line">
+                            {collab.documents.map((d) => (
+                                <Link
+                                    key={d.id}
+                                    to={`/documents?doc=${d.id}`}
+                                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-canvas transition-colors"
+                                >
+                                    <FileText size={16} className="text-primary-500 shrink-0" />
+                                    <span className="flex-1 min-w-0">
+                                        <span className="block text-sm font-semibold text-ink truncate">{d.title}</span>
+                                        <span className="block text-xs text-ink-muted">
+                                            {[DOC_KINDS[d.doc_kind], d.doc_date && formatDateLong(d.doc_date), d.status === 'to_sign' && 'do podpisu'].filter(Boolean).join(' · ')}
+                                        </span>
+                                    </span>
+                                    <ChevronRight size={16} className="text-ink-muted shrink-0" />
+                                </Link>
+                            ))}
+                        </div>
                     </div>
                 )}
 

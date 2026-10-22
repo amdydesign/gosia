@@ -453,13 +453,17 @@ export default function Documents() {
         return () => clearTimeout(timer);
     }, [query, load]);
 
-    // "+" button on mobile opens the upload sheet via ?add=1; Współprace links to ?suggestions=1
+    // "+" button on mobile opens the upload sheet via ?add=1; Współprace links to ?suggestions=1 and ?doc=ID
     useEffect(() => {
         if (searchParams.get('add') === '1') {
             setUploadOpen(true);
             navigate('/documents', { replace: true });
         } else if (searchParams.get('suggestions') === '1') {
             setSuggestionsOpen(true);
+            navigate('/documents', { replace: true });
+        } else if (Number(searchParams.get('doc')) > 0) {
+            // link from a collaboration: open that document's card
+            setSelectedId(Number(searchParams.get('doc')));
             navigate('/documents', { replace: true });
         }
     }, [searchParams, navigate]);
@@ -830,7 +834,7 @@ export default function Documents() {
         </div>
 
         <DocumentDetailSheet
-            doc={docs.find((d) => d.id === selectedId) || null}
+            doc={docs.find((d) => String(d.id) === String(selectedId)) || null}
             onClose={() => setSelectedId(null)}
             onPreview={handleOpen}
             onDownload={handleDownload}

@@ -44,6 +44,21 @@ try {
     $stmtTeam->execute(['collab_id' => $id]);
     $collab['team'] = $stmtTeam->fetchAll(PDO::FETCH_ASSOC);
 
+    // Contracts / bills from the document archive linked to this collaboration
+    $collab['documents'] = [];
+    try {
+        $stmtDocs = $conn->prepare("
+            SELECT id, title, doc_kind, doc_date, status
+            FROM documents
+            WHERE collaboration_id = :collab_id AND user_id = :user_id
+            ORDER BY COALESCE(doc_date, DATE(created_at)) ASC, id ASC
+        ");
+        $stmtDocs->execute(['collab_id' => $id, 'user_id' => $userId]);
+        $collab['documents'] = $stmtDocs->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // archive not set up yet (no documents table / column) - nothing linked
+    }
+
     Response::success($collab);
 
 } catch (Exception $e) {
