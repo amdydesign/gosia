@@ -38,7 +38,7 @@ function Row({ icon, label, children }) {
 /**
  * Document card: first-page thumbnail, summary and all actions in one place.
  */
-export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onCreateCollab, onUnlinkCollab }) {
+export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onFilterBrand, onCreateCollab, onUnlinkCollab }) {
     const toast = useToast();
     const navigate = useNavigate();
     const [thumb, setThumb] = useState({ loading: true, data: null });
@@ -104,10 +104,15 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                     </button>
                     <div className="min-w-0 flex-1 space-y-2">
                         {doc.brand && (
-                            <div className="flex items-center gap-1.5 text-sm font-bold text-primary-700">
+                            <button
+                                type="button"
+                                onClick={() => onFilterBrand(doc)}
+                                className="flex items-center gap-1.5 text-sm font-bold text-primary-700 text-left"
+                                title="Pokaż wszystkie dokumenty tej marki"
+                            >
                                 <Tag size={14} className="shrink-0" />
-                                <span className="break-words">{doc.brand}</span>
-                            </div>
+                                <span className="break-words underline decoration-dotted underline-offset-2">{doc.brand}</span>
+                            </button>
                         )}
                         {doc.counterparty && (
                             <button

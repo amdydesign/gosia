@@ -347,6 +347,7 @@ export default function Documents() {
     const [sort, setSort] = useState('date_desc');
     const [year, setYear] = useState('all');
     const [counterparty, setCounterparty] = useState('all');
+    const [brandFilter, setBrandFilter] = useState('all');
     const [uploads, setUploads] = useState([]); // files on their way to the server
     const [dragging, setDragging] = useState(false);
     const [scan, setScan] = useState(null); // { status, ai } while the scanner is open
@@ -505,15 +506,29 @@ export default function Documents() {
         return [...byKey.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pl'));
     }, [docs]);
 
-    // Year and counterparty filters first, so the status counts match what the list can show
+    // Brands with document counts; "Reserved" and "reserved" are one brand
+    const brandOptions = useMemo(() => {
+        const byKey = new Map();
+        for (const d of docs) {
+            const name = (d.brand || '').trim();
+            if (!name) continue;
+            const entry = byKey.get(name.toLowerCase()) || { key: name.toLowerCase(), name, count: 0 };
+            entry.count += 1;
+            byKey.set(entry.key, entry);
+        }
+        return [...byKey.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pl'));
+    }, [docs]);
+
+    // Year, counterparty and brand filters first, so the status counts match what the list can show
     const inYear = useMemo(
         () =>
             docs.filter(
                 (d) =>
                     (year === 'all' || docDate(d).startsWith(year)) &&
-                    (counterparty === 'all' || (counterparty === 'none' ? !d.counterparty : (d.counterparty_key || d.counterparty) === counterparty))
+                    (counterparty === 'all' || (counterparty === 'none' ? !d.counterparty : (d.counterparty_key || d.counterparty) === counterparty)) &&
+                    (brandFilter === 'all' || (brandFilter === 'none' ? !(d.brand || '').trim() : (d.brand || '').trim().toLowerCase() === brandFilter))
             ),
-        [docs, year, counterparty]
+        [docs, year, counterparty, brandFilter]
     );
 
     const counts = useMemo(
@@ -715,8 +730,8 @@ export default function Documents() {
                             </option>
                         ))}
                     </select>
-                    <select value={counterparty} onChange={(e) => setCounterparty(e.target.value)} className="input !py-2 !rounded-xl col-span-2 order-last sm:order-none min-w-0 sm:w-60" aria-label="Kontrahent">
-                        <option value="all">Wszyscy kontrahenci</option>
+                    <select value={counterparty} onChange={(e) => setCounterparty(e.target.value)} className={`input !py-2 !rounded-xl order-last sm:order-none min-w-0 sm:w-56 ${brandOptions.length || brandFilter !== 'all' ? '' : 'col-span-2'}`} aria-label="Kontrahent">
+                        <option value="all">Kontrahenci</option>
                         {counterparties.map((c) => (
                             <option key={c.key} value={c.key}>
                                 {c.name} ({c.count})
@@ -724,6 +739,17 @@ export default function Documents() {
                         ))}
                         <option value="none">Bez kontrahenta</option>
                     </select>
+                    {(brandOptions.length > 0 || brandFilter !== 'all') && (
+                        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="input !py-2 !rounded-xl order-last sm:order-none min-w-0 sm:w-48" aria-label="Marka">
+                            <option value="all">Marki</option>
+                            {brandOptions.map((b) => (
+                                <option key={b.key} value={b.key}>
+                                    {b.name} ({b.count})
+                                </option>
+                            ))}
+                            <option value="none">Bez marki</option>
+                        </select>
+                    )}
                     <select value={year} onChange={(e) => setYear(e.target.value)} className="input !py-2 !rounded-xl min-w-0 sm:w-40" aria-label="Rok">
                         <option value="all">Wszystkie lata</option>
                         {years.map((y) => (
@@ -799,7 +825,7 @@ export default function Documents() {
                     <EmptyState
                         icon={FolderLock}
                         title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : filter === 'signed' ? 'Brak podpisanych dokumentów' : 'Brak dokumentów dla tych filtrów') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
-                        text={docs.length > 0 ? 'Zmień filtr, rok lub kontrahenta, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę — wystarczy wybrać plik (na komputerze możesz go też przeciągnąć tutaj).'}
+                        text={docs.length > 0 ? 'Zmień filtr, rok, kontrahenta lub markę, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę — wystarczy wybrać plik (na komputerze możesz go też przeciągnąć tutaj).'}
                         action={!query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
                     />
                 </div>
@@ -887,6 +913,10 @@ export default function Documents() {
             onFilterCounterparty={(doc) => {
                 setSelectedId(null);
                 setCounterparty(doc.counterparty_key || doc.counterparty);
+            }}
+            onFilterBrand={(doc) => {
+                setSelectedId(null);
+                setBrandFilter((doc.brand || '').trim().toLowerCase());
             }}
             onCreateCollab={(doc) =>
                 createCollabFrom(
