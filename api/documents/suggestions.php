@@ -4,9 +4,10 @@
  * GET /api/documents/suggestions.php
  *
  * Documents not yet linked to a collaboration, with a counterparty and a gross amount,
- * are grouped so a contract and its bill (both carry the amount) become ONE suggestion:
- * same company (legal form spelling ignored), same amount (±1 zł), dates within 120 days.
- * At most one contract and one bill per group - several contracts are separate jobs.
+ * are grouped into jobs - same company (legal form spelling ignored) and amount (±1 zł):
+ *  - documents dated within 7 days of each other are one job (contract, annex, bill… -> 5000, not 3x 5000);
+ *  - a later bill / invoice (up to 120 days) joins a contract that has no bill yet, and vice versa;
+ *  - another contract weeks later is a NEW job with the same company, not a duplicate.
  * Each group either matches an existing collaboration (same brand, amount and a close
  * date) -> action "link", or becomes a prefilled new one -> action "create".
  */
@@ -24,13 +25,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 const SUGGEST_MAX_DAYS = 120;
 const SUGGEST_AMOUNT_TOLERANCE = 1.0;
+const SUGGEST_SAME_JOB_DAYS = 7;
 
 function suggestDays($a, $b)
 {
     return abs((strtotime($a) - strtotime($b)) / 86400);
 }
 
-/** Which half of a "contract + bill" pair a document is; null = unknown kind (never paired) */
+/** Which half of a "contract + bill" pair a document is; null = unknown kind */
 function suggestSlot($kind)
 {
     if ($kind === 'umowa') {
@@ -74,40 +76,49 @@ try {
     $stmt->execute(['user_id' => $userId]);
     $collabs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // collaborations that already have their contract / bill attached (a second contract is a new job)
+    // contracts / bills already attached to collaborations, with their dates:
+    // a collaboration whose contract is from weeks earlier must not swallow a new contract
     $stmt = $conn->prepare("
-        SELECT collaboration_id, doc_kind FROM documents
+        SELECT collaboration_id, doc_kind, COALESCE(doc_date, DATE(created_at)) AS day FROM documents
         WHERE user_id = :user_id AND collaboration_id IS NOT NULL AND doc_kind IN ('umowa', 'rachunek', 'faktura')
     ");
     $stmt->execute(['user_id' => $userId]);
     $taken = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $taken[(int) $row['collaboration_id']][suggestSlot($row['doc_kind'])] = true;
+        $taken[(int) $row['collaboration_id']][suggestSlot($row['doc_kind'])][] = $row['day'];
     }
 
-    // Group documents that describe the same job: ONE contract + its ONE bill / invoice.
-    // Every other document stays on its own - several contracts (even with the same
-    // company and amount) are separate jobs, never merged into one collaboration.
+    // Group documents that describe the same job (see the rules at the top)
     $groups = [];
     foreach ($docs as $doc) {
         $doc['amount'] = (float) $doc['amount'];
         $doc['counterparty'] = documentsNormalizeCounterparty($doc['counterparty']);
         $slot = suggestSlot($doc['doc_kind']);
-        $placed = false;
-        foreach ($groups as &$group) {
-            if ($slot !== null && !isset($group['slots'][$slot]) && count($group['documents']) === 1
-                && suggestSlot($group['documents'][0]['doc_kind']) !== null
-                && documentsSameParty($group['counterparty'], $doc['counterparty'])
-                && abs($group['amount'] - $doc['amount']) <= SUGGEST_AMOUNT_TOLERANCE
-                && suggestDays($group['day'], $doc['day']) <= SUGGEST_MAX_DAYS) {
-                $group['documents'][] = $doc;
-                $group['slots'][$slot] = true;
-                $placed = true;
-                break;
+        $other = $slot === 'bill' ? 'contract' : ($slot === 'contract' ? 'bill' : null);
+        $best = null; // the closest job: dated within a week first, then a contract / bill pair
+        $bestScore = null;
+        foreach ($groups as $i => $group) {
+            if (!documentsSameParty($group['counterparty'], $doc['counterparty'])
+                || abs($group['amount'] - $doc['amount']) > SUGGEST_AMOUNT_TOLERANCE) {
+                continue;
+            }
+            $days = suggestDays($group['day'], $doc['day']);
+            $pairs = $other && $days <= SUGGEST_MAX_DAYS && isset($group['slots'][$other]) && !isset($group['slots'][$slot]);
+            if ($days > SUGGEST_SAME_JOB_DAYS && !$pairs) {
+                continue;
+            }
+            $score = ($days <= SUGGEST_SAME_JOB_DAYS ? 0 : 1000) + $days;
+            if ($bestScore === null || $score < $bestScore) {
+                $best = $i;
+                $bestScore = $score;
             }
         }
-        unset($group);
-        if (!$placed) {
+        if ($best !== null) {
+            $groups[$best]['documents'][] = $doc;
+            if ($slot !== null) {
+                $groups[$best]['slots'][$slot] = true;
+            }
+        } else {
             $groups[] = [
                 'counterparty' => $doc['counterparty'],
                 'amount' => $doc['amount'],
@@ -141,9 +152,12 @@ try {
                 continue;
             }
             $known = $known ?: $collab;
+            // busy = it already has a contract / bill from a different job (dated more than a week apart)
             $busy = false;
             foreach (array_keys($group['slots']) as $slot) {
-                $busy = $busy || isset($taken[(int) $collab['id']][$slot]);
+                foreach ($taken[(int) $collab['id']][$slot] ?? [] as $linkedDay) {
+                    $busy = $busy || suggestDays($linkedDay, $day) > SUGGEST_SAME_JOB_DAYS;
+                }
             }
             if (!$busy && abs((float) $collab['amount_gross'] - $group['amount']) <= SUGGEST_AMOUNT_TOLERANCE
                 && suggestDays($collab['date'], $day) <= SUGGEST_MAX_DAYS
@@ -155,7 +169,7 @@ try {
         if ($match) {
             // the next contract with the same brand and amount must not claim this one too
             foreach (array_keys($group['slots']) as $slot) {
-                $taken[(int) $match['id']][$slot] = true;
+                $taken[(int) $match['id']][$slot][] = $day;
             }
         }
 
