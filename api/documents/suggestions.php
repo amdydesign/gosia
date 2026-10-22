@@ -102,12 +102,12 @@ try {
 
         // An existing collaboration for the same job? (avoids duplicates)
         $match = null;
-        $knownBrand = null;
+        $known = null; // most recent collaboration with this brand ("jak ostatnio")
         foreach ($collabs as $collab) {
             if (!documentsSameParty($collab['brand'], $group['counterparty'])) {
                 continue;
             }
-            $knownBrand = $knownBrand ?: $collab['brand'];
+            $known = $known ?: $collab;
             if (abs((float) $collab['amount_gross'] - $group['amount']) <= SUGGEST_AMOUNT_TOLERANCE
                 && suggestDays($collab['date'], $day) <= SUGGEST_MAX_DAYS
                 && (!$match || suggestDays($collab['date'], $day) < suggestDays($match['date'], $day))) {
@@ -137,10 +137,12 @@ try {
             ] : null,
             'prefill' => $match ? null : [
                 // reuse the brand spelling already used in collaborations ("reszta jak ostatnio")
-                'brand' => $knownBrand ?: suggestBrand($group['counterparty']),
+                'brand' => $known ? $known['brand'] : suggestBrand($group['counterparty']),
                 'amount_gross' => $group['amount'],
                 'date' => $day,
-                'collab_type' => $billing && $billing !== 'umowa_praca' ? $billing : null,
+                // from the contract, else as last time with this brand, else UoD 50%
+                'collab_type' => $billing && $billing !== 'umowa_praca' ? $billing : (($known['collab_type'] ?? null) ?: 'umowa_50'),
+                'type' => ($known['type'] ?? null) ?: 'inne',
                 'notes' => 'Z dokumentów: ' . implode(', ', $titles),
             ],
         ];

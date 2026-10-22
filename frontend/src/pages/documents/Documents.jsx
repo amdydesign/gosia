@@ -12,6 +12,8 @@ import { forgetThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useDashboard } from '../../context/DashboardContext';
+import { apiRequest } from '../../utils/api';
+import { formatCurrency, getTaxBreakdown, getTodayDate } from '../../utils/format';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import SearchInput from '../../components/ui/SearchInput';
@@ -322,7 +324,7 @@ export default function Documents() {
     const [selectedId, setSelectedId] = useState(null); // document card
     const [suggestions, setSuggestions] = useState([]);
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
-    const { openCollab } = useQuickActions();
+    const { openCollab, bump } = useQuickActions();
     const [filter, setFilter] = useState('all');
     const [sort, setSort] = useState('date_desc');
     const [year, setYear] = useState('all');
@@ -330,7 +332,7 @@ export default function Documents() {
     const [uploads, setUploads] = useState([]); // files on their way to the server
     const [dragging, setDragging] = useState(false);
     const [scan, setScan] = useState(null); // { status, ai } while the scanner is open
-    const { data: dashboard } = useDashboard();
+    const { data: dashboard, refresh: refreshDashboard } = useDashboard();
     const aiAvailable = Boolean(dashboard?.ai?.documents);
     const requestId = useRef(0);
     const queryRef = useRef(query);
@@ -367,23 +369,53 @@ export default function Documents() {
         loadSuggestions();
     };
 
-    // Confirmed in the collaboration form -> then the documents get linked to it
-    const createCollabFrom = (prefill, documentIds) => {
+    // One tap: the collaboration is saved straight from the contract / bill data and the
+    // documents are linked to it; "Edytuj" in the toast opens it for corrections.
+    // Without an amount there is nothing sensible to save, so the form opens instead.
+    const createCollabFrom = async (prefill, documentIds) => {
         setSuggestionsOpen(false);
         setSelectedId(null);
-        openCollab({
-            prefill,
-            onSaved: async (id) => {
-                if (!id) return;
-                try {
-                    await documentsService.linkCollab(documentIds, id);
-                    toast.success('Współpraca dodana i połączona z dokumentami');
-                } catch (err) {
-                    toast.error(err.message || 'Nie udało się połączyć dokumentów');
-                }
-                refreshAll();
-            },
-        });
+        const amount = Number(prefill.amount_gross) || 0;
+        const brand = (prefill.brand || '').trim();
+
+        if (!brand || amount <= 0) {
+            openCollab({
+                prefill,
+                onSaved: async (id) => {
+                    if (!id) return;
+                    await documentsService.linkCollab(documentIds, id).catch(() => {});
+                    refreshAll();
+                },
+            });
+            return;
+        }
+
+        const collabType = prefill.collab_type || 'umowa_50';
+        const breakdown = getTaxBreakdown(amount, collabType);
+        try {
+            const created = await apiRequest('/collaborations/create.php', 'POST', {
+                brand,
+                type: prefill.type || 'inne',
+                collab_type: collabType,
+                fiscal_tracking: collabType !== 'gotowka',
+                amount_gross: amount,
+                amount_net: Math.round(breakdown.net * 100) / 100,
+                date: prefill.date || getTodayDate(),
+                payment_status: 'pending',
+                notes: prefill.notes || '',
+                team: [],
+            });
+            await documentsService.linkCollab(documentIds, created.id);
+            bump('collaborations');
+            refreshDashboard();
+            toast.success(`Dodano współpracę: ${brand} · ${formatCurrency(amount)}`, {
+                duration: 7000,
+                action: { label: 'Edytuj', onClick: () => openCollab({ id: created.id }) },
+            });
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się utworzyć współpracy');
+        }
+        refreshAll();
     };
 
     const linkSuggestion = async (s) => {
