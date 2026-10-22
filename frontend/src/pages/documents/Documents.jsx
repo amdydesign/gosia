@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X } from 'lucide-react';
 import documentsService from '../../services/documents';
 import { extractPdfText } from '../../utils/pdfText';
 import { useToast } from '../../context/ToastContext';
@@ -47,10 +47,6 @@ function formatSize(bytes) {
     return bytes + ' B';
 }
 
-function baseName(fileName) {
-    return fileName.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
-}
-
 function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -71,134 +67,62 @@ function Highlight({ text, query }) {
     );
 }
 
-function UploadSheet({ open, onClose, onUploaded }) {
-    const toast = useToast();
+/** Text layer of a PDF for search; empty for other files or scans. */
+async function pdfTextOf(file) {
+    if (!/\.pdf$/i.test(file.name)) return '';
+    try {
+        return await extractPdfText(file);
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Upload is one step: pick the files and they go up right away.
+ * Name and date are taken from the file name / document text on the server.
+ */
+function UploadSheet({ open, onClose, onPick }) {
     const inputRef = useRef(null);
-    const [file, setFile] = useState(null);
-    const [title, setTitle] = useState('');
-    const [notes, setNotes] = useState('');
-    const [signStatus, setSignStatus] = useState('signed');
-    const [date, setDate] = useState('');
-    const [status, setStatus] = useState('');
-    const [error, setError] = useState('');
+    const [status, setStatus] = useState('signed');
 
-    useEffect(() => {
-        if (open) {
-            setFile(null);
-            setTitle('');
-            setNotes('');
-            setSignStatus('signed');
-            setDate('');
-            setStatus('');
-            setError('');
-        }
-    }, [open]);
+    const choose = (value) => {
+        setStatus(value);
+        inputRef.current?.click();
+    };
 
-    const pickFile = (event) => {
-        const picked = event.target.files?.[0];
+    const picked = (event) => {
+        const files = Array.from(event.target.files || []);
         event.target.value = '';
-        if (!picked) return;
-        if (picked.size > MAX_SIZE) {
-            setError('Maksymalny rozmiar pliku to 20 MB');
-            return;
-        }
-        setError('');
-        setFile(picked);
-        if (!title.trim()) setTitle(baseName(picked.name));
+        if (!files.length) return;
+        onClose();
+        onPick(files, status);
     };
-
-    const handleSubmit = async (event) => {
-        event.preventDefault();
-        if (!file) {
-            setError('Wybierz plik');
-            return;
-        }
-        if (!title.trim()) {
-            setError('Podaj nazwę dokumentu');
-            return;
-        }
-        setError('');
-        try {
-            let contentText = '';
-            if (/\.pdf$/i.test(file.name)) {
-                setStatus('Odczytuję tekst z PDF…');
-                try {
-                    contentText = await extractPdfText(file);
-                } catch {
-                    contentText = '';
-                }
-            }
-            setStatus('Wysyłanie…');
-            const result = await documentsService.upload({ file, title: title.trim(), notes, status: signStatus, docDate: date, contentText });
-            toast.success(result?.has_text ? 'Dokument dodany — treść przeszukiwalna' : 'Dokument dodany');
-            onUploaded();
-            onClose();
-        } catch (err) {
-            setError(err.message || 'Nie udało się dodać dokumentu');
-        } finally {
-            setStatus('');
-        }
-    };
-
-    const busy = Boolean(status);
 
     return (
-        <Sheet
-            open={open}
-            onClose={busy ? undefined : onClose}
-            title="Nowy dokument"
-            description="Plik jest dostępny tylko po zalogowaniu."
-            footer={
-                <>
-                    <Button variant="ghost" onClick={onClose} disabled={busy} className="flex-1">
-                        Anuluj
-                    </Button>
-                    <Button variant="primary" type="submit" form="document-upload" loading={busy} icon={Upload} className="flex-1">
-                        {status || 'Dodaj'}
-                    </Button>
-                </>
-            }
-        >
-            <form id="document-upload" onSubmit={handleSubmit} className="space-y-4">
+        <Sheet open={open} onClose={onClose} title="Dodaj dokumenty" description="Wybierz pliki — można kilka naraz.">
+            <div className="grid grid-cols-2 gap-3">
                 <button
                     type="button"
-                    onClick={() => inputRef.current?.click()}
-                    disabled={busy}
-                    className="w-full rounded-2xl border-2 border-dashed border-line hover:border-primary-300 bg-canvas px-4 py-5 text-center transition-colors"
+                    onClick={() => choose('signed')}
+                    className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 hover:border-emerald-400 px-3 py-6 text-center transition-colors"
                 >
-                    {file ? (
-                        <>
-                            <div className="text-sm font-semibold text-ink truncate">{file.name}</div>
-                            <div className="text-xs text-ink-muted mt-0.5">{formatSize(file.size)} · kliknij, aby zmienić</div>
-                        </>
-                    ) : (
-                        <>
-                            <Upload size={22} className="mx-auto text-primary-500 mb-1.5" />
-                            <div className="text-sm font-semibold text-ink">Wybierz plik</div>
-                            <div className="text-xs text-ink-muted mt-0.5">PDF, Word, Excel, zdjęcie · do 20 MB</div>
-                        </>
-                    )}
+                    <CheckCircle2 size={26} className="mx-auto text-emerald-600 mb-2" />
+                    <div className="text-[15px] font-bold text-ink">Podpisane</div>
                 </button>
-                <input ref={inputRef} type="file" accept={ACCEPT} onChange={pickFile} className="hidden" />
-
-                <Field label="Nazwa dokumentu" required>
-                    <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="np. Umowa NDA — Marka X 2026" maxLength={255} />
-                </Field>
-
-                <Field label="Status">
-                    <ChoiceChips options={STATUS_OPTIONS} value={signStatus} onChange={setSignStatus} />
-                </Field>
-
-                <Field label="Data dokumentu" hint="Np. data podpisania. Puste = data dodania.">
-                    <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
-                </Field>
-
-                <Field label="Notatka" hint="Opcjonalnie: słowa kluczowe, strony, daty. Też są przeszukiwane.">
-                    <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
-                </Field>
-
-                {error && <div className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
-            </form>
+                <button
+                    type="button"
+                    onClick={() => choose('to_sign')}
+                    className="rounded-2xl border-2 border-amber-200 bg-amber-50/60 hover:border-amber-400 px-3 py-6 text-center transition-colors"
+                >
+                    <PenLine size={26} className="mx-auto text-amber-600 mb-2" />
+                    <div className="text-[15px] font-bold text-ink">Do podpisu</div>
+                </button>
+            </div>
+            <input ref={inputRef} type="file" accept={ACCEPT} onChange={picked} className="hidden" multiple />
+            <p className="text-xs text-ink-muted mt-4 leading-relaxed">
+                Nazwa i data ustawią się same z nazwy pliku i treści dokumentu. Wszystko odbywa się na Twoim serwerze —
+                pliki nigdzie dalej nie trafiają. Poprawić możesz potem ołówkiem przy dokumencie.
+            </p>
         </Sheet>
     );
 }
@@ -285,7 +209,11 @@ export default function Documents() {
     const [filter, setFilter] = useState('all');
     const [sort, setSort] = useState('date_desc');
     const [year, setYear] = useState('all');
+    const [uploads, setUploads] = useState([]); // files on their way to the server
+    const [dragging, setDragging] = useState(false);
     const requestId = useRef(0);
+    const queryRef = useRef(query);
+    queryRef.current = query;
 
     const load = useCallback(async (q) => {
         const id = ++requestId.current;
@@ -347,6 +275,49 @@ export default function Documents() {
         }
     };
 
+    // Files go up one by one; each shows a row with progress until it lands in the list
+    const uploadFiles = async (files, status = 'signed') => {
+        const items = files.map((file, i) => ({ key: `${Date.now()}-${i}`, name: file.name, file }));
+        const tooBig = items.filter((item) => item.file.size > MAX_SIZE);
+        const ok = items.filter((item) => item.file.size <= MAX_SIZE);
+        setUploads((prev) => [
+            ...ok.map(({ key, name }) => ({ key, name, error: '' })),
+            ...tooBig.map(({ key, name }) => ({ key, name, error: 'Za duży plik (max 20 MB)' })),
+            ...prev,
+        ]);
+        let done = 0;
+        for (const item of ok) {
+            try {
+                const contentText = await pdfTextOf(item.file);
+                await documentsService.upload({ file: item.file, title: '', status, contentText });
+                setUploads((prev) => prev.filter((u) => u.key !== item.key));
+                done += 1;
+                load(queryRef.current);
+            } catch (err) {
+                setUploads((prev) => prev.map((u) => (u.key === item.key ? { ...u, error: err.message || 'Nie udało się dodać pliku' } : u)));
+            }
+        }
+        if (done) toast.success(done === 1 ? 'Dokument dodany' : `Dodano dokumenty: ${done}`);
+    };
+
+    // Desktop: drop files anywhere on the page
+    const dropHandlers = {
+        onDragOver: (e) => {
+            if (!e.dataTransfer?.types?.includes('Files')) return;
+            e.preventDefault();
+            setDragging(true);
+        },
+        onDragLeave: (e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
+        },
+        onDrop: (e) => {
+            e.preventDefault();
+            setDragging(false);
+            const files = Array.from(e.dataTransfer?.files || []);
+            if (files.length) uploadFiles(files);
+        },
+    };
+
     const handleOpen = async (doc) => {
         try {
             if (PREVIEW_TYPES.includes(doc.mime_type)) await documentsService.preview(doc);
@@ -378,7 +349,15 @@ export default function Documents() {
     // Sheets render outside the animated wrapper - its transform would trap their z-index under the nav
     return (
         <>
-        <div className="animate-fade-in">
+        <div className="animate-fade-in relative" {...dropHandlers}>
+            {dragging && (
+                <div className="absolute inset-0 z-20 rounded-3xl border-2 border-dashed border-primary-400 bg-primary-50/80 flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                        <Upload size={30} className="mx-auto text-primary-600 mb-2" />
+                        <div className="font-bold text-primary-800">Upuść pliki, żeby dodać</div>
+                    </div>
+                </div>
+            )}
             <PageHeader
                 title="Dokumenty"
                 subtitle="Umowy i dokumenty poufne — widoczne tylko po zalogowaniu"
@@ -419,6 +398,27 @@ export default function Documents() {
                 </div>
             </PageHeader>
 
+            {uploads.length > 0 && (
+                <div className="card divide-y divide-line overflow-hidden mb-3">
+                    {uploads.map((u) => (
+                        <div key={u.key} className="flex items-center gap-3 px-4 sm:px-5 py-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${u.error ? 'bg-red-50 text-red-600' : 'bg-primary-50 text-primary-600'}`}>
+                                {u.error ? <AlertCircle size={19} /> : <Loader2 size={19} className="animate-spin" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-ink truncate">{u.name}</div>
+                                <div className={`text-xs ${u.error ? 'text-red-700' : 'text-ink-muted'}`}>{u.error || 'Wysyłanie…'}</div>
+                            </div>
+                            {u.error && (
+                                <button type="button" onClick={() => setUploads((prev) => prev.filter((x) => x.key !== u.key))} className="p-2 text-ink-muted hover:bg-black/5 rounded-lg" aria-label="Ukryj">
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {loading ? (
                 <div className="space-y-3">
                     {[0, 1, 2].map((i) => <CardSkeleton key={i} className="h-20" />)}
@@ -430,7 +430,7 @@ export default function Documents() {
                     <EmptyState
                         icon={FolderLock}
                         title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : filter === 'signed' ? 'Brak podpisanych dokumentów' : 'Brak dokumentów z tego roku') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
-                        text={docs.length > 0 ? 'Zmień filtr lub rok, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę. Tekst z PDF i Worda będzie można przeszukiwać.'}
+                        text={docs.length > 0 ? 'Zmień filtr lub rok, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę — wystarczy wybrać plik (na komputerze możesz go też przeciągnąć tutaj).'}
                         action={!query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
                     />
                 </div>
@@ -511,7 +511,7 @@ export default function Documents() {
             )}
         </div>
 
-        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={() => load(query)} />
+        <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} />
         <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={() => load(query)} />
         </>
     );
