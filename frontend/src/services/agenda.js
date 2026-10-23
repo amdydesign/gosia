@@ -29,7 +29,7 @@ export function deleteTask(id) {
     return apiRequest(`/tasks/delete.php?id=${id}`, 'DELETE');
 }
 
-/** AI sorts a quick note into idea / task / purchase / collaboration (Claude Haiku). */
+/** AI sorts a quick note into idea / task / purchase / collaboration (Claude Sonnet). */
 export function classifyNote(text) {
     return apiRequest('/ai/capture.php', 'POST', { text });
 }

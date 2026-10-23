@@ -112,7 +112,7 @@ function UploadSheet({ open, onClose, onPick, onScan, aiAvailable }) {
                     <input type="checkbox" checked={ai} onChange={(e) => setAi(e.target.checked)} className="mt-0.5 w-5 h-5 accent-primary-600 shrink-0" />
                     <span className="min-w-0">
                         <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                            <Sparkles size={15} className="text-primary-500" /> Analiza AI (Claude Haiku)
+                            <Sparkles size={15} className="text-primary-500" /> Analiza AI (Claude Sonnet)
                         </span>
                         <span className="block text-xs text-ink-muted mt-0.5 leading-relaxed">
                             Dokładniej odczyta tekst, pismo odręczne, kontrahenta, datę i streszczenie. Dokument zostanie wysłany do Anthropic —

@@ -1,6 +1,6 @@
 <?php
 /**
- * "Zrzuć tutaj" - sort a quick note with AI (Claude Haiku / Gemini).
+ * "Zrzuć tutaj" - sort a quick note with AI (Claude Sonnet / Gemini).
  *
  * POST /api/ai/capture.php  { text: "rolka o płaszczach camel" }
  * -> { kind: "idea" | "task" | "purchase" | "collaboration", title, due_date?, idea?, purchase?, collaboration? }

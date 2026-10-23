@@ -1,6 +1,6 @@
 <?php
 /**
- * OPTIONAL: read a stored document with AI (Claude Haiku) and fill in its details
+ * OPTIONAL: read a stored document with AI (Claude Sonnet) and fill in its details
  * POST /api/documents/analyze.php?id=123
  *
  * Runs only when the user asks for it (switch when adding, button in the editor),

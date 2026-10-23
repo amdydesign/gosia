@@ -41,7 +41,7 @@ export const documentsService = {
         return data.data;
     },
 
-    // OPTIONAL AI (Claude Haiku): fills name, counterparty, date, status, summary
+    // OPTIONAL AI (Claude Sonnet): fills name, counterparty, date, status, summary
     analyze: (id) => apiRequest(`/documents/analyze.php?id=${id}`, 'POST'),
 
     // Collaboration suggestions from contracts / bills (contract + its bill = one suggestion)

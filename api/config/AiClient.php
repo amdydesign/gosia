@@ -18,11 +18,13 @@
 class AiClient
 {
     const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-    // Screenshots, notes and contracts are simple extraction - the cheap, fast Haiku
-    // reads them (ANTHROPIC_MODEL / ANTHROPIC_DOCS_MODEL override, e.g. back to claude-sonnet-5-5)
+    // Screenshots are simple extraction - the cheap, fast Haiku reads them (ANTHROPIC_MODEL overrides).
+    // Contracts and "Zrzuć tutaj" notes need more judgement - Sonnet
+    // (ANTHROPIC_DOCS_MODEL / ANTHROPIC_NOTES_MODEL override).
     const CLAUDE_MODEL = 'claude-haiku-5-5';
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
-    const CLAUDE_DOCS_MODEL = 'claude-haiku-5-5';
+    const CLAUDE_DOCS_MODEL = 'claude-sonnet-5-5';
+    const CLAUDE_NOTES_MODEL = 'claude-sonnet-5-5';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
     const GEMINI_MODEL = 'gemini-flash-latest';
     const TIMEOUT = 90;
@@ -108,6 +110,7 @@ class AiClient
         return self::extractWithClaude($prompt, $parts, $schema, [
             'model' => trim($_ENV['ANTHROPIC_DOCS_MODEL'] ?? '') ?: self::CLAUDE_DOCS_MODEL,
             'max_tokens' => 32000,
+            'effort' => 'medium',
             'timeout' => 240,
         ]);
     }
@@ -121,8 +124,9 @@ class AiClient
         $provider = self::provider();
         if ($provider === 'claude') {
             return self::extractWithClaude($prompt, [['text' => $text]], $schema, [
-                'max_tokens' => 4000,
-                'timeout' => 30,
+                'model' => trim($_ENV['ANTHROPIC_NOTES_MODEL'] ?? '') ?: self::CLAUDE_NOTES_MODEL,
+                'max_tokens' => 8000,
+                'timeout' => 60,
             ]);
         }
         if ($provider === 'gemini') {
@@ -136,7 +140,7 @@ class AiClient
     /**
      * @param array $images  image parts; a PDF (media_type application/pdf) becomes a document
      *                       block and ['text' => ...] a text block
-     * @param array $options model, max_tokens (defaults: ANTHROPIC_MODEL / Haiku, 16000)
+     * @param array $options model, max_tokens, effort (defaults: ANTHROPIC_MODEL / Haiku, 16000, low)
      */
     public static function buildClaudeBody($prompt, array $images, array $schema, $withFallbacks = true, array $options = [])
     {
@@ -162,7 +166,7 @@ class AiClient
             'max_tokens' => $options['max_tokens'] ?? 16000,
             // Reading a screenshot is simple - low effort keeps it fast
             'output_config' => [
-                'effort' => 'low',
+                'effort' => $options['effort'] ?? 'low',
                 'format' => ['type' => 'json_schema', 'schema' => $schema],
             ],
             'messages' => [['role' => 'user', 'content' => $content]],
