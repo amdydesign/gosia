@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Lightbulb, CheckCircle2, Circle, Clock, Play } from 'lucide-react';
+import { Plus, Lightbulb, CheckCircle2, Circle, Clock, Play, CalendarCheck } from 'lucide-react';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -11,6 +11,7 @@ import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
 import { CardSkeleton } from '../../components/ui/Skeleton';
 import { estimateSpeechSeconds, formatSeconds, formatDateShort } from '../../utils/format';
+import { isPlanned, localToday, planIdea } from '../../services/agenda';
 
 const FILTERS = [
     { value: 'draft', label: 'Do nagrania' },
@@ -76,6 +77,20 @@ export default function IdeaList() {
         }
     };
 
+    const togglePlan = async (idea) => {
+        const on = !isPlanned(idea);
+        const before = idea.planned_for;
+        setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, planned_for: on ? localToday() : null } : i)));
+        try {
+            await planIdea(idea.id, on);
+            refresh();
+            toast.success(on ? 'Na dziś — pojawi się na Starcie' : 'Zdjęte z dzisiejszej listy');
+        } catch (err) {
+            setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, planned_for: before } : i)));
+            toast.error(err.message || 'Nie udało się zapisać');
+        }
+    };
+
     return (
         <div className="animate-fade-in">
             <PageHeader
@@ -112,6 +127,7 @@ export default function IdeaList() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {filtered.map((idea) => {
                         const recorded = idea.status === 'recorded';
+                        const planned = isPlanned(idea);
                         const seconds = estimateSpeechSeconds(idea.content);
                         return (
                             <div key={idea.id} className={`card flex flex-col transition-all ${recorded ? 'opacity-70 hover:opacity-100' : 'hover:border-secondary/40 hover:shadow-md'}`}>
@@ -120,11 +136,14 @@ export default function IdeaList() {
                                         <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${recorded ? 'bg-slate-100 text-ink-muted' : 'bg-secondary-light text-secondary-dark'}`}>
                                             <Lightbulb size={18} />
                                         </span>
-                                        {seconds > 0 && (
-                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
-                                                <Clock size={11} /> ~{formatSeconds(seconds)}
-                                            </span>
-                                        )}
+                                        <span className="flex items-center gap-2">
+                                            {planned && <span className="badge bg-accent text-on-accent">Na dziś</span>}
+                                            {seconds > 0 && (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
+                                                    <Clock size={11} /> ~{formatSeconds(seconds)}
+                                                </span>
+                                            )}
+                                        </span>
                                     </div>
                                     <h3 className={`font-bold text-[15px] leading-snug line-clamp-2 ${recorded ? 'text-ink-soft' : 'text-ink'}`}>{idea.title}</h3>
                                     <p className="text-sm text-ink-muted line-clamp-3 mt-1.5 flex-1">
@@ -133,6 +152,17 @@ export default function IdeaList() {
                                     <div className="text-[11px] text-ink-muted mt-3">{formatDateShort(idea.created_at?.slice(0, 10))}</div>
                                 </Link>
                                 <div className="flex items-center gap-2 px-3 pb-3">
+                                    {!recorded && (
+                                        <button
+                                            type="button"
+                                            onClick={() => togglePlan(idea)}
+                                            aria-pressed={planned}
+                                            className={`btn btn-sm flex-1 ${planned ? 'bg-accent text-on-accent' : 'btn-secondary'}`}
+                                        >
+                                            <CalendarCheck size={14} />
+                                            {planned ? 'Na dziś' : 'Nagram dziś'}
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => toggleStatus(idea)}

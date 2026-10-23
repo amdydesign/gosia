@@ -143,39 +143,41 @@ class TodayAgenda
             // tasks table optional
         }
 
-        // Newest script ready to record
+        // Reels planned for today ("Nagram dziś"); a plan not recorded yesterday carries over
         try {
+            Schema::ensureColumn($conn, 'ideas', 'planned_for');
             $stmt = $conn->prepare("
-                SELECT id, title,
+                SELECT id, title, planned_for,
                        CASE WHEN content IS NULL OR content = '' THEN 0
                             ELSE LENGTH(TRIM(content)) - LENGTH(REPLACE(TRIM(content), ' ', '')) + 1 END AS words
                 FROM ideas
-                WHERE user_id = :user_id AND status = 'draft'
-                ORDER BY created_at DESC
-                LIMIT 5
+                WHERE user_id = :user_id AND status = 'draft' AND planned_for IS NOT NULL AND planned_for <= :today
+                ORDER BY planned_for ASC, created_at DESC
+                LIMIT 10
             ");
-            $stmt->execute(['user_id' => $userId]);
+            $stmt->execute(['user_id' => $userId, 'today' => $today]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $key = 'idea:' . $row['id'];
-                if ((int) $row['words'] === 0 || isset($skip[$key])) {
+                if (isset($skip[$key])) {
                     continue;
                 }
                 $seconds = (int) round((int) $row['words'] / 2.3);
+                $length = $seconds > 0 ? '~' . intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT) : 'bez scenariusza';
+                $carried = $row['planned_for'] < $today;
                 $items[] = [
                     'kind' => 'idea',
                     'ref_key' => $key,
                     'title' => 'Nagraj: ' . $row['title'],
-                    'meta' => '~' . intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT) . ' · scenariusz gotowy',
+                    'meta' => $length . ($carried ? ' · zaplanowane wcześniej' : ' · na dziś'),
                     'amount' => null,
-                    'deadline' => null,
+                    'deadline' => $row['planned_for'],
                     'days' => null,
-                    'late' => false,
+                    'late' => $carried,
                     'idea_id' => (int) $row['id'],
-                    'url' => '/ideas/' . $row['id'] . '?prompter=1',
+                    'url' => '/ideas/' . $row['id'] . ($seconds > 0 ? '?prompter=1' : ''),
                     'bucket' => 'today',
-                    'urgency' => 15,
+                    'urgency' => $carried ? 55 : 50,
                 ];
-                break;
             }
         } catch (Exception $e) {
             // ideas table optional

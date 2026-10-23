@@ -68,3 +68,18 @@ export function hoursLeft(deadline) {
     const end = new Date(y, m - 1, d, 23, 59, 59);
     return Math.max(0, Math.round((end - Date.now()) / 3600000));
 }
+
+/** Today's date in local time, YYYY-MM-DD. */
+export function localToday() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "Nagram dziś": a reel shows up on Start's list only when planned (until recorded). */
+export function isPlanned(idea) {
+    return !!idea?.planned_for && idea.planned_for <= localToday() && idea.status !== 'recorded';
+}
+
+export function planIdea(id, on) {
+    return apiRequest(`/ideas/update.php?id=${id}`, 'PUT', { planned_for: on ? localToday() : null });
+}

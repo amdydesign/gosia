@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Briefcase, Camera, Check, Clock, Crosshair, FileText, Lightbulb, Loader2, Play, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, Briefcase, CalendarCheck, CalendarX, Camera, Check, Clock, Crosshair, FileText, Lightbulb, Loader2, Play, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
@@ -21,6 +21,7 @@ import {
     deleteIdea,
     deleteTask,
     hoursLeft,
+    planIdea,
     setPurchaseStatus,
     setTaskDone,
     snooze,
@@ -141,14 +142,20 @@ export default function Dashboard() {
             ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
                     <LaterList items={later} done={done} weekItems={weekItems} actions={actions} />
-                    <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} current={current} />
+                    <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} onPlan={actions.planIdeaToday} />
                     <MoneyCard data={data} />
                     {/* phone: earnings at the end, after what needs doing */}
                     <EarningsCard data={data} display="flex lg:hidden" />
                 </div>
             )}
 
-            <SnoozeSheet target={actions.snoozeTarget} onPick={actions.snoozeWith} onRemove={actions.removeTask} onClose={() => actions.setSnoozeTarget(null)} />
+            <SnoozeSheet
+                target={actions.snoozeTarget}
+                onPick={actions.snoozeWith}
+                onRemove={actions.removeTask}
+                onUnplan={actions.unplanIdea}
+                onClose={() => actions.setSnoozeTarget(null)}
+            />
         </div>
     );
 }
@@ -262,7 +269,35 @@ function useAgendaActions() {
         [refresh, run, toast]
     );
 
-    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith, removeTask };
+    // "Nie dziś": a planned reel goes back to the ideas list without a date
+    const unplanIdea = useCallback(
+        (item) => {
+            setSnoozeTarget(null);
+            run(item, async () => {
+                await planIdea(item.idea_id, false);
+                toast.success('Zdjęte z dzisiejszej listy', {
+                    duration: 5000,
+                    action: { label: 'Cofnij', onClick: () => planIdea(item.idea_id, true).then(() => refresh()) },
+                });
+            });
+        },
+        [refresh, run, toast]
+    );
+
+    const planIdeaToday = useCallback(
+        async (idea) => {
+            try {
+                await planIdea(idea.id, true);
+                await refresh();
+                toast.success('Na dziś — jest na liście');
+            } catch (err) {
+                toast.error(err.message || 'Nie udało się zapisać');
+            }
+        },
+        [refresh, toast]
+    );
+
+    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith, removeTask, unplanIdea, planIdeaToday };
 }
 
 /* ------------------------------------------------------------------ pieces */
@@ -370,6 +405,11 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                 {item.kind === 'task' && (
                     <button type="button" onClick={() => actions.removeTask(item)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2">
                         Usuń
+                    </button>
+                )}
+                {item.kind === 'idea' && (
+                    <button type="button" onClick={() => actions.unplanIdea(item)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2">
+                        Nie dziś
                     </button>
                 )}
                 {canSkip && (
@@ -558,14 +598,15 @@ function MoneyCard({ data }) {
     );
 }
 
-function CaptureCard({ ai, ideas, current }) {
+function CaptureCard({ ai, ideas, onPlan }) {
     const toast = useToast();
     const { refresh } = useDashboard();
     const navigate = useNavigate();
     const { openCollab, openPurchase } = useQuickActions();
     const [text, setText] = useState('');
     const [saving, setSaving] = useState(false);
-    const nextIdea = ideas.find((i) => Number(i.words) > 0 && current?.ref_key !== `idea:${i.id}`);
+    // A suggestion only - reels count as "na dziś" after "Nagram dziś"
+    const nextIdea = ideas.find((i) => Number(i.words) > 0 && !i.planned_for);
 
     const saveAsTask = async (title, due) => {
         const res = await createTask(title, due);
@@ -660,21 +701,28 @@ function CaptureCard({ ai, ideas, current }) {
                 </div>
             </div>
             {nextIdea && (
-                <Link to={`/ideas/${nextIdea.id}?prompter=1`} className="mt-auto flex items-center gap-3 p-3 rounded-2xl bg-canvas hover:bg-surface-2">
-                    <span className="w-11 h-11 rounded-full bg-accent text-on-accent flex items-center justify-center shrink-0">
+                <div className="mt-auto flex items-center gap-3 p-3 rounded-2xl bg-canvas">
+                    <Link to={`/ideas/${nextIdea.id}?prompter=1`} aria-label="Otwórz prompter" className="w-11 h-11 rounded-full bg-accent text-on-accent flex items-center justify-center shrink-0">
                         <Play size={15} fill="currentColor" />
-                    </span>
-                    <span className="min-w-0">
-                        <span className="block text-xs text-ink-muted">Do nagrania</span>
+                    </Link>
+                    <Link to={`/ideas/${nextIdea.id}`} className="min-w-0 flex-1">
+                        <span className="block text-xs text-ink-muted">Pomysł do nagrania</span>
                         <span className="block text-sm font-medium text-ink truncate">{nextIdea.title}</span>
-                    </span>
-                </Link>
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={() => onPlan(nextIdea)}
+                        className="h-10 px-3 rounded-full border border-line-strong text-xs font-semibold text-ink inline-flex items-center gap-1.5 shrink-0 hover:bg-surface-2"
+                    >
+                        <CalendarCheck size={14} /> Na dziś
+                    </button>
+                </div>
             )}
         </section>
     );
 }
 
-function SnoozeSheet({ target, onPick, onRemove, onClose }) {
+function SnoozeSheet({ target, onPick, onRemove, onUnplan, onClose }) {
     return (
         <Sheet open={!!target} onClose={onClose} title="Przypomnij później" description={target?.title} size="sm">
             <div className="grid gap-2 pb-1">
@@ -689,6 +737,15 @@ function SnoozeSheet({ target, onPick, onRemove, onClose }) {
                     </button>
                 ))}
                 <p className="hint">Do tego czasu zniknie z listy, a potem przyjdzie powiadomienie.</p>
+                {target?.kind === 'idea' && (
+                    <button
+                        type="button"
+                        onClick={() => onUnplan(target)}
+                        className="mt-2 h-12 px-4 rounded-2xl text-left font-semibold text-ink hover:bg-surface-2 inline-flex items-center gap-3"
+                    >
+                        <CalendarX size={18} className="text-ink-muted" /> Nie dziś — wróci do listy pomysłów
+                    </button>
+                )}
                 {target?.kind === 'task' && (
                     <button
                         type="button"
