@@ -10,7 +10,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 import CollabDetailSheet from '../../components/collaborations/CollabDetailSheet';
 import ExportModal from './ExportModal';
-import { formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, groupByMonth } from '../../utils/format';
+import { daysFromToday, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, groupByMonth } from '../../utils/format';
 import { daysWaiting, grossOf, isLate, isPaid, netOf, WAGE_TYPE } from '../../utils/collabs';
 
 const MONTHS_STEP = 6;
@@ -77,7 +77,14 @@ export default function Collaborations() {
         );
     }, [collabs, query]);
 
-    const unpaid = useMemo(() => filtered.filter((c) => !isPaid(c)).sort((a, b) => (a.date < b.date ? -1 : 1)), [filtered]);
+    // Not settled yet: late first, then waiting for the transfer, then still in progress (future date)
+    const unpaid = useMemo(
+        () =>
+            filtered
+                .filter((c) => !isPaid(c))
+                .sort((a, b) => STATUS_ORDER[unsettledStatus(a)] - STATUS_ORDER[unsettledStatus(b)] || (a.date < b.date ? -1 : 1)),
+        [filtered]
+    );
     const unpaidTotal = unpaid.reduce((s, c) => s + grossOf(c), 0);
     const history = useMemo(() => groupByMonth(filtered.filter(isPaid)), [filtered]);
 
@@ -201,8 +208,13 @@ export default function Collaborations() {
                 <>
                     {unpaid.length > 0 && (
                         <section>
-                            <h2 className="section-label px-1 mb-2">Czeka na przelew</h2>
-                            <div className="card divide-y divide-line overflow-hidden">
+                            <div className="flex items-baseline justify-between px-1 mb-2">
+                                <h2 className="text-base font-semibold text-ink">
+                                    Nierozliczone <span className="text-ink-muted font-medium">· {unpaid.length}</span>
+                                </h2>
+                                <span className="amount text-sm font-semibold text-ink tabular-nums">{formatCurrency(unpaidTotal)}</span>
+                            </div>
+                            <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 divide-y divide-amber-200 overflow-hidden">
                                 {unpaid.map((c) => (
                                     <UnpaidRow key={c.id} collab={c} busy={busyId === c.id} onOpen={() => openDetail(c)} onPaid={() => markPaid(c)} />
                                 ))}
@@ -251,15 +263,37 @@ export default function Collaborations() {
     );
 }
 
+const STATUS_ORDER = { late: 0, waiting: 1, progress: 2 };
+const STATUS_STYLE = {
+    late: { label: 'Po terminie', pill: 'bg-red-600 text-white' },
+    waiting: { label: 'Czeka na przelew', pill: 'bg-amber-500 text-white' },
+    progress: { label: 'W trakcie', pill: 'bg-sky-600 text-white' },
+};
+
+/** late (unpaid too long), waiting (done, no transfer yet) or progress (date still ahead). */
+function unsettledStatus(c) {
+    if (isLate(c)) return 'late';
+    return (daysFromToday(c.date) ?? 0) > 0 ? 'progress' : 'waiting';
+}
+
 function UnpaidRow({ collab, busy, onOpen, onPaid }) {
-    const late = isLate(collab);
+    const status = unsettledStatus(collab);
+    const style = STATUS_STYLE[status];
     const waiting = daysWaiting(collab);
+    const ahead = daysFromToday(collab.date) ?? 0;
+    const when =
+        status === 'progress'
+            ? ahead === 1 ? 'jutro' : `za ${ahead} dni`
+            : waiting > 0 ? `czeka ${waiting} dni` : 'od dziś';
     return (
         <div className="flex items-center gap-3 pl-4 pr-3 py-3">
             <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
                 <div className="font-semibold text-ink text-[15px] truncate">{collab.brand}</div>
-                <div className={`text-xs mt-0.5 truncate ${late ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>
-                    {formatDateShort(collab.date)} · {waiting > 0 ? `czeka ${waiting} dni` : 'czeka na przelew'}
+                <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${style.pill}`}>{style.label}</span>
+                    <span className={`text-xs truncate ${status === 'late' ? 'text-red-700 font-semibold' : 'text-ink-muted'}`}>
+                        {formatDateShort(collab.date)} · {when}
+                    </span>
                 </div>
             </button>
             <div className="text-right shrink-0">
