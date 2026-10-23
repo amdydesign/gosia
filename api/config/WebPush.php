@@ -7,8 +7,9 @@
  * Self-contained: requires only ext-openssl and ext-curl (no composer packages
  * beyond the already used vlucas/phpdotenv for .env loading).
  *
- * Setup:
- *   php api/utils/generate_vapid_keys.php   -> put keys into api/.env
+ * Keys: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY from api/.env when set; otherwise
+ * the server generates a pair on first use and keeps it in `server_settings`
+ * (private key encrypted like the AI keys), so push works without manual setup.
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -21,39 +22,82 @@ class WebPush
     private $vapidPrivateKey; // raw scalar (32 bytes)
     private $subject;
 
+    private static $keys = null;
+
     public function __construct()
     {
-        $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
-        $dotenv->safeLoad();
-
-        $publicB64 = $_ENV['VAPID_PUBLIC_KEY'] ?? '';
-        $privateB64 = $_ENV['VAPID_PRIVATE_KEY'] ?? '';
-        $this->subject = $_ENV['VAPID_SUBJECT'] ?? 'mailto:admin@localhost';
-
-        if ($publicB64 === '' || $privateB64 === '') {
-            throw new RuntimeException('VAPID keys not configured. Run api/utils/generate_vapid_keys.php and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY in .env');
-        }
-
-        $this->vapidPublicKey = self::base64UrlDecode($publicB64);
-        $this->vapidPrivateKey = self::base64UrlDecode($privateB64);
+        $keys = self::keys();
+        $this->subject = $keys['subject'];
+        $this->vapidPublicKey = self::base64UrlDecode($keys['public']);
+        $this->vapidPrivateKey = self::base64UrlDecode($keys['private']);
 
         if (strlen($this->vapidPublicKey) !== 65 || $this->vapidPublicKey[0] !== "\x04" || strlen($this->vapidPrivateKey) !== 32) {
-            throw new RuntimeException('Invalid VAPID key format in .env');
+            throw new RuntimeException('Invalid VAPID key format');
         }
     }
 
     public static function isConfigured()
     {
-        $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
-        $dotenv->safeLoad();
-        return !empty($_ENV['VAPID_PUBLIC_KEY']) && !empty($_ENV['VAPID_PRIVATE_KEY']);
+        try {
+            self::keys();
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
     }
 
     public static function getPublicKey()
     {
+        return self::keys()['public'];
+    }
+
+    /**
+     * @return array ['public' => b64url, 'private' => b64url, 'subject' => string]
+     */
+    private static function keys()
+    {
+        if (self::$keys !== null) {
+            return self::$keys;
+        }
         $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
         $dotenv->safeLoad();
-        return $_ENV['VAPID_PUBLIC_KEY'] ?? '';
+        $subject = $_ENV['VAPID_SUBJECT'] ?? '' ?: 'https://panel.malgorzatamordarska.pl';
+
+        if (!empty($_ENV['VAPID_PUBLIC_KEY']) && !empty($_ENV['VAPID_PRIVATE_KEY'])) {
+            return self::$keys = ['public' => $_ENV['VAPID_PUBLIC_KEY'], 'private' => $_ENV['VAPID_PRIVATE_KEY'], 'subject' => $subject];
+        }
+
+        require_once __DIR__ . '/Database.php';
+        require_once __DIR__ . '/Schema.php';
+        require_once __DIR__ . '/AiSettings.php';
+        $conn = (new Database())->getConnection();
+        Schema::ensure($conn, 'server_settings');
+
+        $load = function () use ($conn) {
+            $rows = $conn->query("SELECT name, value FROM server_settings WHERE name IN ('vapid_public', 'vapid_private')")->fetchAll(PDO::FETCH_KEY_PAIR);
+            $private = isset($rows['vapid_private']) ? AiSettings::decrypt($rows['vapid_private']) : null;
+            return !empty($rows['vapid_public']) && $private ? [$rows['vapid_public'], $private] : null;
+        };
+
+        $pair = $load();
+        if (!$pair) {
+            // Stored pair no longer readable (JWT_SECRET changed) - replace it
+            $conn->exec("DELETE FROM server_settings WHERE name = 'vapid_private' AND value NOT LIKE 'v1:%'");
+            $count = (int) $conn->query("SELECT COUNT(*) FROM server_settings WHERE name IN ('vapid_public', 'vapid_private')")->fetchColumn();
+            if ($count === 2) {
+                $conn->exec("DELETE FROM server_settings WHERE name IN ('vapid_public', 'vapid_private')");
+            }
+            // First use: create the pair once (INSERT IGNORE keeps the first one if two requests race)
+            $new = self::generateVapidKeys();
+            $stmt = $conn->prepare("INSERT IGNORE INTO server_settings (name, value) VALUES (:name, :value)");
+            $stmt->execute(['name' => 'vapid_public', 'value' => $new['publicKey']]);
+            $stmt->execute(['name' => 'vapid_private', 'value' => AiSettings::encrypt($new['privateKey'])]);
+            $pair = $load();
+        }
+        if (!$pair) {
+            throw new RuntimeException('VAPID keys unavailable');
+        }
+        return self::$keys = ['public' => $pair[0], 'private' => $pair[1], 'subject' => $subject];
     }
 
     /**
