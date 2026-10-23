@@ -57,9 +57,15 @@ Dzisiaj jest {$today} ({$weekday}). Zdecyduj, czym jest notatka, i zwróć dane 
 
 Rodzaje (kind):
 - "idea" - pomysł na rolkę / post / nagranie (np. "rolka o płaszczach camel", "nagrać haul jesienny").
-- "collaboration" - współpraca z marką, za którą będzie zapłata (np. "Vichy 2 stories 3000", "Pandora chce karuzelę za 4500 brutto").
+- "collaboration" - PŁATNA współpraca z marką: w notatce jest kwota albo wprost mowa o wynagrodzeniu / fakturze / umowie
+  (np. "Vichy 2 stories 3000", "Pandora chce karuzelę za 4500 brutto", "umowa z Reserved na rolkę 5k").
+  Bez kwoty i bez mowy o zapłacie to NIE jest współpraca.
 - "purchase" - kupiona rzecz, którą może trzeba będzie zwrócić (np. "kupiłam płaszcz w Zalando 599", "zamówienie Answear buty").
 - "task" - każda inna rzecz do zrobienia (np. "zadzwonić do księgowej", "wysłać fakturę do Mohito w piątek").
+  Także treści dla marek bez zapłaty: podziękowanie za paczkę PR, barter, oznaczenie marki
+  (np. "Stories za Esotiq x Ewa Minge" -> task "Nagraj stories dla Esotiq x Ewa Minge",
+  "oznaczyć Answear w poście" -> task "Oznacz Answear w poście").
+- W razie wątpliwości wybierz "task".
 
 Zasady:
 - title: krótki, konkretny tytuł po polsku, z wielkiej litery, bez kropki na końcu (dla zadania zacznij od czasownika, np. "Zadzwoń do księgowej").
@@ -117,6 +123,11 @@ function normalizeCapture($r, $text)
     $kind = in_array($r['kind'] ?? '', CAPTURE_KINDS, true) ? $r['kind'] : 'task';
     $title = trim((string) ($r['title'] ?? '')) ?: mb_substr($text, 0, 120);
     $due = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($r['due_date'] ?? '')) ? $r['due_date'] : null;
+
+    // A "collaboration" without any money is a thank-you / barter post - keep it as a to-do
+    if ($kind === 'collaboration' && (float) ($r['collaboration']['amount_gross'] ?? 0) <= 0) {
+        $kind = 'task';
+    }
 
     $out = ['kind' => $kind, 'title' => mb_substr($title, 0, 200), 'due_date' => $due];
     if ($kind === 'idea') {
