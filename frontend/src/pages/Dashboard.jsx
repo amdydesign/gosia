@@ -29,6 +29,12 @@ import {
 import { setAppBadge } from '../services/push';
 
 const FOCUS_KEY = 'gonia.focus';
+const CAPTURE_MODE_KEY = 'gonia.captureMode';
+const CAPTURE_MODES = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'task', label: 'Zadanie' },
+    { value: 'idea', label: 'Pomysł' },
+];
 const WEEK_OPEN_KEY = 'gonia.weekOpen';
 
 function readFlag(key) {
@@ -605,6 +611,22 @@ function CaptureCard({ ai, ideas, onPlan }) {
     const { openCollab, openPurchase } = useQuickActions();
     const [text, setText] = useState('');
     const [saving, setSaving] = useState(false);
+    // "Zapisz jako": Auto (AI decides) or always a task / an idea - remembered on this device
+    const [mode, setModeState] = useState(() => {
+        try {
+            return localStorage.getItem(CAPTURE_MODE_KEY) || 'auto';
+        } catch {
+            return 'auto';
+        }
+    });
+    const setMode = (m) => {
+        setModeState(m);
+        try {
+            localStorage.setItem(CAPTURE_MODE_KEY, m);
+        } catch {
+            // ignore
+        }
+    };
     // A suggestion only - reels count as "na dziś" after "Nagram dziś"
     const nextIdea = ideas.find((i) => Number(i.words) > 0 && !i.planned_for);
 
@@ -622,8 +644,14 @@ function CaptureCard({ ai, ideas, onPlan }) {
         if (!note || saving) return;
         setSaving(true);
         try {
-            if (!ai?.enabled) {
+            if (mode === 'task' || (mode === 'auto' && !ai?.enabled)) {
                 await saveAsTask(note);
+            } else if (mode === 'idea') {
+                const res = await createIdea(note, '');
+                toast.success('Zapisane jako pomysł na rolkę', {
+                    duration: 5000,
+                    action: { label: 'Cofnij', onClick: () => deleteIdea(res.id).then(() => refresh()) },
+                });
             } else {
                 let result;
                 try {
@@ -658,8 +686,30 @@ function CaptureCard({ ai, ideas, onPlan }) {
         <section className="card p-5 flex flex-col gap-3">
             <h3 className="text-base font-semibold text-ink">Głowa pełna? Zrzuć tutaj</h3>
             <form onSubmit={submit} className="flex flex-col gap-1.5">
+                <div role="group" aria-label="Zapisz jako" className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs text-ink-muted mr-1">Zapisz jako:</span>
+                    {CAPTURE_MODES.map((m) => (
+                        <button
+                            key={m.value}
+                            type="button"
+                            aria-pressed={mode === m.value}
+                            onClick={() => setMode(m.value)}
+                            className={`h-8 px-3 rounded-full text-xs font-semibold border transition-colors ${
+                                mode === m.value ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-soft border-line-strong'
+                            }`}
+                        >
+                            {m.label}
+                        </button>
+                    ))}
+                </div>
                 <label htmlFor="capture" className="text-xs text-ink-muted">
-                    {ai?.enabled ? 'AI samo rozpozna: pomysł, zadanie, zakup czy współpraca' : 'Zapiszę jako zadanie na dziś'}
+                    {mode === 'task'
+                        ? 'Zadanie na dziś, bez pytania AI'
+                        : mode === 'idea'
+                            ? 'Pomysł na rolkę (bez daty nagrania)'
+                            : ai?.enabled
+                                ? 'AI rozpozna: zadanie, pomysł, zakup albo płatną współpracę'
+                                : 'Bez klucza AI zapiszę jako zadanie'}
                 </label>
                 <div className="flex gap-2">
                     <input
