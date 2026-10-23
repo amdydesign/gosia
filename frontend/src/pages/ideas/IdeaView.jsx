@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Edit2, Play, CheckCircle2, Trash2, Lightbulb, Clock, Type, Undo2, Copy } from 'lucide-react';
+import { Edit2, Play, CheckCircle2, Trash2, Lightbulb, Clock, Type, Undo2, Copy, CalendarCheck } from 'lucide-react';
+import { isPlanned, localToday, planIdea } from '../../services/agenda';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -66,6 +67,18 @@ export default function IdeaView() {
         }
     };
 
+    const togglePlan = async () => {
+        const on = !isPlanned(idea);
+        try {
+            await planIdea(id, on);
+            setIdea({ ...idea, planned_for: on ? localToday() : null });
+            refresh();
+            toast.success(on ? 'Na dziś — pojawi się na Starcie' : 'Zdjęte z dzisiejszej listy');
+        } catch (err) {
+            toast.error(err.message || 'Błąd zapisu');
+        }
+    };
+
     const handleDelete = async () => {
         if (!(await confirm({ title: 'Usunąć pomysł?', message: idea.title, confirmLabel: 'Usuń', danger: true }))) return;
         try {
@@ -103,6 +116,18 @@ export default function IdeaView() {
                 <Badge tone={recorded ? 'success' : 'plum'} icon={recorded ? CheckCircle2 : Lightbulb}>{recorded ? 'Nagrane' : 'Do nagrania'}</Badge>
                 {seconds > 0 && <Badge tone="neutral" icon={Clock}>~{formatSeconds(seconds)}</Badge>}
                 <Badge tone="neutral" icon={Type}>{countWords(idea.content)} słów</Badge>
+                {!recorded && (
+                    <button
+                        type="button"
+                        onClick={togglePlan}
+                        aria-pressed={isPlanned(idea)}
+                        className={`h-9 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 border ${
+                            isPlanned(idea) ? 'bg-accent text-on-accent border-transparent' : 'bg-surface text-ink border-line-strong'
+                        }`}
+                    >
+                        <CalendarCheck size={14} /> {isPlanned(idea) ? 'Na dziś' : 'Nagram dziś'}
+                    </button>
+                )}
                 <span className="text-xs text-ink-muted ml-auto">{formatDateLong(idea.created_at?.slice(0, 10))}</span>
             </div>
 

@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../middleware/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
@@ -45,6 +46,12 @@ try {
     if (isset($data->content)) {
         $fields[] = "content = :content";
         $params['content'] = $data->content;
+    }
+    // "Nagram dziś": YYYY-MM-DD or null to take it off the day's list
+    if ($data && property_exists($data, 'planned_for')) {
+        Schema::ensureColumn($conn, 'ideas', 'planned_for');
+        $fields[] = "planned_for = :planned_for";
+        $params['planned_for'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $data->planned_for) ? $data->planned_for : null;
     }
     if (isset($data->status)) {
         $validStatuses = ['draft', 'recorded'];

@@ -207,11 +207,12 @@ try {
     $nextIdea = null;
     $draftIdeas = [];
     try {
+        Schema::ensureColumn($conn, 'ideas', 'planned_for');
         $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM ideas WHERE user_id = :user_id AND status = 'draft'");
         $stmt->execute($p);
         $ideasDrafts = intval($stmt->fetch()['c']);
         $stmt = $conn->prepare("
-            SELECT id, title, created_at,
+            SELECT id, title, created_at, planned_for,
                    CASE WHEN content IS NULL OR content = '' THEN 0
                         ELSE LENGTH(TRIM(content)) - LENGTH(REPLACE(TRIM(content), ' ', '')) + 1 END AS words
             FROM ideas

@@ -170,18 +170,25 @@ try {
             }
         }
 
-        // 5. Ideas to record - Monday and Thursday
+        // 5. Ideas to record - Monday and Thursday (any draft with a script, planned or not)
         if ($prefs['ideas'] && in_array((int) $now->format('N'), [1, 4], true) && $time >= $prefs['ideas_time']) {
-            foreach ($getAgenda() as $item) {
-                if ($item['kind'] === 'idea') {
-                    $send([
-                        'title' => 'Dobry moment na nagranie',
-                        'body' => $item['title'] . ' (' . $item['meta'] . ')',
-                        'url' => $item['url'],
-                        'tag' => 'ideas',
-                    ], 'ideas:' . $today);
-                    break;
-                }
+            $stmt = $conn->prepare("
+                SELECT id, title FROM ideas
+                WHERE user_id = :user_id AND status = 'draft' AND content IS NOT NULL AND content <> ''
+                ORDER BY created_at DESC
+            ");
+            $stmt->execute(['user_id' => $userId]);
+            $drafts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($drafts) {
+                $n = count($drafts);
+                $send([
+                    'title' => 'Dobry moment na nagranie',
+                    'body' => $n === 1
+                        ? '„' . $drafts[0]['title'] . '” czeka na prompter.'
+                        : 'Masz ' . $n . ' ' . TodayAgenda::plural($n, 'pomysł', 'pomysły', 'pomysłów') . ' do nagrania, np. „' . $drafts[0]['title'] . '”.',
+                    'url' => $n === 1 ? '/ideas/' . $drafts[0]['id'] . '?prompter=1' : '/ideas',
+                    'tag' => 'ideas',
+                ], 'ideas:' . $today);
             }
         }
     }

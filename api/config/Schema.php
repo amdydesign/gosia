@@ -174,6 +174,8 @@ class Schema
     private static $columns = [
         'purchases.kept_confirmed' => "ALTER TABLE purchases ADD COLUMN kept_confirmed TINYINT(1) NOT NULL DEFAULT 0",
         'purchases.returned_at' => "ALTER TABLE purchases ADD COLUMN returned_at TIMESTAMP NULL DEFAULT NULL",
+        // "Nagram dziś": a reel lands on Start's list only when planned for a day
+        'ideas.planned_for' => "ALTER TABLE ideas ADD COLUMN planned_for DATE NULL DEFAULT NULL",
     ];
 
     /**
