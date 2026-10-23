@@ -248,12 +248,12 @@ function GroupHeader({ open, onToggle, title, count, amount, amountTone = 'text-
         >
             <ChevronDown size={18} className={`shrink-0 text-ink-muted transition-transform ${open ? '' : '-rotate-90'}`} />
             <div className="flex-1 min-w-0">
-                <div className="text-[17px] font-extrabold text-ink truncate">{title}</div>
-                <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap mt-0.5">
-                    <span className="text-sm text-ink-soft">
-                        <span className="text-lg font-extrabold text-ink tabular-nums">{count}</span> {count === 1 ? 'rzecz' : 'rzeczy'}
+                <div className="font-bold text-ink truncate">{title}</div>
+                <div className="flex items-baseline gap-x-2.5 gap-y-0.5 flex-wrap text-sm">
+                    <span className="text-ink-soft">
+                        <span className="font-bold text-ink tabular-nums">{count}</span> {count === 1 ? 'rzecz' : 'rzeczy'}
                     </span>
-                    <span className={`text-lg font-extrabold tabular-nums ${amountTone}`}>{formatCurrency(amount)}</span>
+                    <span className={`font-bold tabular-nums ${amountTone}`}>{formatCurrency(amount)}</span>
                     {note && <span className="text-xs text-ink-muted">{note}</span>}
                 </div>
             </div>
