@@ -103,9 +103,18 @@ export default function Prompter({ title, content, onClose }) {
     return (
         <div className="fixed inset-0 z-[95] bg-black text-white flex flex-col select-none">
             {/* Top bar */}
-            <div className="flex items-center justify-between gap-3 px-4 py-3 bg-black/80 backdrop-blur border-b border-white/10 safe-top">
-                <button type="button" onClick={onClose} className="p-2 -ml-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10" aria-label="Zamknij">
-                    <X size={26} />
+            {/* iPhone home-screen app draws under the status bar - keep the bar below it */}
+            <div
+                className="flex items-center justify-between gap-3 px-4 pb-3 bg-black/80 backdrop-blur border-b border-white/10"
+                style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+            >
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="h-11 pl-2 pr-3 -ml-2 rounded-full bg-white/10 text-white inline-flex items-center gap-1.5 text-sm font-semibold hover:bg-white/20"
+                    aria-label="Zamknij prompter"
+                >
+                    <X size={22} /> Zamknij
                 </button>
                 <div className="flex-1 min-w-0 text-center text-xs font-semibold text-white/60 truncate">{title}</div>
                 <button
