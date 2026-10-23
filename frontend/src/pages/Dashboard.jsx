@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Check, Clock, Crosshair, Loader2, Play, Plus, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Clock, Crosshair, Loader2, Play, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
@@ -148,7 +148,7 @@ export default function Dashboard() {
                 </div>
             )}
 
-            <SnoozeSheet target={actions.snoozeTarget} onPick={actions.snoozeWith} onClose={() => actions.setSnoozeTarget(null)} />
+            <SnoozeSheet target={actions.snoozeTarget} onPick={actions.snoozeWith} onRemove={actions.removeTask} onClose={() => actions.setSnoozeTarget(null)} />
         </div>
     );
 }
@@ -238,7 +238,31 @@ function useAgendaActions() {
         [refresh, run, snoozeTarget, toast]
     );
 
-    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith };
+    // Tasks typed into "Zrzuć tutaj" can be removed (a joke, a typo); "Cofnij" brings them back
+    const removeTask = useCallback(
+        (item) => {
+            setSnoozeTarget(null);
+            const id = item.task_id ?? Number(String(item.ref_key).split(':')[1]);
+            const wasDone = !!item.done_at;
+            run(item, async () => {
+                await deleteTask(id);
+                toast.success('Usunięte', {
+                    duration: 5000,
+                    action: {
+                        label: 'Cofnij',
+                        onClick: async () => {
+                            const res = await createTask(item.title, item.deadline || undefined);
+                            if (wasDone && res?.id) await setTaskDone(res.id, true);
+                            refresh();
+                        },
+                    },
+                });
+            });
+        },
+        [refresh, run, toast]
+    );
+
+    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith, removeTask };
 }
 
 /* ------------------------------------------------------------------ pieces */
@@ -343,6 +367,11 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                         Część zostawiam
                     </Link>
                 )}
+                {item.kind === 'task' && (
+                    <button type="button" onClick={() => actions.removeTask(item)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2">
+                        Usuń
+                    </button>
+                )}
                 {canSkip && (
                     <button type="button" onClick={onSkip} className="text-sm font-medium underline underline-offset-2 px-2 ml-auto">
                         Pokaż następną
@@ -412,6 +441,17 @@ function LaterList({ items, done, weekItems, actions }) {
                     </span>
                     <span className="flex-1 min-w-0 text-sm text-ink-muted line-through truncate">{d.title}</span>
                     <span className="text-xs text-ink-muted">{d.done_at.slice(11, 16)}</span>
+                    {d.ref_key.startsWith('task:') && (
+                        <button
+                            type="button"
+                            onClick={() => actions.removeTask(d)}
+                            aria-label={`Usuń: ${d.title}`}
+                            title="Usuń"
+                            className="w-9 h-9 -mr-1 rounded-full flex items-center justify-center text-ink-muted hover:bg-ink/5 hover:text-ink shrink-0"
+                        >
+                            <X size={16} />
+                        </button>
+                    )}
                 </div>
             ))}
 
@@ -599,7 +639,7 @@ function CaptureCard({ ai, ideas, current }) {
                 </div>
             </form>
             <button type="button" onClick={openQuickAdd} className="text-sm font-medium text-ink-soft inline-flex items-center gap-1.5 self-start text-left hover:text-ink">
-                <Plus size={15} /> Dodaj ręcznie (współpraca, zakup, dokument)
+                <Plus size={15} /> Dodaj ręcznie
             </button>
             {nextIdea && (
                 <Link to={`/ideas/${nextIdea.id}?prompter=1`} className="mt-auto flex items-center gap-3 p-3 rounded-2xl bg-canvas hover:bg-surface-2">
@@ -616,7 +656,7 @@ function CaptureCard({ ai, ideas, current }) {
     );
 }
 
-function SnoozeSheet({ target, onPick, onClose }) {
+function SnoozeSheet({ target, onPick, onRemove, onClose }) {
     return (
         <Sheet open={!!target} onClose={onClose} title="Przypomnij później" description={target?.title} size="sm">
             <div className="grid gap-2 pb-1">
@@ -631,6 +671,15 @@ function SnoozeSheet({ target, onPick, onClose }) {
                     </button>
                 ))}
                 <p className="hint">Do tego czasu zniknie z listy, a potem przyjdzie powiadomienie.</p>
+                {target?.kind === 'task' && (
+                    <button
+                        type="button"
+                        onClick={() => onRemove(target)}
+                        className="mt-2 h-12 px-4 rounded-2xl text-left font-semibold text-red-700 hover:bg-red-50 inline-flex items-center gap-3"
+                    >
+                        <Trash2 size={18} /> Usuń zadanie
+                    </button>
+                )}
             </div>
         </Sheet>
     );
