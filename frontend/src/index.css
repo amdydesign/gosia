@@ -51,10 +51,10 @@
   --shadow-float: 0 12px 32px -14px rgba(17, 17, 19, 0.35);
   --shadow-sheet: 0 -8px 40px -12px rgba(17, 17, 19, 0.25);
 
-  --animate-fade-in: fade-in 0.18s ease-out both;
-  --animate-scale-in: scale-in 0.18s ease-out both;
-  --animate-slide-up: slide-up 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-toast-in: toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.18s ease-out backwards;
+  --animate-scale-in: scale-in 0.18s ease-out backwards;
+  --animate-slide-up: slide-up 0.24s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  --animate-toast-in: toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -83,13 +83,13 @@
   color-scheme: dark;
 
   --color-canvas: #0b0b0d;
-  --color-surface: #151518;
-  --color-surface-2: #1c1c20;
-  --color-ink: #f4f4f5;
-  --color-ink-soft: #d4d4d8;
-  --color-ink-muted: #a1a1aa;
-  --color-line: #26262b;
-  --color-line-strong: #3a3a42;
+  --color-surface: #18181c;
+  --color-surface-2: #222227;
+  --color-ink: #f7f7f8;
+  --color-ink-soft: #dcdce0;
+  --color-ink-muted: #b4b4bc;
+  --color-line: #303037;
+  --color-line-strong: #4a4a54;
 
   --color-primary-50: #1a1f0e;
   --color-primary-100: #232b10;

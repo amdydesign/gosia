@@ -116,7 +116,7 @@ export default function IdeaView() {
                 )}
             </Card>
 
-            <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] lg:static -mx-4 sm:mx-0 px-4 sm:px-0 py-3 lg:py-0 bg-canvas/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-t border-line lg:border-0">
+            <div className="sticky bottom-[calc(90px+env(safe-area-inset-bottom))] lg:static -mx-4 sm:mx-0 px-4 sm:px-0 py-3 lg:py-0 bg-canvas/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-t border-line lg:border-0">
                 <div className="flex gap-2">
                     <Button variant="dark" size="lg" icon={Play} onClick={() => setPrompter(true)} className="flex-[2]" disabled={!idea.content}>
                         Prompter
