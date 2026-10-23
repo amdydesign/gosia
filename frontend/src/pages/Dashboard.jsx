@@ -36,6 +36,21 @@ const CAPTURE_MODES = [
     { value: 'idea', label: 'Pomysł' },
 ];
 const WEEK_OPEN_KEY = 'gonia.weekOpen';
+const SNOOZED_OPEN_KEY = 'gonia.snoozedOpen';
+
+/** "przypomnę o 19:00" today, "jutro o 9:00" / "pt o 9:00" later. */
+function snoozeLabel(until) {
+    const [date, time] = until.split(' ');
+    const hhmm = (time || '').slice(0, 5).replace(/^0/, '');
+    const [y, m, d] = date.split('-').map(Number);
+    const day = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((day - today) / 86400000);
+    if (diff <= 0) return `przypomnę o ${hhmm}`;
+    if (diff === 1) return `jutro o ${hhmm}`;
+    return `${new Intl.DateTimeFormat('pl-PL', { weekday: 'short' }).format(day).replace('.', '')} o ${hhmm}`;
+}
 
 function readFlag(key) {
     try {
@@ -71,11 +86,14 @@ export default function Dashboard() {
     const agenda = useMemo(() => data?.agenda || [], [data]);
     const todayItems = useMemo(() => agenda.filter((i) => i.bucket === 'today'), [agenda]);
     const weekItems = useMemo(() => agenda.filter((i) => i.bucket === 'week'), [agenda]);
+    // "Później" today stays on today's list (not in Teraz); snoozed to another day goes to "Odłożone"
+    const laterToday = useMemo(() => agenda.filter((i) => i.bucket === 'later'), [agenda]);
+    const snoozed = useMemo(() => agenda.filter((i) => i.bucket === 'snoozed'), [agenda]);
     const done = useMemo(() => data?.done_today || [], [data]);
 
     useEffect(() => {
-        if (data) setAppBadge(todayItems.length);
-    }, [data, todayItems.length]);
+        if (data) setAppBadge(todayItems.length + laterToday.length);
+    }, [data, todayItems.length, laterToday.length]);
 
     const toggleFocus = () => {
         setFocus((f) => {
@@ -99,7 +117,8 @@ export default function Dashboard() {
     const index = todayItems.length ? skip % todayItems.length : 0;
     const current = todayItems[index] || null;
     const later = todayItems.filter((i) => i !== current);
-    const total = done.length + todayItems.length;
+    const total = done.length + todayItems.length + laterToday.length;
+    const todayCount = todayItems.length + laterToday.length;
 
     return (
         <div className="space-y-4 lg:space-y-5 animate-fade-in">
@@ -110,7 +129,7 @@ export default function Dashboard() {
                     </h2>
                     <p className="text-sm text-ink-muted mt-0.5">
                         {formatWeekdayDate()}
-                        {todayItems.length > 0 && ` · na dziś ${todayItems.length}, reszta może poczekać`}
+                        {todayCount > 0 && ` · na dziś ${todayCount}, reszta może poczekać`}
                     </p>
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -147,7 +166,7 @@ export default function Dashboard() {
                 </p>
             ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
-                    <LaterList items={later} done={done} weekItems={weekItems} actions={actions} />
+                    <LaterList items={later} laterToday={laterToday} snoozed={snoozed} done={done} weekItems={weekItems} actions={actions} />
                     <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} onPlan={actions.planIdeaToday} />
                     <MoneyCard data={data} />
                     {/* phone: earnings at the end, after what needs doing */}
@@ -303,7 +322,17 @@ function useAgendaActions() {
         [refresh, toast]
     );
 
-    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith, removeTask, unplanIdea, planIdeaToday };
+    const unsnooze = useCallback(
+        (item) => {
+            run(item, async () => {
+                await cancelSnooze(item.ref_key);
+                toast.success('Przywrócone na listę');
+            });
+        },
+        [run, toast]
+    );
+
+    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith, unsnooze, removeTask, unplanIdea, planIdeaToday };
 }
 
 /* ------------------------------------------------------------------ pieces */
@@ -460,8 +489,9 @@ function EarningsCard({ data, display }) {
     );
 }
 
-function LaterList({ items, done, weekItems, actions }) {
+function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
     const [weekOpen, setWeekOpen] = useState(() => readFlag(WEEK_OPEN_KEY));
+    const [snoozedOpen, setSnoozedOpen] = useState(() => readFlag(SNOOZED_OPEN_KEY));
     const shown = items.slice(0, 3);
     const hidden = items.length - shown.length;
 
@@ -475,11 +505,14 @@ function LaterList({ items, done, weekItems, actions }) {
     return (
         <section className="card p-2 pt-4 flex flex-col">
             <h3 className="px-3 mb-1 text-base font-semibold text-ink">Potem dziś</h3>
-            {shown.length === 0 && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
+            {shown.length === 0 && laterToday.length === 0 && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
             {shown.map((item) => (
                 <AgendaRow key={item.ref_key} item={item} actions={actions} />
             ))}
             {hidden > 0 && <p className="px-3 py-1 text-xs text-ink-muted">+ {hidden} kolejne, pokażą się po kolei w „Teraz”</p>}
+            {laterToday.map((item) => (
+                <AgendaRow key={item.ref_key} item={item} actions={actions} />
+            ))}
             {done.slice(0, 3).map((d) => (
                 <div key={d.ref_key + d.done_at} className="flex items-center gap-3 px-3 py-2">
                     <span className="w-7 h-7 rounded-full bg-chart text-on-accent flex items-center justify-center shrink-0">
@@ -500,6 +533,34 @@ function LaterList({ items, done, weekItems, actions }) {
                     )}
                 </div>
             ))}
+
+            {snoozed.length > 0 && (
+                <div className="mt-2 pt-2 mx-3 border-t border-line">
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setSnoozedOpen((o) => {
+                                writeFlag(SNOOZED_OPEN_KEY, !o);
+                                return !o;
+                            })
+                        }
+                        aria-expanded={snoozedOpen}
+                        className="w-full flex justify-between items-center py-2.5 text-sm text-ink-muted"
+                    >
+                        <span className="inline-flex items-center gap-1.5">
+                            <Clock size={14} /> Odłożone na później: {snoozed.length}
+                        </span>
+                        <span className="font-medium text-ink">{snoozedOpen ? 'Zwiń' : 'Pokaż'}</span>
+                    </button>
+                    {snoozedOpen && (
+                        <div className="-mx-3 pb-1">
+                            {snoozed.map((item) => (
+                                <AgendaRow key={item.ref_key} item={item} actions={actions} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {weekItems.length > 0 && (
                 <div className="mt-auto pt-2 mx-3 border-t border-line">
@@ -539,7 +600,15 @@ function AgendaRow({ item, actions }) {
             </button>
             <Link to={item.url} className="flex-1 min-w-0">
                 <span className="block text-[15px] font-medium text-ink truncate">{item.title}</span>
-                <span className={`block text-xs ${metaTone}`}>
+                <span className={`block text-xs ${item.snoozed_until ? 'text-ink-muted' : metaTone}`}>
+                    {item.snoozed_until ? (
+                        <>
+                            <span className="inline-flex items-center gap-1 font-medium text-ink-soft">
+                                <Clock size={11} /> {snoozeLabel(item.snoozed_until)}
+                            </span>
+                            {' · '}
+                        </>
+                    ) : null}
                     {item.kind === 'return' ? deadlineLabel(item.days, item.deadline) : item.meta}
                     {item.amount > 0 && (
                         <>
@@ -551,10 +620,10 @@ function AgendaRow({ item, actions }) {
             </Link>
             <button
                 type="button"
-                onClick={() => actions.setSnoozeTarget(item)}
+                onClick={() => (item.snoozed_until ? actions.unsnooze(item) : actions.setSnoozeTarget(item))}
                 className="h-10 px-3 rounded-full border border-line-strong text-xs font-medium text-ink hover:bg-surface-2 shrink-0"
             >
-                Później
+                {item.snoozed_until ? 'Przywróć' : 'Później'}
             </button>
         </div>
     );

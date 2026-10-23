@@ -6,7 +6,8 @@
  * Each item: kind (return|payment|task|idea), ref_key, title, meta, amount,
  * deadline, days, url, bucket ("today" | "week"), urgency (higher = first),
  * plus ids the app needs for one-tap actions.
- * Things snoozed ("Przypomnij później") are left out until their reminder.
+ * Things snoozed ("Później") stay listed with snoozed_until, but leave "today"
+ * (bucket "later" / "snoozed") until their reminder.
  */
 
 require_once __DIR__ . '/../config/Schema.php';
@@ -52,9 +53,6 @@ class TodayAgenda
             unset($g);
         }
         foreach ($groups as $key => $g) {
-            if (isset($skip[$key])) {
-                continue;
-            }
             $days = $g['days'];
             $items[] = [
                 'kind' => 'return',
@@ -86,9 +84,6 @@ class TodayAgenda
         $stmt->execute(['user_id' => $userId, 'today' => $today, 'today2' => $today]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $key = 'collab:' . $row['id'];
-            if (isset($skip[$key])) {
-                continue;
-            }
             $days = (int) $row['days_waiting'];
             $items[] = [
                 'kind' => 'payment',
@@ -120,9 +115,6 @@ class TodayAgenda
             $stmt->execute(['user_id' => $userId, 'today' => $today, 'soon' => date('Y-m-d', strtotime('+7 days'))]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $key = 'task:' . $row['id'];
-                if (isset($skip[$key])) {
-                    continue;
-                }
                 $days = $row['due_date'] === null ? null : (int) $row['days'];
                 $items[] = [
                     'kind' => 'task',
@@ -158,9 +150,6 @@ class TodayAgenda
             $stmt->execute(['user_id' => $userId, 'today' => $today]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $key = 'idea:' . $row['id'];
-                if (isset($skip[$key])) {
-                    continue;
-                }
                 $seconds = (int) round((int) $row['words'] / 2.3);
                 $length = $seconds > 0 ? '~' . intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT) : 'bez scenariusza';
                 $carried = $row['planned_for'] < $today;
@@ -183,22 +172,33 @@ class TodayAgenda
             // ideas table optional
         }
 
+        // Snoozed ("Później"): still listed, but never "Teraz" until the reminder time.
+        // Later today -> bucket "later" (still counts for today); another day -> "snoozed".
+        foreach ($items as &$item) {
+            if (isset($skip[$item['ref_key']])) {
+                $until = $skip[$item['ref_key']];
+                $item['snoozed_until'] = $until;
+                $item['bucket'] = substr($until, 0, 10) === $today ? 'later' : 'snoozed';
+            }
+        }
+        unset($item);
+
         usort($items, function ($a, $b) {
             return $b['urgency'] <=> $a['urgency'];
         });
         return $items;
     }
 
-    /** ref_keys snoozed for later (done things drop out by their own status). */
+    /** ref_key => remind_at of things snoozed for later (done things drop out by their own status). */
     private static function skippedKeys(PDO $conn, $userId)
     {
         $skip = [];
         try {
             Schema::ensure($conn, 'reminders');
-            $stmt = $conn->prepare("SELECT ref_key FROM reminders WHERE user_id = :user_id AND sent_at IS NULL AND remind_at > :now");
+            $stmt = $conn->prepare("SELECT ref_key, remind_at FROM reminders WHERE user_id = :user_id AND sent_at IS NULL AND remind_at > :now");
             $stmt->execute(['user_id' => $userId, 'now' => date('Y-m-d H:i:s')]);
-            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $key) {
-                $skip[$key] = true;
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $skip[$row['ref_key']] = $row['remind_at'];
             }
         } catch (Exception $e) {
             // optional tables

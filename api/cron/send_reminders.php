@@ -108,7 +108,7 @@ try {
         // 2. "Na dziś"
         if ($prefs['summary'] && $time >= $prefs['summary_time']) {
             $todayItems = array_values(array_filter($getAgenda(), function ($i) {
-                return $i['bucket'] === 'today';
+                return $i['bucket'] === 'today' || $i['bucket'] === 'later';
             }));
             $n = count($todayItems);
             if ($n > 0) {
@@ -138,7 +138,8 @@ try {
         if ($prefs['returns'] && $time >= RETURNS_TIME) {
             $days = $prefs['summary'] ? [0, 1] : [0, 1, 3];
             foreach ($getAgenda() as $item) {
-                if ($item['kind'] !== 'return' || !in_array($item['days'], $days, true)) {
+                // snoozed returns get their own reminder at the chosen time
+                if ($item['kind'] !== 'return' || !in_array($item['days'], $days, true) || !empty($item['snoozed_until'])) {
                     continue;
                 }
                 $title = $item['days'] === 0 ? 'Dziś ostatni dzień zwrotu' : ($item['days'] === 1 ? 'Jutro mija termin zwrotu' : 'Za 3 dni mija termin zwrotu');
@@ -154,7 +155,7 @@ try {
         // 4. Overdue payments - once a week
         if ($prefs['payments'] && $time >= $prefs['summary_time']) {
             $late = array_values(array_filter($getAgenda(), function ($i) {
-                return $i['kind'] === 'payment';
+                return $i['kind'] === 'payment' && empty($i['snoozed_until']);
             }));
             if ($late) {
                 $brands = array_map(function ($i) {
