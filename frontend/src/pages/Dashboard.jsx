@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Check, Clock, Crosshair, Loader2, Play, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, Briefcase, Camera, Check, Clock, Crosshair, FileText, Lightbulb, Loader2, Play, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
@@ -334,7 +334,7 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
 
             {item.kind === 'return' && (
                 <div className="mt-1">
-                    <div className="flex justify-between text-sm font-semibold mb-1.5">
+                    <div className="flex flex-wrap justify-between gap-x-3 text-sm font-semibold mb-1.5">
                         <span>Termin: {deadlineLabel(item.days, item.deadline)}</span>
                         {hours !== null && <span>zostało ok. {hours} godz.</span>}
                     </div>
@@ -561,7 +561,8 @@ function MoneyCard({ data }) {
 function CaptureCard({ ai, ideas, current }) {
     const toast = useToast();
     const { refresh } = useDashboard();
-    const { openCollab, openPurchase, openQuickAdd } = useQuickActions();
+    const navigate = useNavigate();
+    const { openCollab, openPurchase } = useQuickActions();
     const [text, setText] = useState('');
     const [saving, setSaving] = useState(false);
     const nextIdea = ideas.find((i) => Number(i.words) > 0 && current?.ref_key !== `idea:${i.id}`);
@@ -638,9 +639,26 @@ function CaptureCard({ ai, ideas, current }) {
                     </button>
                 </div>
             </form>
-            <button type="button" onClick={openQuickAdd} className="text-sm font-medium text-ink-soft inline-flex items-center gap-1.5 self-start text-left hover:text-ink">
-                <Plus size={15} /> Dodaj ręcznie
-            </button>
+            <div>
+                <div className="text-xs text-ink-muted mb-2">Albo dodaj od razu:</div>
+                <div className="grid grid-cols-2 gap-2">
+                    {[
+                        { label: 'Umowa', icon: FileText, run: () => navigate('/documents?add=1') },
+                        { label: 'Współpraca', icon: Briefcase, run: () => openCollab() },
+                        { label: 'Zakup', icon: Camera, run: () => openPurchase() },
+                        { label: 'Pomysł', icon: Lightbulb, run: () => navigate('/ideas/new') },
+                    ].map((a) => (
+                        <button
+                            key={a.label}
+                            type="button"
+                            onClick={a.run}
+                            className="h-12 px-3 rounded-2xl border border-line-strong bg-surface text-sm font-semibold text-ink inline-flex items-center gap-2 hover:bg-surface-2 active:scale-[0.98]"
+                        >
+                            <a.icon size={18} className="text-primary-600 shrink-0" /> {a.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
             {nextIdea && (
                 <Link to={`/ideas/${nextIdea.id}?prompter=1`} className="mt-auto flex items-center gap-3 p-3 rounded-2xl bg-canvas hover:bg-surface-2">
                     <span className="w-11 h-11 rounded-full bg-accent text-on-accent flex items-center justify-center shrink-0">

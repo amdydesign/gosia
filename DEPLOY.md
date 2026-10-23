@@ -56,7 +56,7 @@ Jeśli panel pozwala tylko na adres URL:
 
 Sprawdzenie bez wysyłania: dopisz `&dry=1` do adresu (albo `--dry` w poleceniu) — pokaże, co by wyszło.
 
-Wymagane w `api/.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (wygeneruj raz: `php api/utils/generate_vapid_keys.php`).
+Klucze powiadomień (VAPID) serwer tworzy sam przy pierwszym włączeniu powiadomień i trzyma w bazie (tabela `server_settings`). Własne klucze w `api/.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) mają pierwszeństwo.
 Strefa czasowa: domyślnie `Europe/Warsaw` (zmiana: `APP_TIMEZONE` w `api/.env`).
 
 **iPhone:** powiadomienia działają tylko w aplikacji dodanej do ekranu głównego

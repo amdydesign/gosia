@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 requireAuth();
 
 if (!WebPush::isConfigured()) {
-    Response::error('Push notifications are not configured on the server', 503);
+    Response::error('Serwer nie może przygotować powiadomień — spróbuj ponownie za chwilę', 503);
 }
 
 Response::success(['publicKey' => WebPush::getPublicKey()]);

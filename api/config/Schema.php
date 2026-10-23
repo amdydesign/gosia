@@ -146,6 +146,14 @@ class Schema
                 UNIQUE KEY idx_user_key (user_id, dedup_key)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        // Server-wide values the app creates itself (e.g. VAPID keys for push)
+        'server_settings' => "
+            CREATE TABLE IF NOT EXISTS server_settings (
+                name VARCHAR(64) NOT NULL PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
         'social_refresh_log' => "
             CREATE TABLE IF NOT EXISTS social_refresh_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,

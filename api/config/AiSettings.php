@@ -88,7 +88,7 @@ class AiSettings
         return hash('sha256', 'gosia-app-settings|' . ($_ENV['JWT_SECRET'] ?? ''), true);
     }
 
-    private static function encrypt($plain)
+    public static function encrypt($plain)
     {
         $iv = random_bytes(12);
         $tag = '';
@@ -96,7 +96,7 @@ class AiSettings
         return 'v1:' . base64_encode($iv . $tag . $cipher);
     }
 
-    private static function decrypt($stored)
+    public static function decrypt($stored)
     {
         if (strpos((string) $stored, 'v1:') !== 0) {
             return null;

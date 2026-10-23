@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 try {
     $userId = getCurrentUserId();
     if (!WebPush::isConfigured()) {
-        Response::error('Serwer nie ma kluczy powiadomień (VAPID) - zobacz DEPLOY.md', 503);
+        Response::error('Serwer nie może przygotować powiadomień — spróbuj ponownie za chwilę', 503);
     }
 
     $db = new Database();

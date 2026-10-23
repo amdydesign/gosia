@@ -12,10 +12,10 @@ export default function MobileNav() {
     return (
         <nav
             aria-label="Główna"
-            className="lg:hidden fixed inset-x-3 z-40 h-[66px] p-1.5 grid grid-cols-5 gap-0.5 rounded-full bg-surface border border-line shadow-float"
+            className="lg:hidden fixed inset-x-2 z-40 h-[66px] p-1.5 grid grid-cols-6 gap-0.5 rounded-full bg-surface border border-line shadow-float"
             style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
         >
-            {NAV_ITEMS.filter((item) => item.mobile !== false).map((item) => {
+            {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const badge = badges[item.key];
                 return (
@@ -32,14 +32,14 @@ export default function MobileNav() {
                         {({ isActive }) => (
                             <>
                                 <span className="relative">
-                                    <Icon size={20} strokeWidth={isActive ? 2.3 : 1.9} />
+                                    <Icon size={19} strokeWidth={isActive ? 2.3 : 1.9} />
                                     {badge > 0 && (
                                         <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-secondary text-on-secondary text-[10px] font-bold flex items-center justify-center ring-2 ring-surface">
                                             {badge}
                                         </span>
                                     )}
                                 </span>
-                                <span className={`text-[10.5px] leading-none ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                                <span className={`text-[10px] leading-none tracking-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
                             </>
                         )}
                     </NavLink>
