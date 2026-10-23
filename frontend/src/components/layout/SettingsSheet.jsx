@@ -4,6 +4,7 @@ import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, Fold
 import Sheet from '../ui/Sheet';
 import Logo from '../ui/Logo';
 import Switch from '../ui/Switch';
+import { OWNER_NAME } from '../../utils/format';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
 import ExportModal from '../../pages/collaborations/ExportModal';
 import NotificationsSheet from '../settings/NotificationsSheet';
@@ -56,11 +57,11 @@ export default function SettingsSheet({ open, onClose }) {
             <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-12 h-12 rounded-full bg-surface-2 border border-line text-ink flex items-center justify-center font-semibold text-lg">
-                        {(user?.username || 'G').charAt(0).toUpperCase()}
+                        {OWNER_NAME.charAt(0)}
                     </div>
                     <div className="min-w-0">
-                        <div className="font-semibold text-ink truncate">{user?.username || 'Użytkownik'}</div>
-                        <div className="text-xs text-ink-muted">Panel stylistki</div>
+                        <div className="font-semibold text-ink truncate">{OWNER_NAME}</div>
+                        <div className="text-xs text-ink-muted truncate">Login: {user?.username || '—'}</div>
                     </div>
                 </div>
 

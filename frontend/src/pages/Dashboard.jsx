@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowRight, Briefcase, CalendarCheck, CalendarX, Camera, Check, Clock, Crosshair, FileText, Lightbulb, Loader2, Play, Sparkles, Trash2, X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
 import { useToast } from '../context/ToastContext';
@@ -10,7 +9,7 @@ import Button from '../components/ui/Button';
 import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
-import { formatCurrency, formatWeekdayDate, greetingForHour } from '../utils/format';
+import { OWNER_NAME, formatCurrency, formatWeekdayDate, greetingForHour } from '../utils/format';
 import {
     SNOOZE_PRESETS,
     cancelSnooze,
@@ -67,7 +66,6 @@ function writeFlag(key, on) {
  * visible progress for the day, money at a glance and one field to dump thoughts into.
  */
 export default function Dashboard() {
-    const { user } = useAuth();
     const { data, loading, error, refresh } = useDashboard();
     const [focus, setFocus] = useState(() => readFlag(FOCUS_KEY));
     const [skip, setSkip] = useState(0);
@@ -119,7 +117,7 @@ export default function Dashboard() {
             <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
                 <div className="flex-1 min-w-[220px]">
                     <h2 className="font-display text-2xl lg:text-[28px] font-semibold tracking-tight text-ink">
-                        {greetingForHour()}, {user?.username || 'Gosia'}
+                        {greetingForHour()}, {OWNER_NAME}
                     </h2>
                     <p className="text-sm text-ink-muted mt-0.5">
                         {formatWeekdayDate()}
