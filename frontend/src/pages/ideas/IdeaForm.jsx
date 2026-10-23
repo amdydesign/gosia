@@ -129,7 +129,7 @@ export default function IdeaForm() {
                 </Field>
             </Card>
 
-            <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] lg:static -mx-4 sm:mx-0 px-4 sm:px-0 py-3 lg:py-0 bg-canvas/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-t border-line lg:border-0">
+            <div className="sticky bottom-[calc(90px+env(safe-area-inset-bottom))] lg:static -mx-4 sm:mx-0 px-4 sm:px-0 py-3 lg:py-0 bg-canvas/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-t border-line lg:border-0">
                 <div className="flex gap-3">
                     <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 lg:flex-none">Anuluj</Button>
                     <Button type="submit" variant="primary" icon={Save} loading={saving} className="flex-[2] lg:flex-none lg:px-8">Zapisz</Button>

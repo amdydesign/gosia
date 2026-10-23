@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /**
@@ -21,15 +22,16 @@ export default function Sheet({ open, onClose, title, description, children, foo
 
     const maxW = { sm: 'sm:max-w-sm', md: 'sm:max-w-md', lg: 'sm:max-w-lg', xl: 'sm:max-w-2xl' }[size] || 'sm:max-w-md';
 
-    return (
+    // Rendered into <body> so no page wrapper can trap it under the top bar
+    return createPortal(
         <div
-            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] animate-fade-in"
+            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/60 animate-fade-in"
             onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
             role="dialog"
             aria-modal="true"
         >
             <div
-                className={`w-full ${maxW} bg-surface rounded-t-3xl sm:rounded-3xl shadow-sheet flex flex-col max-h-[92dvh] animate-slide-up sm:animate-scale-in`}
+                className={`w-full ${maxW} bg-surface border border-line-strong rounded-t-3xl sm:rounded-3xl shadow-sheet flex flex-col max-h-[92dvh] animate-slide-up sm:animate-scale-in`}
             >
                 <div className="sm:hidden flex justify-center pt-2.5">
                     <div className="h-1 w-10 rounded-full bg-slate-300" />
@@ -60,6 +62,7 @@ export default function Sheet({ open, onClose, title, description, children, foo
                 {footer && <div className="px-5 py-4 border-t border-line bg-canvas/60 rounded-b-3xl safe-bottom flex gap-3">{footer}</div>}
                 {!footer && <div className="safe-bottom" />}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
