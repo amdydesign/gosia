@@ -104,6 +104,18 @@ try {
     }
 
     $conn->commit();
+
+    if (isset($input['payment_status'])) {
+        require_once __DIR__ . '/../utils/DoneLog.php';
+        if ($input['payment_status'] === 'paid') {
+            $row = $conn->prepare("SELECT brand FROM collaborations WHERE id = :id");
+            $row->execute(['id' => $id]);
+            DoneLog::record($conn, $userId, 'collab:' . $id, 'Płatność ' . ($row->fetchColumn() ?: ''));
+        } else {
+            DoneLog::forget($conn, $userId, 'collab:' . $id);
+        }
+    }
+
     Response::success(['message' => 'Updated successfully']);
 
 } catch (Exception $e) {

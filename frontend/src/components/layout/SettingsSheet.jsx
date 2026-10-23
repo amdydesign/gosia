@@ -1,33 +1,40 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock } from 'lucide-react';
+import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff } from 'lucide-react';
 import Sheet from '../ui/Sheet';
+import Logo from '../ui/Logo';
+import Switch from '../ui/Switch';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
 import ExportModal from '../../pages/collaborations/ExportModal';
+import NotificationsSheet from '../settings/NotificationsSheet';
 import { useAuth } from '../../context/AuthContext';
 import { usePush } from '../../hooks/usePush';
-import { useToast } from '../../context/ToastContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
+import { usePreferences } from '../../context/PreferencesContext';
 
+const THEMES = [
+    { value: 'dark', label: 'Noc', icon: Moon },
+    { value: 'light', label: 'Dzień', icon: Sun },
+    { value: 'auto', label: 'Auto', icon: Smartphone },
+];
+
+/**
+ * Profile menu (avatar): look, privacy, notifications and account.
+ */
 export default function SettingsSheet({ open, onClose }) {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
     const push = usePush();
-    const toast = useToast();
     const confirm = useConfirm();
     const { data: dashboard } = useDashboard();
     const { openAiSettings } = useQuickActions();
+    const { theme, setTheme, hideByDefault, setHideByDefault } = usePreferences();
     const ai = dashboard?.ai;
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
-
-    const handlePush = async () => {
-        const result = await push.toggle();
-        if (result.ok) toast.success(result.status === 'subscribed' ? 'Powiadomienia włączone' : 'Powiadomienia wyłączone');
-        else if (result.message) toast.error(result.message);
-    };
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
 
     const handleLogout = async () => {
         if (await confirm({ title: 'Wylogować?', message: 'Będziesz musiała zalogować się ponownie.', confirmLabel: 'Wyloguj' })) {
@@ -35,29 +42,81 @@ export default function SettingsSheet({ open, onClose }) {
         }
     };
 
+    const pushText =
+        push.status === 'subscribed'
+            ? 'Włączone na tym urządzeniu'
+            : push.status === 'denied'
+                ? 'Zablokowane w ustawieniach telefonu'
+                : push.needsInstall
+                    ? 'Dodaj Gonię do ekranu głównego'
+                    : 'Wyłączone';
+
     return (
         <>
-            <Sheet open={open && !passwordOpen && !exportOpen} onClose={onClose} title="Ustawienia" size="sm">
-                <div className="flex items-center gap-3 p-3 rounded-2xl bg-canvas border border-line mb-4">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-400 to-secondary text-white flex items-center justify-center font-bold">
+            <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-12 h-12 rounded-full bg-surface-2 border border-line text-ink flex items-center justify-center font-semibold text-lg">
                         {(user?.username || 'G').charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                        <div className="font-bold text-ink truncate">{user?.username || 'Użytkownik'}</div>
-                        <div className="text-xs text-ink-muted">Stylistka · Gosia panel</div>
+                        <div className="font-semibold text-ink truncate">{user?.username || 'Użytkownik'}</div>
+                        <div className="text-xs text-ink-muted">Panel stylistki</div>
                     </div>
                 </div>
 
+                <div className="mb-5">
+                    <div className="text-sm font-semibold text-ink mb-2">Wygląd</div>
+                    <div role="group" aria-label="Wygląd" className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-canvas border border-line">
+                        {THEMES.map((t) => {
+                            const active = theme === t.value;
+                            return (
+                                <button
+                                    key={t.value}
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() => setTheme(t.value)}
+                                    className={`h-11 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 transition-colors ${
+                                        active ? 'bg-ink text-canvas' : 'text-ink-soft hover:text-ink'
+                                    }`}
+                                >
+                                    <t.icon size={16} /> {t.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <p className="hint">„Auto” przełącza się samo według ustawień telefonu.</p>
+                </div>
+
                 <div className="card divide-y divide-line overflow-hidden">
+                    <button type="button" role="switch" aria-checked={hideByDefault} onClick={() => setHideByDefault(!hideByDefault)} className="row w-full text-left hover:bg-surface-2">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
+                            <EyeOff size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Zawsze ukrywaj kwoty</span>
+                            <span className="block text-xs text-ink-muted">Rozmyte po otwarciu, pokażesz je okiem u góry</span>
+                        </span>
+                        <Switch on={hideByDefault} />
+                    </button>
+                    <button type="button" onClick={() => setNotificationsOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${push.status === 'subscribed' ? 'bg-primary-50 text-primary-700' : 'bg-surface-2 text-ink-muted'}`}>
+                            {push.status === 'subscribed' ? <Bell size={18} /> : <BellOff size={18} />}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Powiadomienia</span>
+                            <span className="block text-xs text-ink-muted">{pushText}</span>
+                        </span>
+                        <ChevronRight size={18} className="text-ink-muted" />
+                    </button>
                     <button
                         type="button"
                         onClick={() => {
                             onClose();
                             navigate('/documents');
                         }}
-                        className="row w-full text-left hover:bg-canvas"
+                        className="row w-full text-left hover:bg-surface-2"
                     >
-                        <span className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
                             <FolderLock size={18} />
                         </span>
                         <span className="flex-1 min-w-0">
@@ -66,35 +125,15 @@ export default function SettingsSheet({ open, onClose }) {
                         </span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
-                    {push.supported && (
-                        <button type="button" onClick={handlePush} disabled={push.busy} className="row w-full text-left hover:bg-canvas">
-                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${push.status === 'subscribed' ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
-                                {push.status === 'subscribed' ? <Bell size={18} /> : <BellOff size={18} />}
-                            </span>
-                            <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-semibold text-ink">Powiadomienia push</span>
-                                <span className="block text-xs text-ink-muted">
-                                    {push.status === 'subscribed'
-                                        ? 'Włączone: terminy zwrotów, spóźnione przelewy, pomysły'
-                                        : push.status === 'denied'
-                                            ? 'Zablokowane w przeglądarce'
-                                            : 'Wyłączone'}
-                                </span>
-                            </span>
-                            <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${push.status === 'subscribed' ? 'bg-primary-600' : 'bg-slate-300'}`}>
-                                <span className={`block w-5 h-5 rounded-full bg-white shadow transition-transform ${push.status === 'subscribed' ? 'translate-x-5' : ''}`} />
-                            </span>
-                        </button>
-                    )}
                     <button
                         type="button"
                         onClick={() => {
                             onClose();
                             openAiSettings();
                         }}
-                        className="row w-full text-left hover:bg-canvas"
+                        className="row w-full text-left hover:bg-surface-2"
                     >
-                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${ai?.enabled ? 'bg-primary-50 text-primary-600' : 'bg-slate-100 text-ink-muted'}`}>
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${ai?.enabled ? 'bg-primary-50 text-primary-700' : 'bg-surface-2 text-ink-muted'}`}>
                             <Sparkles size={18} />
                         </span>
                         <span className="flex-1 min-w-0">
@@ -105,33 +144,37 @@ export default function SettingsSheet({ open, onClose }) {
                         </span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
-                    <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-canvas">
-                        <span className="w-9 h-9 rounded-xl bg-slate-100 text-ink-soft flex items-center justify-center">
+                    <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
                             <Download size={18} />
                         </span>
                         <span className="flex-1 text-sm font-semibold text-ink">Eksport współprac (CSV)</span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
-                    <button type="button" onClick={() => setPasswordOpen(true)} className="row w-full text-left hover:bg-canvas">
-                        <span className="w-9 h-9 rounded-xl bg-slate-100 text-ink-soft flex items-center justify-center">
+                    <button type="button" onClick={() => setPasswordOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
                             <KeyRound size={18} />
                         </span>
                         <span className="flex-1 text-sm font-semibold text-ink">Zmień hasło</span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
-                    <button type="button" onClick={handleLogout} className="row w-full text-left hover:bg-red-50/60">
-                        <span className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                    <button type="button" onClick={handleLogout} className="row w-full text-left hover:bg-red-50">
+                        <span className="w-9 h-9 rounded-xl bg-red-50 text-red-700 flex items-center justify-center">
                             <LogOut size={18} />
                         </span>
                         <span className="flex-1 text-sm font-semibold text-red-700">Wyloguj</span>
                     </button>
                 </div>
 
-                <p className="text-center text-[11px] text-ink-muted mt-4 pb-1">Gosia panel · wersja 4.0</p>
+                <div className="flex justify-center mt-5 pb-1 opacity-80">
+                    <Logo size="sm" />
+                </div>
             </Sheet>
 
             <ChangePasswordModal isOpen={passwordOpen} onClose={() => setPasswordOpen(false)} />
             <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
+            <NotificationsSheet open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
         </>
     );
 }
+

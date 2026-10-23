@@ -19,7 +19,7 @@ const emptyItem = () => ({ name: '', amount: '', include: true });
  * items and prices -> quick review -> save (one entry per item).
  * Falls back to a short manual form when AI is off.
  */
-export default function PurchaseAddSheet({ initialFiles, manual = false, onClose, onSaved }) {
+export default function PurchaseAddSheet({ initialFiles, manual = false, prefill, onClose, onSaved }) {
     const toast = useToast();
     const { data: dashboard, refresh } = useDashboard();
     const { openAiSettings } = useQuickActions();
@@ -34,7 +34,14 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, onClose
     const [keepScreens, setKeepScreens] = useState(true);
     const [totalOnScreen, setTotalOnScreen] = useState(0);
     const [memory, setMemory] = useState(() => buildStoreMemory([]));
-    const [form, setForm] = useState({ store: '', purchase_date: today, return_days: 14, notes: '', items: [emptyItem()] });
+    const [form, setForm] = useState(() => ({
+        store: prefill?.store || '',
+        purchase_date: today,
+        return_days: 14,
+        notes: '',
+        // "Zrzuć tutaj" may already know the store / item / price
+        items: prefill?.item ? [{ name: prefill.item, amount: prefill.amount ? String(prefill.amount) : '', include: true }] : [emptyItem()],
+    }));
     const daysTouched = useRef(false);
     const galleryRef = useRef(null);
     const cameraRef = useRef(null);
@@ -190,10 +197,10 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, onClose
                         }}
                         className="w-full rounded-3xl border-2 border-dashed border-primary-300 bg-primary-50/60 hover:bg-primary-50 px-6 py-9 flex flex-col items-center text-center transition-colors"
                     >
-                        <span className="w-14 h-14 rounded-2xl bg-white text-primary-600 shadow-sm flex items-center justify-center mb-3">
+                        <span className="w-14 h-14 rounded-2xl bg-surface text-primary-600 shadow-sm flex items-center justify-center mb-3">
                             <ImagePlus size={28} />
                         </span>
-                        <span className="text-base font-extrabold text-primary-900">Wybierz screena</span>
+                        <span className="text-base font-display font-semibold text-primary-900">Wybierz screena</span>
                         <span className="text-xs text-primary-800/70 mt-1">Potwierdzenie zamówienia, mail ze sklepu, koszyk albo paragon. Możesz zaznaczyć kilka.</span>
                     </button>
                     <div className="grid grid-cols-2 gap-2">
@@ -273,7 +280,7 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, onClose
                                         <button
                                             type="button"
                                             onClick={() => updateItem(i, { include: !it.include })}
-                                            className={`shrink-0 w-7 h-7 rounded-lg border-2 flex items-center justify-center ${it.include ? 'bg-primary-600 border-primary-600 text-white' : 'border-line-strong bg-white'}`}
+                                            className={`shrink-0 w-7 h-7 rounded-lg border-2 flex items-center justify-center ${it.include ? 'bg-accent border-primary-600 text-on-accent' : 'border-line-strong bg-surface'}`}
                                             aria-label={it.include ? 'Pomiń tę rzecz' : 'Uwzględnij tę rzecz'}
                                         >
                                             {it.include && <Check size={14} strokeWidth={3} />}

@@ -22,7 +22,7 @@ export default function Segmented({ options, value, onChange, className = '', ac
                             {opt.label}
                             {opt.count !== undefined && opt.count !== null && (
                                 <span
-                                    className={`text-[10px] px-1.5 rounded-full ${active ? 'bg-ink/10 text-ink' : 'bg-black/5 text-ink-muted'}`}
+                                    className={`text-[10px] px-1.5 rounded-full ${active ? 'bg-ink/10 text-ink' : 'bg-ink/5 text-ink-muted'}`}
                                 >
                                     {opt.count}
                                 </span>
@@ -39,6 +39,6 @@ const TONES = {
     success: '!bg-emerald-600 !text-white',
     warning: '!bg-amber-500 !text-white',
     danger: '!bg-red-600 !text-white',
-    brand: '!bg-primary-600 !text-white',
-    dark: '!bg-ink !text-white',
+    brand: '!bg-accent !text-on-accent',
+    dark: '!bg-ink !text-canvas',
 };

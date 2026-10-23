@@ -106,7 +106,7 @@ export default function IdeaView() {
                 <span className="text-xs text-ink-muted ml-auto">{formatDateLong(idea.created_at?.slice(0, 10))}</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink">{idea.title}</h1>
+            <h1 className="text-2xl sm:text-3xl font-display font-semibold tracking-tight text-ink">{idea.title}</h1>
 
             <Card className="!p-6 sm:!p-8">
                 {idea.content ? (

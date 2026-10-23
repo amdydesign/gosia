@@ -24,5 +24,5 @@ export function getRouteMeta(pathname) {
             return { ...route, back, params: match.params };
         }
     }
-    return { title: 'Gosia', root: true };
+    return { title: 'Gonia', root: true };
 }

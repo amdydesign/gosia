@@ -17,7 +17,7 @@ export default function SearchInput({ value, onChange, placeholder = 'Szukaj…'
                 <button
                     type="button"
                     onClick={() => onChange('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-ink-muted hover:bg-black/5 hover:text-ink"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-ink-muted hover:bg-ink/5 hover:text-ink"
                     aria-label="Wyczyść"
                 >
                     <X size={14} />

@@ -25,6 +25,9 @@ class Database {
         $this->db_name = $_ENV['DB_NAME'];
         $this->username = $_ENV['DB_USER'];
         $this->password = $_ENV['DB_PASS'];
+
+        // Reminders, "dziś" and push hours are Polish local time (APP_TIMEZONE overrides)
+        date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Europe/Warsaw');
     }
 
     /**
@@ -41,6 +44,8 @@ class Database {
                 ];
                 
                 $this->conn = new PDO($dsn, $this->username, $this->password, $options);
+                // Keep MySQL's CURDATE()/NOW() on the same clock as PHP
+                $this->conn->exec("SET time_zone = '" . date('P') . "'");
             } catch (PDOException $e) {
                 if ($_ENV['APP_DEBUG'] === 'true') {
                     die(json_encode([

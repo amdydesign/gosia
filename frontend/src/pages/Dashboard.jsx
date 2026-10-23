@@ -1,34 +1,81 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Briefcase, Camera, Check, CheckCircle2, ChevronRight, Clock, Lightbulb, Play, Plus, RotateCcw } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Clock, Crosshair, Loader2, Play, Plus, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
+import { useToast } from '../context/ToastContext';
 import { useMarkPaid } from '../hooks/useMarkPaid';
 import Button from '../components/ui/Button';
+import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
-import SocialSection from '../components/social/SocialSection';
-import { formatCurrency, formatDateShort, formatSeconds, formatWeekdayDate, greetingForHour } from '../utils/format';
-import { deadlineText, deadlineTone, groupByStore } from '../utils/purchases';
-import { LATE_AFTER_DAYS } from '../utils/collabs';
+import { formatCurrency, formatWeekdayDate, greetingForHour } from '../utils/format';
+import {
+    SNOOZE_PRESETS,
+    cancelSnooze,
+    classifyNote,
+    createIdea,
+    createTask,
+    deadlineLabel,
+    deleteIdea,
+    deleteTask,
+    hoursLeft,
+    setPurchaseStatus,
+    setTaskDone,
+    snooze,
+} from '../services/agenda';
+import { setAppBadge } from '../services/push';
+
+const FOCUS_KEY = 'gonia.focus';
+const WEEK_OPEN_KEY = 'gonia.weekOpen';
+
+function readFlag(key) {
+    try {
+        return localStorage.getItem(key) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function writeFlag(key, on) {
+    try {
+        localStorage.setItem(key, on ? '1' : '0');
+    } catch {
+        // ignore
+    }
+}
 
 /**
- * Start = shortcuts to everything: add buttons, the 3 numbers that matter,
- * one to-do list with one-tap actions, ideas and followers.
+ * Start for an ADHD brain: one thing now ("Teraz"), a short list after it,
+ * visible progress for the day, money at a glance and one field to dump thoughts into.
  */
 export default function Dashboard() {
     const { user } = useAuth();
-    const navigate = useNavigate();
     const { data, loading, error, refresh } = useDashboard();
-    const { openCollab, openPurchase } = useQuickActions();
-    const { markPaid, busyId: payingId } = useMarkPaid();
+    const [focus, setFocus] = useState(() => readFlag(FOCUS_KEY));
+    const [skip, setSkip] = useState(0);
+    const actions = useAgendaActions();
 
     useEffect(() => {
         refresh();
     }, [refresh]);
 
-    const todo = useMemo(() => buildTodo(data), [data]);
+    const agenda = useMemo(() => data?.agenda || [], [data]);
+    const todayItems = useMemo(() => agenda.filter((i) => i.bucket === 'today'), [agenda]);
+    const weekItems = useMemo(() => agenda.filter((i) => i.bucket === 'week'), [agenda]);
+    const done = useMemo(() => data?.done_today || [], [data]);
+
+    useEffect(() => {
+        if (data) setAppBadge(todayItems.length);
+    }, [data, todayItems.length]);
+
+    const toggleFocus = () => {
+        setFocus((f) => {
+            writeFlag(FOCUS_KEY, !f);
+            return !f;
+        });
+    };
 
     if (loading && !data) return <PageSkeleton />;
     if (error && !data) {
@@ -42,217 +89,549 @@ export default function Dashboard() {
         );
     }
 
-    const fin = data?.financials || {};
-    const counts = data?.counts || {};
-    const ideas = data?.draft_ideas || [];
-    const nextIdea = ideas.find((i) => Number(i.words) > 0);
-
-    const tiles = [
-        { label: 'Współpraca', sub: 'marka + kwota', icon: Plus, tone: 'bg-primary-600 text-white shadow-float', iconTone: 'bg-white/15', onClick: () => openCollab() },
-        { label: 'Zakup', sub: 'ze screena', icon: Camera, tone: 'bg-secondary text-white shadow-[0_10px_30px_-10px_rgba(249,115,22,0.55)]', iconTone: 'bg-white/20', onClick: () => openPurchase() },
-        { label: 'Pomysł', sub: 'na rolkę', icon: Lightbulb, tone: 'bg-surface text-ink border border-line shadow-card', iconTone: 'bg-amber-50 text-amber-600', onClick: () => navigate('/ideas/new') },
-        nextIdea
-            ? { label: 'Nagraj', sub: nextIdea.title, icon: Play, tone: 'bg-ink text-white', iconTone: 'bg-white/10', onClick: () => navigate(`/ideas/${nextIdea.id}?prompter=1`) }
-            : { label: 'Pomysły', sub: 'scenariusze', icon: Lightbulb, tone: 'bg-surface text-ink border border-line shadow-card', iconTone: 'bg-slate-100 text-ink-soft', onClick: () => navigate('/ideas') },
-    ];
+    const index = todayItems.length ? skip % todayItems.length : 0;
+    const current = todayItems[index] || null;
+    const later = todayItems.filter((i) => i !== current);
+    const total = done.length + todayItems.length;
 
     return (
-        <div className="space-y-5 animate-fade-in">
-            <div>
-                <p className="text-sm text-ink-muted font-medium lg:hidden">{formatWeekdayDate()}</p>
-                <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-ink mt-0.5">
-                    {greetingForHour()}, {user?.username || 'Gosia'}
-                </h2>
-            </div>
-
-            {/* Add / do */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {tiles.map((t) => (
+        <div className="space-y-4 lg:space-y-5 animate-fade-in">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+                <div className="flex-1 min-w-[220px]">
+                    <h2 className="font-display text-2xl lg:text-[28px] font-semibold tracking-tight text-ink">
+                        {greetingForHour()}, {user?.username || 'Gosia'}
+                    </h2>
+                    <p className="text-sm text-ink-muted mt-0.5">
+                        {formatWeekdayDate()}
+                        {todayItems.length > 0 && ` · na dziś ${todayItems.length}, reszta może poczekać`}
+                    </p>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <Progress done={done.length} total={total} />
                     <button
-                        key={t.label}
                         type="button"
-                        onClick={t.onClick}
-                        className={`rounded-2xl p-4 text-left flex flex-col gap-3 min-h-[104px] active:scale-[0.98] transition-transform ${t.tone}`}
+                        onClick={toggleFocus}
+                        aria-pressed={focus}
+                        className={`h-11 px-4 rounded-full border text-sm font-medium inline-flex items-center gap-2 shrink-0 transition-colors ${
+                            focus ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink border-line-strong hover:bg-surface-2'
+                        }`}
                     >
-                        <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${t.iconTone}`}>
-                            <t.icon size={22} strokeWidth={2.4} />
-                        </span>
-                        <span className="min-w-0">
-                            <span className="block font-extrabold leading-tight">{t.label}</span>
-                            <span className="block text-xs opacity-75 truncate">{t.sub}</span>
-                        </span>
+                        <Crosshair size={16} />
+                        <span className="hidden sm:inline">Tryb skupienia</span>
+                        <span className="sm:hidden">Skupienie</span>
                     </button>
+                </div>
+            </div>
+
+            <div className={`grid grid-cols-1 gap-4 ${focus ? '' : 'lg:grid-cols-[1.6fr_1fr]'}`}>
+                <FocusCard
+                    item={current}
+                    canSkip={todayItems.length > 1}
+                    onSkip={() => setSkip((s) => s + 1)}
+                    actions={actions}
+                    doneCount={done.length}
+                />
+                {!focus && <EarningsCard data={data} display="hidden lg:flex" />}
+            </div>
+
+            {focus ? (
+                <p className="text-center text-sm text-ink-muted py-6">
+                    Tylko ta jedna rzecz. Reszta jest schowana i poczeka — wyłącz tryb skupienia, gdy skończysz.
+                </p>
+            ) : (
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
+                    <LaterList items={later} done={done} weekItems={weekItems} actions={actions} />
+                    <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} current={current} />
+                    <MoneyCard data={data} />
+                    {/* phone: earnings at the end, after what needs doing */}
+                    <EarningsCard data={data} display="flex lg:hidden" />
+                </div>
+            )}
+
+            <SnoozeSheet target={actions.snoozeTarget} onPick={actions.snoozeWith} onClose={() => actions.setSnoozeTarget(null)} />
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ actions */
+
+function useAgendaActions() {
+    const navigate = useNavigate();
+    const toast = useToast();
+    const { refresh } = useDashboard();
+    const { markPaid } = useMarkPaid();
+    const [busy, setBusy] = useState(null);
+    const [snoozeTarget, setSnoozeTarget] = useState(null);
+
+    const run = useCallback(
+        async (item, fn) => {
+            setBusy(item.ref_key);
+            try {
+                await fn();
+                await refresh();
+            } catch (err) {
+                toast.error(err.message || 'Nie udało się zapisać');
+            } finally {
+                setBusy(null);
+            }
+        },
+        [refresh, toast]
+    );
+
+    const complete = useCallback(
+        (item) => {
+            if (item.kind === 'idea') {
+                navigate(item.url);
+                return;
+            }
+            if (item.kind === 'payment') {
+                run(item, () => markPaid(item.collab));
+                return;
+            }
+            if (item.kind === 'task') {
+                run(item, async () => {
+                    await setTaskDone(item.task_id, true);
+                    toast.success('Ogarnięte!', {
+                        duration: 5000,
+                        action: { label: 'Cofnij', onClick: () => setTaskDone(item.task_id, false).then(() => refresh()) },
+                    });
+                });
+                return;
+            }
+            if (item.kind === 'return') {
+                const purchases = item.purchases || [];
+                run(item, async () => {
+                    for (const p of purchases) {
+                        await setPurchaseStatus(p.id, { status: 'returned', returned_amount: p.amount, kept_confirmed: 0 });
+                    }
+                    toast.success(`Zwrot ${item.store} odhaczony`, {
+                        duration: 5000,
+                        action: {
+                            label: 'Cofnij',
+                            onClick: async () => {
+                                for (const p of purchases) await setPurchaseStatus(p.id, { status: 'kept', returned_amount: 0 });
+                                refresh();
+                            },
+                        },
+                    });
+                });
+            }
+        },
+        [markPaid, navigate, refresh, run, toast]
+    );
+
+    const snoozeWith = useCallback(
+        (preset) => {
+            const item = snoozeTarget;
+            setSnoozeTarget(null);
+            if (!item) return;
+            run(item, async () => {
+                const res = await snooze(item, preset);
+                const at = res?.remind_at ? res.remind_at.slice(11, 16) : '';
+                const label = SNOOZE_PRESETS.find((p) => p.value === preset)?.label || '';
+                toast.success(`Odłożone — przypomnę ${preset === 'tomorrow' ? 'jutro o 9:00' : at ? `o ${at}` : label.toLowerCase()}`, {
+                    duration: 5000,
+                    action: { label: 'Cofnij', onClick: () => cancelSnooze(item.ref_key).then(() => refresh()) },
+                });
+            });
+        },
+        [refresh, run, snoozeTarget, toast]
+    );
+
+    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith };
+}
+
+/* ------------------------------------------------------------------ pieces */
+
+function Progress({ done, total }) {
+    const segments = Math.min(Math.max(total, 1), 8);
+    const filled = total > 8 ? Math.round((done / total) * 8) : done;
+    return (
+        <div className="flex-1 sm:w-64 sm:flex-none" aria-label={`Dziś ogarnięte ${done} z ${total}`}>
+            <div className="flex justify-between text-sm mb-1.5">
+                <span className="font-semibold text-ink">Dziś ogarnięte</span>
+                <span className="text-ink-muted">
+                    {done} z {total}
+                </span>
+            </div>
+            <div className="flex gap-1.5">
+                {Array.from({ length: segments }).map((_, i) => (
+                    <span key={i} className={`h-2 flex-1 rounded-full ${i < filled ? 'bg-chart' : 'bg-line'}`} />
                 ))}
-            </div>
-
-            {/* Numbers */}
-            <div className="grid grid-cols-3 gap-2.5">
-                <NumberTile to="/statistics" label="Ten miesiąc" value={formatCurrency(fin.month?.net || 0, { compact: true })} sub="na rękę" />
-                <NumberTile
-                    to="/collaborations"
-                    label="Do zapłaty"
-                    value={formatCurrency(fin.pending?.gross || 0, { compact: true })}
-                    sub={fin.pending?.count ? `${fin.pending.count} × współpraca` : 'wszystko opłacone'}
-                    alert={fin.pending?.overdue_count > 0}
-                />
-                <NumberTile
-                    to="/purchases"
-                    label="Do zwrotu"
-                    value={formatCurrency(counts.active_returns_value || 0, { compact: true })}
-                    sub={counts.active_returns ? `${counts.active_returns} ${counts.active_returns === 1 ? 'rzecz' : 'rzeczy'}` : 'nic nie czeka'}
-                />
-            </div>
-
-            {/* To do */}
-            <section className="card overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
-                    {todo.length ? <AlertCircle size={17} className="text-amber-500" /> : <CheckCircle2 size={17} className="text-emerald-500" />}
-                    <h3 className="card-title flex-1">{todo.length ? 'Do ogarnięcia' : 'Wszystko pod kontrolą'}</h3>
-                </div>
-                {todo.length === 0 ? (
-                    <p className="px-4 py-4 text-sm text-ink-muted">Żadne zwroty się nie kończą i nic nie wisi z płatnościami.</p>
-                ) : (
-                    <div className="divide-y divide-line">
-                        {todo.map((item) =>
-                            item.kind === 'return' ? (
-                                <Link key={item.key} to="/purchases" className="flex items-center gap-3 pl-4 pr-3 py-2.5 hover:bg-canvas/70">
-                                    <RotateCcw size={17} className="text-emerald-600 shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-[15px] font-semibold text-ink truncate">Zwrot {item.group.store}</div>
-                                        <div className={`text-xs truncate ${item.tone === 'danger' ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>
-                                            {item.group.items.length} {item.group.items.length === 1 ? 'rzecz' : 'rzeczy'} ·{' '}
-                                            {formatCurrency(item.group.items.reduce((s, p) => s + (Number(p.amount) || 0), 0))} ·{' '}
-                                            {deadlineText(item.group.days_remaining, item.group.return_deadline)}
-                                        </div>
-                                    </div>
-                                    <ChevronRight size={18} className="text-ink-muted shrink-0" />
-                                </Link>
-                            ) : (
-                                <div key={item.key} className="flex items-center gap-2 pl-4 pr-2.5 py-2.5">
-                                    <Link to={`/collaborations/${item.raw.id}`} className="flex-1 min-w-0">
-                                        <div className="text-[15px] font-semibold text-ink truncate">{item.raw.brand}</div>
-                                        <div className={`text-xs truncate ${item.late ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>
-                                            {formatCurrency(item.raw.amount_gross)} · {item.raw.days_waiting > 0 ? `czeka ${item.raw.days_waiting} dni` : `od ${formatDateShort(item.raw.date)}`}
-                                        </div>
-                                    </Link>
-                                    <IconAction label="Opłacone" tone="success" busy={payingId === item.raw.id} onClick={() => markPaid(item.raw)} icon={Check} />
-                                </div>
-                            )
-                        )}
-                    </div>
-                )}
-            </section>
-
-            {/* Ideas */}
-            <section className="card overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line">
-                    <h3 className="card-title flex items-center gap-2">
-                        <Lightbulb size={16} className="text-amber-500" /> Do nagrania
-                        {counts.ideas_drafts > 0 && <span className="text-xs font-semibold text-ink-muted">({counts.ideas_drafts})</span>}
-                    </h3>
-                    <Link to="/ideas" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-0.5">
-                        Wszystkie <ChevronRight size={14} />
-                    </Link>
-                </div>
-                {ideas.length === 0 ? (
-                    <div className="px-4 py-3.5 flex items-center justify-between gap-3">
-                        <p className="text-sm text-ink-muted">Brak scenariuszy. Zapisz pomysł, gdy tylko wpadnie.</p>
-                        <Button to="/ideas/new" size="sm" variant="soft" icon={Plus}>Dodaj</Button>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-line">
-                        {ideas.slice(0, 3).map((idea) => {
-                            const seconds = Math.round((Number(idea.words) || 0) / 2.3);
-                            return (
-                                <div key={idea.id} className="flex items-center gap-3 pl-4 pr-2.5 py-2.5">
-                                    <Link to={`/ideas/${idea.id}`} className="flex-1 min-w-0">
-                                        <div className="text-[15px] font-semibold text-ink truncate">{idea.title}</div>
-                                        <div className="text-xs text-ink-muted inline-flex items-center gap-1">
-                                            {seconds > 0 && <><Clock size={11} /> ~{formatSeconds(seconds)} · </>}
-                                            dodano {formatDateShort(idea.created_at?.slice(0, 10))}
-                                        </div>
-                                    </Link>
-                                    <Button size="sm" variant="dark" icon={Play} to={`/ideas/${idea.id}?prompter=1`} disabled={!idea.words} aria-label="Prompter">
-                                        <span className="hidden sm:inline">Prompter</span>
-                                    </Button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </section>
-
-            {/* Followers */}
-            <section>
-                <div className="flex items-center justify-between px-1 mb-2">
-                    <h3 className="section-label">Obserwujący</h3>
-                    <Link to="/statistics" className="text-xs font-semibold text-primary-700 inline-flex items-center gap-0.5">
-                        Statystyki <ChevronRight size={12} />
-                    </Link>
-                </div>
-                <SocialSection compact />
-            </section>
-
-            <div className="lg:hidden grid grid-cols-2 gap-2 pb-2">
-                <Button to="/collaborations" variant="secondary" icon={Briefcase}>Współprace</Button>
-                <Button to="/purchases" variant="secondary" icon={RotateCcw}>Zwroty</Button>
             </div>
         </div>
     );
 }
 
-function NumberTile({ to, label, value, sub, alert = false }) {
+const PRIMARY_LABEL = {
+    return: 'Zrobione, odesłane',
+    payment: 'Opłacone',
+    task: 'Zrobione',
+    idea: 'Nagraj teraz',
+};
+
+function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
+    if (!item) {
+        return (
+            <section className="rounded-[28px] bg-accent text-on-accent p-6 lg:p-7 flex flex-col justify-center gap-2 min-h-[220px]">
+                <span className="text-xs font-semibold uppercase tracking-[0.08em] inline-flex items-center gap-2">
+                    <Sparkles size={15} /> Teraz
+                </span>
+                <h2 className="font-display text-[26px] lg:text-3xl font-semibold tracking-tight leading-tight">
+                    {doneCount > 0 ? 'Wszystko na dziś ogarnięte.' : 'Nic pilnego na dziś.'}
+                </h2>
+                <p className="text-[15px] opacity-80">Wpadnie coś do głowy? Zapisz to w polu „Zrzuć tutaj”.</p>
+            </section>
+        );
+    }
+
+    const busy = actions.busy === item.ref_key;
+    const hours = item.kind === 'return' ? hoursLeft(item.deadline) : null;
+    const PrimaryIcon = item.kind === 'idea' ? Play : Check;
+
     return (
-        <Link to={to} className={`rounded-2xl p-3 sm:p-4 border transition-colors ${alert ? 'bg-red-50 border-red-100' : 'bg-surface border-line shadow-card hover:border-primary-200'}`}>
-            <div className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider truncate ${alert ? 'text-red-700' : 'text-ink-muted'}`}>{label}</div>
-            <div className="text-[17px] sm:text-2xl font-extrabold text-ink mt-1 tracking-tight tabular-nums truncate">{value}</div>
-            <div className="text-[11px] text-ink-muted truncate">{sub}</div>
+        <section aria-labelledby="teraz-title" className="rounded-[28px] bg-accent text-on-accent p-5 lg:p-7 flex flex-col gap-3">
+            <span className="text-xs font-semibold uppercase tracking-[0.08em] inline-flex items-center gap-2">
+                <Crosshair size={15} /> Teraz · jedna rzecz
+            </span>
+            <h2 id="teraz-title" className="font-display text-[24px] lg:text-[30px] font-semibold tracking-tight leading-[1.1]">
+                {item.title}
+            </h2>
+            <p className="text-[15px]">
+                {item.meta}
+                {item.amount > 0 && (
+                    <>
+                        {' · '}
+                        {item.kind === 'return' ? 'odzyskasz ' : ''}
+                        <span className="amount font-semibold">{formatCurrency(item.amount)}</span>
+                    </>
+                )}
+            </p>
+
+            {item.kind === 'return' && (
+                <div className="mt-1">
+                    <div className="flex justify-between text-sm font-semibold mb-1.5">
+                        <span>Termin: {deadlineLabel(item.days, item.deadline)}</span>
+                        {hours !== null && <span>zostało ok. {hours} godz.</span>}
+                    </div>
+                    <div className="h-2.5 rounded-full bg-black/15 overflow-hidden">
+                        <div className="h-full rounded-full bg-on-accent" style={{ width: `${Math.min(100, Math.max(8, 100 - (hours / 168) * 100))}%` }} />
+                    </div>
+                </div>
+            )}
+
+            <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => actions.complete(item)}
+                    disabled={busy}
+                    className="h-12 px-5 rounded-full bg-on-accent text-accent font-semibold inline-flex items-center gap-2 active:scale-[0.98] disabled:opacity-60"
+                >
+                    {busy ? <Loader2 size={18} className="animate-spin" /> : <PrimaryIcon size={18} strokeWidth={2.4} />}
+                    {PRIMARY_LABEL[item.kind]}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => actions.setSnoozeTarget(item)}
+                    disabled={busy}
+                    className="h-12 px-4 rounded-full border-[1.5px] border-black/35 font-semibold inline-flex items-center gap-2 active:scale-[0.98]"
+                >
+                    <Clock size={18} /> Później
+                </button>
+                {item.kind === 'return' && (
+                    <Link to="/purchases" className="text-sm font-medium underline underline-offset-2 px-2">
+                        Część zostawiam
+                    </Link>
+                )}
+                {canSkip && (
+                    <button type="button" onClick={onSkip} className="text-sm font-medium underline underline-offset-2 px-2 ml-auto">
+                        Pokaż następną
+                    </button>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function EarningsCard({ data, display }) {
+    const months = data?.months || [];
+    const net = data?.financials?.month?.net || 0;
+    const count = data?.financials?.month?.count || 0;
+    const max = Math.max(...months.map((m) => m.net), 1);
+    const best = net > 0 && net >= max;
+
+    return (
+        <Link to="/statistics?tab=finanse" className={`card p-5 lg:p-6 ${display} flex-col gap-1 hover:border-line-strong transition-colors`}>
+            <span className="text-sm text-ink-muted">Na rękę · {new Intl.DateTimeFormat('pl-PL', { month: 'long' }).format(new Date())}</span>
+            <span className="amount font-display text-[32px] lg:text-[38px] font-semibold tracking-tight leading-none self-start">{formatCurrency(net)}</span>
+            <span className="text-xs text-ink-muted mt-1">
+                {count ? `${count} opłacone współprace` : 'jeszcze nic nie wpłynęło'}
+                {best && <span className="ml-2 inline-block rounded-full bg-accent text-on-accent font-semibold px-2 py-0.5">najlepszy miesiąc</span>}
+            </span>
+            <div className="amount flex-1 min-h-[72px] flex items-end gap-1.5 mt-3" aria-hidden="true">
+                {months.map((m, i) => (
+                    <span
+                        key={m.month}
+                        className={`flex-1 rounded-md ${i === months.length - 1 ? 'bg-chart' : 'bg-line'}`}
+                        style={{ height: `${Math.max(4, (m.net / max) * 100)}%` }}
+                    />
+                ))}
+            </div>
+            <span className="flex justify-between text-[11px] text-ink-muted mt-1">
+                <span>12 miesięcy temu</span>
+                <span>teraz</span>
+            </span>
         </Link>
     );
 }
 
-function IconAction({ label, tone, busy, onClick, icon: Icon }) {
-    const cls = tone === 'success' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-ink-soft border-line-strong';
+function LaterList({ items, done, weekItems, actions }) {
+    const [weekOpen, setWeekOpen] = useState(() => readFlag(WEEK_OPEN_KEY));
+    const shown = items.slice(0, 3);
+    const hidden = items.length - shown.length;
+
+    const toggleWeek = () => {
+        setWeekOpen((o) => {
+            writeFlag(WEEK_OPEN_KEY, !o);
+            return !o;
+        });
+    };
+
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={busy}
-            className={`shrink-0 h-10 px-3 rounded-xl border text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50 ${cls}`}
-            aria-label={label}
-            title={label}
-        >
-            {Icon && <Icon size={15} />}
-            <span className="hidden sm:inline">{label}</span>
-        </button>
+        <section className="card p-2 pt-4 flex flex-col">
+            <h3 className="px-3 mb-1 text-base font-semibold text-ink">Potem dziś</h3>
+            {shown.length === 0 && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
+            {shown.map((item) => (
+                <AgendaRow key={item.ref_key} item={item} actions={actions} />
+            ))}
+            {hidden > 0 && <p className="px-3 py-1 text-xs text-ink-muted">+ {hidden} kolejne, pokażą się po kolei w „Teraz”</p>}
+            {done.slice(0, 3).map((d) => (
+                <div key={d.ref_key + d.done_at} className="flex items-center gap-3 px-3 py-2">
+                    <span className="w-7 h-7 rounded-full bg-chart text-on-accent flex items-center justify-center shrink-0">
+                        <Check size={14} strokeWidth={3} />
+                    </span>
+                    <span className="flex-1 min-w-0 text-sm text-ink-muted line-through truncate">{d.title}</span>
+                    <span className="text-xs text-ink-muted">{d.done_at.slice(11, 16)}</span>
+                </div>
+            ))}
+
+            {weekItems.length > 0 && (
+                <div className="mt-auto pt-2 mx-3 border-t border-line">
+                    <button type="button" onClick={toggleWeek} aria-expanded={weekOpen} className="w-full flex justify-between items-center py-2.5 text-sm text-ink-muted">
+                        <span>W tym tygodniu jeszcze {weekItems.length}</span>
+                        <span className="font-medium text-ink">{weekOpen ? 'Zwiń' : 'Pokaż'}</span>
+                    </button>
+                    {weekOpen && (
+                        <div className="-mx-3 pb-1">
+                            {weekItems.map((item) => (
+                                <AgendaRow key={item.ref_key} item={item} actions={actions} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </section>
     );
 }
 
-/**
- * Returns ending within a week + unpaid collaborations (late first).
- */
-function buildTodo(data) {
-    if (!data) return [];
-    const items = [];
-    const seen = new Set();
+function AgendaRow({ item, actions }) {
+    const busy = actions.busy === item.ref_key;
+    const metaTone = item.late ? 'text-secondary font-medium' : 'text-ink-muted';
+    return (
+        <div className="flex items-center gap-3 px-3 py-1.5">
+            <button
+                type="button"
+                onClick={() => actions.complete(item)}
+                disabled={busy}
+                aria-label={PRIMARY_LABEL[item.kind]}
+                title={PRIMARY_LABEL[item.kind]}
+                className="w-11 h-11 -ml-1.5 rounded-full flex items-center justify-center shrink-0 group"
+            >
+                <span className="w-7 h-7 rounded-full border-2 border-line-strong flex items-center justify-center group-hover:border-chart">
+                    {busy ? <Loader2 size={13} className="animate-spin" /> : item.kind === 'idea' ? <Play size={11} className="text-ink-muted" /> : null}
+                </span>
+            </button>
+            <Link to={item.url} className="flex-1 min-w-0">
+                <span className="block text-[15px] font-medium text-ink truncate">{item.title}</span>
+                <span className={`block text-xs ${metaTone}`}>
+                    {item.kind === 'return' ? deadlineLabel(item.days, item.deadline) : item.meta}
+                    {item.amount > 0 && (
+                        <>
+                            {' · '}
+                            <span className="amount">{formatCurrency(item.amount)}</span>
+                        </>
+                    )}
+                </span>
+            </Link>
+            <button
+                type="button"
+                onClick={() => actions.setSnoozeTarget(item)}
+                className="h-10 px-3 rounded-full border border-line-strong text-xs font-medium text-ink hover:bg-surface-2 shrink-0"
+            >
+                Później
+            </button>
+        </div>
+    );
+}
 
-    const returns = [...(data.urgent_purchases || []), ...(data.upcoming?.purchases || [])]
-        .filter((p) => Number(p.days_remaining) <= 7)
-        .sort((a, b) => Number(a.days_remaining) - Number(b.days_remaining));
-    const unique = returns.filter((p) => !seen.has(p.id) && seen.add(p.id));
-    // one return per brand, like on the Zakupy screen
-    for (const group of groupByStore(unique).sort((a, b) => a.days_remaining - b.days_remaining)) {
-        items.push({ key: `r-${group.key}`, kind: 'return', group, tone: deadlineTone(group.days_remaining) });
-    }
+function MoneyCard({ data }) {
+    const fin = data?.financials || {};
+    const counts = data?.counts || {};
+    const official = fin.official || {};
+    const progress = Math.min(100, official.tax_threshold_progress || 0);
+    const left = Math.max(0, (official.tax_threshold || 0) - (official.income || 0));
 
-    const unpaid = (data.unpaid_collaborations || []).map((c) => ({
-        key: `c-${c.id}`,
-        kind: 'collab',
-        raw: c,
-        late: c.payment_status === 'overdue' || Number(c.days_waiting) > LATE_AFTER_DAYS,
-    }));
-    unpaid.sort((a, b) => Number(b.late) - Number(a.late));
-    items.push(...unpaid.slice(0, 6));
+    return (
+        <section className="card p-5 flex flex-col gap-1">
+            <h3 className="text-base font-semibold text-ink mb-1">Pieniądze</h3>
+            <Link to="/collaborations" className="flex items-center gap-3 py-2.5 border-b border-line">
+                <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-ink-muted">Czeka na płatność</span>
+                    <span className={`block text-xs ${fin.pending?.overdue_count ? 'text-secondary font-medium' : 'text-ink-muted'}`}>
+                        {fin.pending?.count ? `${fin.pending.count} współprace${fin.pending.overdue_count ? ` · ${fin.pending.overdue_count} po terminie` : ''}` : 'wszystko opłacone'}
+                    </span>
+                </span>
+                <span className="amount font-display text-xl font-semibold tracking-tight">{formatCurrency(fin.pending?.gross || 0)}</span>
+            </Link>
+            <Link to="/purchases" className="flex items-center gap-3 py-2.5 border-b border-line">
+                <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-ink-muted">Do odzyskania ze zwrotów</span>
+                    <span className="block text-xs text-ink-muted">
+                        {counts.active_returns ? `${counts.active_returns} ${counts.active_returns === 1 ? 'rzecz' : 'rzeczy'}` : 'nic nie czeka'}
+                    </span>
+                </span>
+                <span className="amount font-display text-xl font-semibold tracking-tight">{formatCurrency(counts.active_returns_value || 0)}</span>
+            </Link>
+            <Link to="/statistics?tab=finanse" className="pt-3 block">
+                <span className="flex justify-between text-sm">
+                    <span className="text-ink-muted">Próg podatkowy</span>
+                    <span className="font-semibold text-ink">{Math.round(progress)}%</span>
+                </span>
+                <span className="block h-2 rounded-full bg-line overflow-hidden mt-2">
+                    <span className={`block h-full rounded-full ${progress >= 90 ? 'bg-secondary' : 'bg-chart'}`} style={{ width: `${progress}%` }} />
+                </span>
+                <span className="block text-xs text-ink-muted mt-1.5">
+                    zostało <span className="amount">{formatCurrency(left)}</span> do II progu
+                </span>
+            </Link>
+        </section>
+    );
+}
 
-    return items;
+function CaptureCard({ ai, ideas, current }) {
+    const toast = useToast();
+    const { refresh } = useDashboard();
+    const { openCollab, openPurchase, openQuickAdd } = useQuickActions();
+    const [text, setText] = useState('');
+    const [saving, setSaving] = useState(false);
+    const nextIdea = ideas.find((i) => Number(i.words) > 0 && current?.ref_key !== `idea:${i.id}`);
+
+    const saveAsTask = async (title, due) => {
+        const res = await createTask(title, due);
+        toast.success('Zapisane jako zadanie', {
+            duration: 5000,
+            action: { label: 'Cofnij', onClick: () => deleteTask(res.id).then(() => refresh()) },
+        });
+    };
+
+    const submit = async (e) => {
+        e.preventDefault();
+        const note = text.trim();
+        if (!note || saving) return;
+        setSaving(true);
+        try {
+            if (!ai?.enabled) {
+                await saveAsTask(note);
+            } else {
+                let result;
+                try {
+                    result = await classifyNote(note);
+                } catch {
+                    result = { kind: 'task', title: note };
+                }
+                if (result.kind === 'idea') {
+                    const res = await createIdea(result.title, result.idea?.content || note);
+                    toast.success('Zapisane jako pomysł na rolkę', {
+                        duration: 5000,
+                        action: { label: 'Cofnij', onClick: () => deleteIdea(res.id).then(() => refresh()) },
+                    });
+                } else if (result.kind === 'collaboration') {
+                    openCollab({ prefill: { brand: result.collaboration?.brand, amount_gross: result.collaboration?.amount_gross, notes: result.collaboration?.notes || note } });
+                } else if (result.kind === 'purchase') {
+                    openPurchase({ manual: true, prefill: result.purchase });
+                } else {
+                    await saveAsTask(result.title || note, result.due_date);
+                }
+            }
+            setText('');
+            refresh();
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się zapisać');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <section className="card p-5 flex flex-col gap-3">
+            <h3 className="text-base font-semibold text-ink">Głowa pełna? Zrzuć tutaj</h3>
+            <form onSubmit={submit} className="flex flex-col gap-1.5">
+                <label htmlFor="capture" className="text-xs text-ink-muted">
+                    {ai?.enabled ? 'AI samo rozpozna: pomysł, zadanie, zakup czy współpraca' : 'Zapiszę jako zadanie na dziś'}
+                </label>
+                <div className="flex gap-2">
+                    <input
+                        id="capture"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder="np. rolka o płaszczach, Vichy chce 2 stories…"
+                        className="input !rounded-2xl !h-12 flex-1 min-w-0"
+                        enterKeyHint="done"
+                    />
+                    <button
+                        type="submit"
+                        disabled={saving || !text.trim()}
+                        aria-label="Zapisz"
+                        className="w-12 h-12 rounded-2xl bg-ink text-canvas flex items-center justify-center shrink-0 disabled:opacity-40"
+                    >
+                        {saving ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={19} />}
+                    </button>
+                </div>
+            </form>
+            <button type="button" onClick={openQuickAdd} className="text-sm font-medium text-ink-soft inline-flex items-center gap-1.5 self-start text-left hover:text-ink">
+                <Plus size={15} /> Dodaj ręcznie (współpraca, zakup, dokument)
+            </button>
+            {nextIdea && (
+                <Link to={`/ideas/${nextIdea.id}?prompter=1`} className="mt-auto flex items-center gap-3 p-3 rounded-2xl bg-canvas hover:bg-surface-2">
+                    <span className="w-11 h-11 rounded-full bg-accent text-on-accent flex items-center justify-center shrink-0">
+                        <Play size={15} fill="currentColor" />
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block text-xs text-ink-muted">Do nagrania</span>
+                        <span className="block text-sm font-medium text-ink truncate">{nextIdea.title}</span>
+                    </span>
+                </Link>
+            )}
+        </section>
+    );
+}
+
+function SnoozeSheet({ target, onPick, onClose }) {
+    return (
+        <Sheet open={!!target} onClose={onClose} title="Przypomnij później" description={target?.title} size="sm">
+            <div className="grid gap-2 pb-1">
+                {SNOOZE_PRESETS.map((p) => (
+                    <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => onPick(p.value)}
+                        className="h-14 px-4 rounded-2xl border border-line-strong text-left font-semibold text-ink hover:bg-surface-2 inline-flex items-center gap-3"
+                    >
+                        <Clock size={18} className="text-ink-muted" /> {p.label}
+                    </button>
+                ))}
+                <p className="hint">Do tego czasu zniknie z listy, a potem przyjdzie powiadomienie.</p>
+            </div>
+        </Sheet>
+    );
 }

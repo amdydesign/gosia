@@ -13,6 +13,8 @@ require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
 require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/AiSettings.php';
+require_once __DIR__ . '/../utils/DoneLog.php';
+require_once __DIR__ . '/../utils/TodayAgenda.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -228,7 +230,59 @@ try {
         // ideas table optional on older installs
     }
 
+    // 9. Start (ADHD view): open tasks, snoozed things, what got done today
+    $tasks = [];
+    $snoozed = [];
+    $doneToday = [];
+    try {
+        Schema::ensure($conn, 'tasks');
+        $stmt = $conn->prepare("
+            SELECT id, title, due_date FROM tasks
+            WHERE user_id = :user_id AND done_at IS NULL AND (due_date IS NULL OR due_date <= :soon)
+            ORDER BY due_date IS NULL, due_date ASC, id ASC
+            LIMIT 20
+        ");
+        $stmt->execute(['user_id' => $userId, 'soon' => date('Y-m-d', strtotime('+7 days'))]);
+        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        Schema::ensure($conn, 'reminders');
+        $stmt = $conn->prepare("
+            SELECT ref_key, title, remind_at FROM reminders
+            WHERE user_id = :user_id AND sent_at IS NULL AND remind_at > :now
+            ORDER BY remind_at ASC
+        ");
+        $stmt->execute(['user_id' => $userId, 'now' => date('Y-m-d H:i:s')]);
+        $snoozed = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $doneToday = DoneLog::today($conn, $userId);
+    } catch (Exception $e) {
+        // new tables are created on first use - Start still works without them
+    }
+
+    // 10. Net earnings per month, last 12 months (bars on Start)
+    $stmt = $conn->prepare("
+        SELECT DATE_FORMAT(date, '%Y-%m') AS ym, COALESCE(SUM(amount_net), 0) AS net
+        FROM collaborations
+        WHERE user_id = :user_id AND payment_status = 'paid' AND date >= :from
+        GROUP BY ym
+    ");
+    $stmt->execute(['user_id' => $userId, 'from' => date('Y-m-01', strtotime('first day of -11 months'))]);
+    $byMonth = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'net', 'ym');
+    $months = [];
+    for ($i = 11; $i >= 0; $i--) {
+        $ym = date('Y-m', strtotime("first day of -{$i} months"));
+        $months[] = ['month' => $ym, 'net' => round((float) ($byMonth[$ym] ?? 0), 2)];
+    }
+
+    $agenda = TodayAgenda::build($conn, $userId);
+
     Response::success([
+        'today' => date('Y-m-d'),
+        'agenda' => $agenda,
+        'months' => $months,
+        'tasks' => $tasks,
+        'snoozed' => $snoozed,
+        'done_today' => $doneToday,
         'financials' => [
             'year' => date('Y'),
             'yearly_gross' => floatval($yearlyStats['yearly_gross']),

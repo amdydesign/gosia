@@ -1,13 +1,13 @@
 {
-  "name": "Gosia 2.0 – Stylist Manager",
-  "short_name": "Gosia 2.0",
+  "name": "Gonia 2.0",
+  "short_name": "Gonia",
   "description": "System zarządzania współpracami, zwrotami i statystykami social media",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#0b0b0d",
+  "theme_color": "#0b0b0d",
   "lang": "pl",
   "icons": [
     {

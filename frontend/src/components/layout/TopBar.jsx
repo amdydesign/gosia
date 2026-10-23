@@ -1,86 +1,110 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, BellRing, BellOff, Sparkles, Settings } from 'lucide-react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Eye, EyeOff, Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { usePush } from '../../hooks/usePush';
-import { useToast } from '../../context/ToastContext';
-import { formatWeekdayDate } from '../../utils/format';
+import { useDashboard } from '../../context/DashboardContext';
+import { usePreferences } from '../../context/PreferencesContext';
+import Logo from '../ui/Logo';
+import { NAV_ITEMS } from './navItems';
 
-export default function TopBar({ meta, onOpenSettings }) {
+/**
+ * Desktop: logo, pill navigation, "Dodaj" and the profile avatar in one row.
+ * Phone: logo (Start) or page title, amount privacy toggle and avatar; navigation lives in MobileNav.
+ */
+export default function TopBar({ meta, onOpenProfile, onAdd }) {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const toast = useToast();
-    const push = usePush();
+    const { badges } = useDashboard();
+    const { amountsHidden, toggleAmounts } = usePreferences();
+    const initial = (user?.username || 'G').charAt(0).toUpperCase();
 
-    const handleBell = async () => {
-        const result = await push.toggle();
-        if (result.ok) {
-            toast.success(result.status === 'subscribed' ? 'Powiadomienia włączone. Przyjdzie test 🔔' : 'Powiadomienia wyłączone');
-        } else if (result.message) {
-            toast.error(result.message);
-        }
-    };
+    const privacyButton = (
+        <button
+            type="button"
+            onClick={toggleAmounts}
+            aria-pressed={amountsHidden}
+            aria-label={amountsHidden ? 'Pokaż kwoty' : 'Ukryj kwoty'}
+            title={amountsHidden ? 'Pokaż kwoty' : 'Ukryj kwoty'}
+            className={`w-11 h-11 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
+                amountsHidden ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink border-line-strong hover:bg-surface-2'
+            }`}
+        >
+            {amountsHidden ? <Eye size={19} /> : <EyeOff size={19} />}
+        </button>
+    );
 
-    const BellIcon = push.status === 'subscribed' ? BellRing : push.status === 'denied' ? BellOff : Bell;
+    const avatar = (
+        <button
+            type="button"
+            onClick={onOpenProfile}
+            aria-label="Profil i ustawienia"
+            title="Profil i ustawienia"
+            className="w-11 h-11 rounded-full bg-surface-2 border border-line text-ink font-semibold flex items-center justify-center hover:border-line-strong transition-colors shrink-0"
+        >
+            {initial}
+        </button>
+    );
 
     return (
-        <header className="sticky top-0 z-30 bg-canvas/95 backdrop-blur-md border-b border-line/70" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-            <div className="mx-auto w-full max-w-5xl px-3 sm:px-6 lg:px-10 h-14 lg:h-[72px] flex items-center gap-2">
+        <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+            {/* Desktop */}
+            <div className="hidden lg:flex mx-auto w-full max-w-6xl px-10 h-[76px] items-center gap-6">
+                <Link to="/dashboard" className="shrink-0" aria-label="Start">
+                    <Logo />
+                </Link>
+                <nav aria-label="Główna" className="flex items-center gap-1 p-1 bg-surface border border-line rounded-full">
+                    {NAV_ITEMS.map((item) => {
+                        const badge = badges[item.key];
+                        return (
+                            <NavLink
+                                key={item.path}
+                                to={item.path}
+                                className={({ isActive }) =>
+                                    `h-9 px-4 rounded-full inline-flex items-center gap-2 text-sm font-medium transition-colors ${
+                                        isActive ? 'nav-active' : 'text-ink-muted hover:text-ink'
+                                    }`
+                                }
+                            >
+                                {item.label}
+                                {badge > 0 && (
+                                    <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-secondary text-on-secondary text-[11px] font-semibold inline-flex items-center justify-center">
+                                        {badge}
+                                    </span>
+                                )}
+                            </NavLink>
+                        );
+                    })}
+                </nav>
+                <div className="flex-1" />
+                {privacyButton}
+                <button type="button" onClick={onAdd} className="btn btn-primary !rounded-full !h-11 !px-5">
+                    <Plus size={17} strokeWidth={2.5} /> Dodaj
+                </button>
+                {avatar}
+            </div>
+
+            {/* Phone */}
+            <div className="lg:hidden px-4 h-16 flex items-center gap-2">
                 {meta.back ? (
-                    <button
-                        type="button"
-                        onClick={() => (window.history.length > 1 ? navigate(-1) : navigate(meta.back))}
-                        className="p-2 -ml-1 rounded-xl text-ink-soft hover:bg-black/5 hover:text-ink transition-colors"
-                        aria-label="Wstecz"
-                    >
-                        <ArrowLeft size={22} />
-                    </button>
-                ) : (
-                    <Link to="/dashboard" className="lg:hidden w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white flex items-center justify-center shadow-float shrink-0">
-                        <Sparkles size={17} />
-                    </Link>
-                )}
-
-                <div className="flex-1 min-w-0 pl-1">
-                    {/* Root pages render their own big heading on desktop - show only the date there */}
-                    <h1 className={`text-[17px] lg:text-xl font-extrabold tracking-tight text-ink truncate leading-tight ${meta.root ? 'lg:hidden' : ''}`}>
-                        {meta.title}
-                    </h1>
-                    {meta.root && <p className="hidden lg:block text-sm font-medium text-ink-soft">{formatWeekdayDate()}</p>}
-                </div>
-
-                <div className="flex items-center gap-1">
-                    {push.supported && (
+                    <>
                         <button
                             type="button"
-                            onClick={handleBell}
-                            disabled={push.busy}
-                            className={`p-2.5 rounded-xl transition-colors ${
-                                push.status === 'subscribed' ? 'text-primary-600 bg-primary-50' : 'text-ink-soft hover:bg-black/5'
-                            }`}
-                            title={push.status === 'subscribed' ? 'Powiadomienia włączone' : 'Włącz powiadomienia'}
-                            aria-label="Powiadomienia"
+                            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate(meta.back))}
+                            className="w-11 h-11 -ml-2 rounded-full text-ink flex items-center justify-center hover:bg-ink/5"
+                            aria-label="Wstecz"
                         >
-                            <BellIcon size={20} />
+                            <ArrowLeft size={22} />
                         </button>
-                    )}
-                    <button
-                        type="button"
-                        onClick={onOpenSettings}
-                        className="lg:hidden w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary text-white flex items-center justify-center font-bold text-sm ml-1"
-                        aria-label="Ustawienia"
-                    >
-                        {(user?.username || 'G').charAt(0).toUpperCase()}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onOpenSettings}
-                        className="hidden lg:inline-flex p-2.5 rounded-xl text-ink-soft hover:bg-black/5 transition-colors"
-                        aria-label="Ustawienia"
-                        title="Ustawienia"
-                    >
-                        <Settings size={20} />
-                    </button>
-                </div>
+                        <h1 className="flex-1 min-w-0 font-display text-lg font-semibold tracking-tight text-ink truncate">{meta.title}</h1>
+                    </>
+                ) : meta.section === 'dashboard' ? (
+                    <Link to="/dashboard" className="flex-1" aria-label="Start">
+                        <Logo size="sm" />
+                    </Link>
+                ) : (
+                    <h1 className="flex-1 min-w-0 font-display text-xl font-semibold tracking-tight text-ink truncate">{meta.title}</h1>
+                )}
+                {privacyButton}
+                {avatar}
             </div>
         </header>
     );

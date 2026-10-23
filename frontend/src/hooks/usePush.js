@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getPushStatus, subscribeToPush, unsubscribeFromPush } from '../services/push';
 
 /**
- * Push notification state: 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
+ * Push notification state: 'unsupported' | 'install' (iPhone, not on home screen) | 'denied' | 'subscribed' | 'unsubscribed'
  */
 export function usePush() {
     const [status, setStatus] = useState('unsupported');
@@ -25,6 +25,9 @@ export function usePush() {
                 setStatus('unsubscribed');
                 return { ok: true, status: 'unsubscribed' };
             }
+            if (status === 'install') {
+                return { ok: false, message: 'Najpierw dodaj Gonię do ekranu głównego i otwórz ją z ikony.' };
+            }
             if (status === 'denied') {
                 return { ok: false, message: 'Powiadomienia są zablokowane w ustawieniach przeglądarki dla tej strony.' };
             }
@@ -39,5 +42,5 @@ export function usePush() {
         }
     }, [busy, status]);
 
-    return { status, busy, toggle, supported: status !== 'unsupported' };
+    return { status, busy, toggle, supported: status !== 'unsupported', needsInstall: status === 'install' };
 }

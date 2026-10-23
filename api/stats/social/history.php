@@ -1,7 +1,7 @@
 <?php
 /**
  * Get Social Stats History
- * GET /api/stats/social/history.php
+ * GET /api/stats/social/history.php?days=30   (days: 7-365, default 30)
  */
 
 require_once __DIR__ . '/../../config/cors.php';
@@ -18,16 +18,16 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
-    // 30 days history
+    $days = max(7, min(365, (int) ($_GET['days'] ?? 30)));
     $stmt = $conn->prepare("
         SELECT platform, followers_count, date
         FROM social_stats
         WHERE user_id = :user_id
-        AND date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        AND date >= :from
         ORDER BY date ASC
     ");
 
-    $stmt->execute(['user_id' => $userId]);
+    $stmt->execute(['user_id' => $userId, 'from' => date('Y-m-d', strtotime("-{$days} days"))]);
     $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Group by platform

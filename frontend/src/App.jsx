@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { PreferencesProvider } from './context/PreferencesContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import { DashboardProvider } from './context/DashboardContext';
 import { QuickActionsProvider } from './context/QuickActionsContext';
@@ -26,6 +27,7 @@ import './App.css';
 function App() {
     return (
         <ErrorBoundary>
+            <PreferencesProvider>
             <AuthProvider>
                 <ToastProvider>
                     <ConfirmProvider>
@@ -83,6 +85,7 @@ function App() {
                     </ConfirmProvider>
                 </ToastProvider>
             </AuthProvider>
+            </PreferencesProvider>
         </ErrorBoundary>
     );
 }

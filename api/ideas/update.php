@@ -62,6 +62,17 @@ try {
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
 
+    if (isset($data->status)) {
+        require_once __DIR__ . '/../utils/DoneLog.php';
+        if ($data->status === 'recorded') {
+            $row = $conn->prepare("SELECT title FROM ideas WHERE id = :id");
+            $row->execute(['id' => $id]);
+            DoneLog::record($conn, $userId, 'idea:' . $id, 'Nagrane: ' . ($row->fetchColumn() ?: ''));
+        } else {
+            DoneLog::forget($conn, $userId, 'idea:' . $id);
+        }
+    }
+
     Response::success(['message' => 'Idea updated successfully']);
 
 } catch (Exception $e) {

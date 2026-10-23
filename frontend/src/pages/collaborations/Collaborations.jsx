@@ -119,7 +119,7 @@ export default function Collaborations() {
             {/* Header (desktop) */}
             <div className="hidden lg:flex items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Współprace</h1>
+                    <h1 className="text-[28px] font-display font-semibold tracking-tight text-ink">Współprace</h1>
                     <p className="text-sm text-ink-muted">Dodajesz w 10 sekund, płatności pilnujemy razem</p>
                 </div>
                 <div className="flex gap-2">
@@ -134,7 +134,7 @@ export default function Collaborations() {
                     onClick={() => navigate('/documents?suggestions=1')}
                     className="w-full flex items-center gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 hover:bg-primary-50 px-4 py-3 text-left transition-colors"
                 >
-                    <span className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center shrink-0">
+                    <span className="w-9 h-9 rounded-xl bg-accent text-on-accent flex items-center justify-center shrink-0">
                         <FileText size={17} />
                     </span>
                     <span className="flex-1 min-w-0">
@@ -149,12 +149,12 @@ export default function Collaborations() {
             <div className="grid grid-cols-2 gap-3">
                 <div className={`rounded-2xl p-4 border ${unpaid.length ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
                     <div className={`section-label ${unpaid.length ? '!text-amber-700' : '!text-emerald-700'}`}>Czeka na przelew</div>
-                    <div className="text-xl sm:text-2xl font-extrabold text-ink mt-1 tabular-nums">{formatCurrency(unpaidTotal)}</div>
+                    <div className="amount text-xl sm:text-2xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(unpaidTotal)}</div>
                     <div className="text-xs text-ink-muted mt-0.5">{unpaid.length ? `${unpaid.length} ${plural(unpaid.length)}` : 'Wszystko opłacone'}</div>
                 </div>
                 <div className="rounded-2xl p-4 bg-surface border border-line shadow-card">
                     <div className="section-label">Na rękę w {new Date().getFullYear()}</div>
-                    <div className="text-xl sm:text-2xl font-extrabold text-ink mt-1 tabular-nums">{formatCurrency(yearNet)}</div>
+                    <div className="amount text-xl sm:text-2xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(yearNet)}</div>
                     <div className="text-xs text-ink-muted mt-0.5">z opłaconych współprac</div>
                 </div>
             </div>
@@ -171,7 +171,7 @@ export default function Collaborations() {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                     />
-                    <button type="button" onClick={() => { setQuery(''); setSearchOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-ink-muted hover:bg-black/5" aria-label="Zamknij wyszukiwanie">
+                    <button type="button" onClick={() => { setQuery(''); setSearchOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-ink-muted hover:bg-ink/5" aria-label="Zamknij wyszukiwanie">
                         <X size={16} />
                     </button>
                 </div>
@@ -217,7 +217,7 @@ export default function Collaborations() {
                                     <div className="flex items-baseline justify-between px-1 mb-2">
                                         <h2 className="section-label">{group.label}</h2>
                                         <span className="text-xs font-semibold text-ink-muted tabular-nums">
-                                            {formatCurrency(group.items.reduce((s, c) => s + netOf(c), 0))} na rękę
+                                            <span className="amount">{formatCurrency(group.items.reduce((s, c) => s + netOf(c), 0))}</span> na rękę
                                         </span>
                                     </div>
                                     <div className="card divide-y divide-line overflow-hidden">
@@ -263,7 +263,7 @@ function UnpaidRow({ collab, busy, onOpen, onPaid }) {
                 </div>
             </button>
             <div className="text-right shrink-0">
-                <div className="font-bold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</div>
+                <div className="amount font-bold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</div>
             </div>
             <button
                 type="button"
@@ -295,8 +295,8 @@ function PaidRow({ collab, onOpen }) {
                 </div>
             </div>
             <div className="text-right shrink-0">
-                <div className="font-bold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</div>
-                <div className="text-[11px] text-emerald-700 font-semibold tabular-nums">{formatCurrency(netOf(collab))}</div>
+                <div className="amount font-bold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</div>
+                <div className="amount text-[11px] text-emerald-700 font-semibold tabular-nums">{formatCurrency(netOf(collab))}</div>
             </div>
         </button>
     );
