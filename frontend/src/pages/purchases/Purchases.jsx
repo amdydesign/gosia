@@ -8,7 +8,7 @@ import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 import PurchaseDetailSheet from '../../components/purchases/PurchaseDetailSheet';
-import { bucket, deadlineText, deadlineTone, groupOrders, withPatch } from '../../utils/purchases';
+import { bucket, deadlineText, deadlineTone, groupByStore, withPatch } from '../../utils/purchases';
 import { formatCurrency, formatDateShort } from '../../utils/format';
 import { takeSharedFiles } from '../../utils/shareTarget';
 
@@ -66,10 +66,12 @@ export default function Purchases() {
     const applyPatch = useCallback((pid, patch) => {
         setPurchases((list) => (patch === null ? list.filter((p) => p.id !== pid) : list.map((p) => (p.id === pid ? withPatch(p, patch) : p))));
     }, []);
-    const { returned, keep, keepMany, busyId } = usePurchaseActions({ onChange: applyPatch });
+    const { settle } = usePurchaseActions({ onChange: applyPatch });
+    const keepSelection = useKeepSelection();
+    const [settling, setSettling] = useState(null);
 
     const active = useMemo(() => purchases.filter((p) => bucket(p) === 'active'), [purchases]);
-    const orders = useMemo(() => groupOrders(active).sort((a, b) => a.days_remaining - b.days_remaining), [active]);
+    const returns = useMemo(() => groupByStore(active).sort((a, b) => a.days_remaining - b.days_remaining), [active]);
     const history = useMemo(
         () =>
             purchases
@@ -145,20 +147,24 @@ export default function Purchases() {
             ) : (
                 <>
                     <section>
-                        <h2 className="section-label px-1 mb-2">Do decyzji</h2>
-                        {orders.length === 0 ? (
+                        <h2 className="section-label px-1 mb-2">Zwroty do zrobienia</h2>
+                        {returns.length === 0 ? (
                             <div className="card px-4 py-5 text-sm text-ink-muted text-center">Nic nie czeka na zwrot. 🎉</div>
                         ) : (
                             <div className="space-y-3">
-                                {orders.map((order) => (
-                                    <OrderCard
-                                        key={order.key}
-                                        order={order}
-                                        busyId={busyId}
+                                {returns.map((group) => (
+                                    <ReturnCard
+                                        key={group.key}
+                                        group={group}
+                                        kept={keepSelection.ids}
+                                        onToggleKeep={keepSelection.toggle}
                                         onOpen={openDetail}
-                                        onReturned={(p) => returned(p)}
-                                        onKeep={(p) => keep(p)}
-                                        onKeepAll={() => keepMany(order.items)}
+                                        busy={settling === group.key}
+                                        onSettle={async (toReturn, toKeep) => {
+                                            setSettling(group.key);
+                                            if (await settle(toReturn, toKeep)) keepSelection.forget(group.items);
+                                            setSettling(null);
+                                        }}
                                     />
                                 ))}
                             </div>
@@ -218,62 +224,120 @@ export default function Purchases() {
     );
 }
 
-function OrderCard({ order, busyId, onOpen, onReturned, onKeep, onKeepAll }) {
-    const tone = deadlineTone(order.days_remaining);
+const KEEP_KEY = 'gosia-return-keep';
+
+/** Items marked "zostawiam" inside a return - remembered on this device until the return is done. */
+function useKeepSelection() {
+    const [ids, setIds] = useState(() => {
+        try {
+            return new Set(JSON.parse(localStorage.getItem(KEEP_KEY) || '[]'));
+        } catch {
+            return new Set();
+        }
+    });
+    const save = (next) => {
+        setIds(next);
+        try {
+            localStorage.setItem(KEEP_KEY, JSON.stringify([...next]));
+        } catch {
+            // private mode: selection lives until reload
+        }
+    };
+    const toggle = (id) => {
+        const next = new Set(ids);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        save(next);
+    };
+    const forget = (list) => {
+        const next = new Set(ids);
+        list.forEach((p) => next.delete(p.id));
+        save(next);
+    };
+    return { ids, toggle, forget };
+}
+
+/**
+ * One return per brand: tap "Zostawiam" on what stays, then one button sends the rest back.
+ */
+function ReturnCard({ group, kept, onToggleKeep, onOpen, onSettle, busy }) {
+    const tone = deadlineTone(group.days_remaining);
     const badge = {
         danger: 'bg-red-600 text-white',
         warning: 'bg-amber-400 text-amber-950',
         ok: 'bg-emerald-50 text-emerald-700',
     }[tone];
-    const total = order.items.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const toReturn = group.items.filter((p) => !kept.has(p.id));
+    const toKeep = group.items.filter((p) => kept.has(p.id));
+    const returnSum = toReturn.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const total = group.items.reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
     return (
         <div className="card overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-line bg-canvas/60">
                 <div className="flex-1 min-w-0">
-                    <div className="font-bold text-ink truncate">{order.store}</div>
+                    <div className="font-bold text-ink truncate">{group.store}</div>
                     <div className="text-xs text-ink-muted">
-                        kupione {formatDateShort(order.purchase_date)} · {formatCurrency(total)}
+                        {group.items.length} {group.items.length === 1 ? 'rzecz' : 'rzeczy'} · {formatCurrency(total)}
+                        {group.orders > 1 ? ` · ${group.orders} zamówienia` : ''}
                     </div>
                 </div>
-                <span className={`shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1 ${badge}`}>{deadlineText(order.days_remaining, order.return_deadline)}</span>
+                <span className={`shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1 ${badge}`}>{deadlineText(group.days_remaining, group.return_deadline)}</span>
             </div>
             <div className="divide-y divide-line">
-                {order.items.map((p) => {
-                    const busy = busyId === p.id;
+                {group.items.map((p) => {
+                    const stays = kept.has(p.id);
                     return (
-                        <div key={p.id} className="flex items-center gap-2 pl-4 pr-2.5 py-2.5">
+                        <div key={p.id} className={`flex items-center gap-2 pl-4 pr-2.5 py-2.5 ${stays ? 'bg-primary-50/40' : ''}`}>
                             <button type="button" onClick={() => onOpen(p)} className="flex-1 min-w-0 text-left">
-                                <div className="text-[15px] font-semibold text-ink truncate">{p.items}</div>
-                                <div className="text-xs text-ink-muted tabular-nums">{formatCurrency(p.amount)}</div>
+                                <div className={`text-[15px] font-semibold truncate ${stays ? 'text-ink-soft' : 'text-ink'}`}>{p.items}</div>
+                                <div className="text-xs text-ink-muted tabular-nums">
+                                    {formatCurrency(p.amount)}
+                                    {group.orders > 1 ? ` · kupione ${formatDateShort(p.purchase_date)}` : ''}
+                                    {stays ? ' · zostaje' : ' · do zwrotu'}
+                                </div>
                             </button>
                             <button
                                 type="button"
                                 disabled={busy}
-                                onClick={() => onReturned(p)}
-                                className="shrink-0 h-10 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50"
-                                title="Odesłane / zwrócone"
+                                onClick={() => onToggleKeep(p.id)}
+                                aria-pressed={stays}
+                                className={`shrink-0 h-10 px-3 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50 ${
+                                    stays ? 'bg-primary-600 text-white' : 'border border-line-strong text-ink-soft hover:text-primary-700'
+                                }`}
+                                title={stays ? 'Jednak do zwrotu' : 'Zostawiam'}
                             >
-                                <RotateCcw size={15} /> Zwrot
-                            </button>
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => onKeep(p)}
-                                className="shrink-0 h-10 px-3 rounded-xl border border-line-strong text-ink-soft text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50 hover:text-primary-700"
-                                title="Zostawiam"
-                            >
-                                <Heart size={15} /> Zostaje
+                                <Heart size={15} fill={stays ? 'currentColor' : 'none'} /> {stays ? 'Zostaje' : 'Zostawiam'}
                             </button>
                         </div>
                     );
                 })}
             </div>
-            {order.items.length > 1 && (
-                <button type="button" onClick={onKeepAll} className="w-full px-4 py-2 border-t border-line text-xs font-semibold text-ink-muted hover:text-primary-700 inline-flex items-center justify-center gap-1.5">
-                    <Check size={13} /> Zostawiam wszystko
+            <div className="p-3 border-t border-line">
+                <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onSettle(toReturn, toKeep)}
+                    className={`w-full h-11 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 active:scale-[0.99] transition disabled:opacity-50 ${
+                        toReturn.length ? 'bg-emerald-600 text-white' : 'bg-primary-600 text-white'
+                    }`}
+                >
+                    {toReturn.length ? (
+                        <>
+                            <RotateCcw size={16} /> Zrobiłam zwrot · {toReturn.length} {toReturn.length === 1 ? 'rzecz' : 'rzeczy'} · {formatCurrency(returnSum)}
+                        </>
+                    ) : (
+                        <>
+                            <Check size={16} /> Zostawiam wszystko
+                        </>
+                    )}
                 </button>
-            )}
+                {toReturn.length > 0 && toKeep.length > 0 && (
+                    <p className="text-[11px] text-ink-muted text-center mt-1.5">
+                        Zostaje: {toKeep.length} {toKeep.length === 1 ? 'rzecz' : 'rzeczy'} — reszta oznaczy się jako zwrócona
+                    </p>
+                )}
+            </div>
         </div>
     );
 }

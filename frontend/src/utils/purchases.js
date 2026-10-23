@@ -16,20 +16,16 @@ export function bucket(p) {
     return 'active';
 }
 
-/** Group purchases bought together (same store + date) into one "order". */
-export function groupOrders(purchases) {
+/**
+ * One return per brand: everything from the same store waiting for a decision,
+ * whichever order it came from. The earliest deadline counts for the whole return.
+ */
+export function groupByStore(purchases) {
     const groups = new Map();
     for (const p of purchases) {
-        const key = `${(p.store || '').trim().toLowerCase()}|${p.purchase_date}`;
+        const key = (p.store || '').trim().toLowerCase() || `#${p.id}`;
         if (!groups.has(key)) {
-            groups.set(key, {
-                key,
-                store: p.store,
-                purchase_date: p.purchase_date,
-                return_deadline: p.return_deadline,
-                days_remaining: Number(p.days_remaining),
-                items: [],
-            });
+            groups.set(key, { key, store: p.store, return_deadline: p.return_deadline, days_remaining: Number(p.days_remaining), items: [] });
         }
         const g = groups.get(key);
         g.items.push(p);
@@ -37,6 +33,10 @@ export function groupOrders(purchases) {
             g.days_remaining = Number(p.days_remaining);
             g.return_deadline = p.return_deadline;
         }
+    }
+    for (const g of groups.values()) {
+        g.items.sort((a, b) => (a.purchase_date < b.purchase_date ? -1 : a.purchase_date > b.purchase_date ? 1 : a.id - b.id));
+        g.orders = new Set(g.items.map((p) => p.purchase_date)).size;
     }
     return Array.from(groups.values());
 }

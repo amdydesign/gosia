@@ -1,17 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Briefcase, Camera, Check, CheckCircle2, ChevronRight, Clock, Heart, Lightbulb, Play, Plus, RotateCcw } from 'lucide-react';
+import { AlertCircle, Briefcase, Camera, Check, CheckCircle2, ChevronRight, Clock, Lightbulb, Play, Plus, RotateCcw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
 import { useMarkPaid } from '../hooks/useMarkPaid';
-import { usePurchaseActions } from '../hooks/usePurchaseActions';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import SocialSection from '../components/social/SocialSection';
 import { formatCurrency, formatDateShort, formatSeconds, formatWeekdayDate, greetingForHour } from '../utils/format';
-import { deadlineText, deadlineTone } from '../utils/purchases';
+import { deadlineText, deadlineTone, groupByStore } from '../utils/purchases';
 import { LATE_AFTER_DAYS } from '../utils/collabs';
 
 /**
@@ -22,9 +21,8 @@ export default function Dashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const { data, loading, error, refresh } = useDashboard();
-    const { openCollab, openPurchase, bump } = useQuickActions();
+    const { openCollab, openPurchase } = useQuickActions();
     const { markPaid, busyId: payingId } = useMarkPaid();
-    const { returned, keep, busyId: returningId } = usePurchaseActions({ onChange: () => bump('purchases') });
 
     useEffect(() => {
         refresh();
@@ -117,16 +115,18 @@ export default function Dashboard() {
                     <div className="divide-y divide-line">
                         {todo.map((item) =>
                             item.kind === 'return' ? (
-                                <div key={item.key} className="flex items-center gap-2 pl-4 pr-2.5 py-2.5">
-                                    <Link to={`/purchases/${item.raw.id}`} className="flex-1 min-w-0">
-                                        <div className="text-[15px] font-semibold text-ink truncate">{item.raw.items}</div>
+                                <Link key={item.key} to="/purchases" className="flex items-center gap-3 pl-4 pr-3 py-2.5 hover:bg-canvas/70">
+                                    <RotateCcw size={17} className="text-emerald-600 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-[15px] font-semibold text-ink truncate">Zwrot {item.group.store}</div>
                                         <div className={`text-xs truncate ${item.tone === 'danger' ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>
-                                            Zwrot · {item.raw.store} · {deadlineText(Number(item.raw.days_remaining), item.raw.return_deadline)}
+                                            {item.group.items.length} {item.group.items.length === 1 ? 'rzecz' : 'rzeczy'} ·{' '}
+                                            {formatCurrency(item.group.items.reduce((s, p) => s + (Number(p.amount) || 0), 0))} ·{' '}
+                                            {deadlineText(item.group.days_remaining, item.group.return_deadline)}
                                         </div>
-                                    </Link>
-                                    <IconAction label="Zwrócone" tone="success" busy={returningId === item.raw.id} onClick={() => returned(item.raw)} icon={RotateCcw} />
-                                    <IconAction label="Zostaje" tone="neutral" busy={returningId === item.raw.id} onClick={() => keep(item.raw)} icon={Heart} />
-                                </div>
+                                    </div>
+                                    <ChevronRight size={18} className="text-ink-muted shrink-0" />
+                                </Link>
                             ) : (
                                 <div key={item.key} className="flex items-center gap-2 pl-4 pr-2.5 py-2.5">
                                     <Link to={`/collaborations/${item.raw.id}`} className="flex-1 min-w-0">
@@ -239,10 +239,10 @@ function buildTodo(data) {
     const returns = [...(data.urgent_purchases || []), ...(data.upcoming?.purchases || [])]
         .filter((p) => Number(p.days_remaining) <= 7)
         .sort((a, b) => Number(a.days_remaining) - Number(b.days_remaining));
-    for (const p of returns) {
-        if (seen.has(p.id)) continue;
-        seen.add(p.id);
-        items.push({ key: `p-${p.id}`, kind: 'return', raw: p, tone: deadlineTone(Number(p.days_remaining)) });
+    const unique = returns.filter((p) => !seen.has(p.id) && seen.add(p.id));
+    // one return per brand, like on the Zakupy screen
+    for (const group of groupByStore(unique).sort((a, b) => a.days_remaining - b.days_remaining)) {
+        items.push({ key: `r-${group.key}`, kind: 'return', group, tone: deadlineTone(group.days_remaining) });
     }
 
     const unpaid = (data.unpaid_collaborations || []).map((c) => ({
