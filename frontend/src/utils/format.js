@@ -304,3 +304,7 @@ export function yesterdayDate() {
     d.setDate(d.getDate() - 1);
     return toDateInput(d);
 }
+
+// ---------- People ----------
+// The panel is Gosia's - greet her by name whatever the login is ("admin")
+export const OWNER_NAME = 'Gosia';
