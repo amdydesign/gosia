@@ -52,9 +52,9 @@ export function ToastProvider({ children }) {
 
 function ToastItem({ toast, onClose }) {
     const styles = {
-        success: { icon: CheckCircle2, cls: 'bg-ink text-white', iconCls: 'text-emerald-400' },
+        success: { icon: CheckCircle2, cls: 'bg-ink text-canvas', iconCls: 'text-emerald-400' },
         error: { icon: AlertTriangle, cls: 'bg-red-600 text-white', iconCls: 'text-white' },
-        info: { icon: Info, cls: 'bg-ink text-white', iconCls: 'text-sky-300' },
+        info: { icon: Info, cls: 'bg-ink text-canvas', iconCls: 'text-sky-300' },
     }[toast.type];
     const Icon = styles.icon;
 
@@ -72,7 +72,7 @@ function ToastItem({ toast, onClose }) {
                         toast.action.onClick();
                         onClose();
                     }}
-                    className="text-xs font-bold uppercase tracking-wide text-primary-300 hover:text-white"
+                    className="text-xs font-bold uppercase tracking-wide text-primary-300 hover:opacity-80"
                 >
                     {toast.action.label}
                 </button>

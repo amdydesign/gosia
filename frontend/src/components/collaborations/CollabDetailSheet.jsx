@@ -138,17 +138,17 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                         )}
                         {isPrivate && <Lock size={12} className="text-ink-muted" aria-label="Poza PIT" />}
                     </div>
-                    <h2 className="text-2xl font-extrabold tracking-tight text-ink mt-1 break-words">{collab.brand}</h2>
+                    <h2 className="text-2xl font-display font-semibold tracking-tight text-ink mt-1 break-words">{collab.brand}</h2>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-canvas border border-line p-3.5">
                         <div className="section-label">{isPrivate ? 'Kwota' : 'Brutto'}</div>
-                        <div className="text-xl font-extrabold text-ink mt-1 tabular-nums">{formatCurrency(grossOf(collab))}</div>
+                        <div className="text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(grossOf(collab))}</div>
                     </div>
                     <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3.5">
                         <div className="section-label !text-emerald-700">Na rękę</div>
-                        <div className="text-xl font-extrabold text-emerald-800 mt-1 tabular-nums">{formatCurrency(netOf(collab))}</div>
+                        <div className="text-xl font-display font-semibold text-emerald-800 mt-1 tabular-nums">{formatCurrency(netOf(collab))}</div>
                     </div>
                 </div>
                 {!isPrivate && breakdown?.gross > 0 && (

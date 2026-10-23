@@ -18,9 +18,10 @@
 class AiClient
 {
     const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-    const CLAUDE_MODEL = 'claude-sonnet-5-5';
+    // Screenshots, notes and contracts are simple extraction - the cheap, fast Haiku
+    // reads them (ANTHROPIC_MODEL / ANTHROPIC_DOCS_MODEL override, e.g. back to claude-sonnet-5-5)
+    const CLAUDE_MODEL = 'claude-haiku-5-5';
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
-    // Contracts are read by the cheap Haiku (ANTHROPIC_DOCS_MODEL overrides it)
     const CLAUDE_DOCS_MODEL = 'claude-haiku-5-5';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
     const GEMINI_MODEL = 'gemini-flash-latest';
@@ -111,12 +112,31 @@ class AiClient
         ]);
     }
 
+    /**
+     * Sort a short free-text note ("Zrzuć tutaj") into structured data.
+     * Text only, so it may also go to Gemini when that is the chosen provider.
+     */
+    public static function classifyText($prompt, $text, array $schema)
+    {
+        $provider = self::provider();
+        if ($provider === 'claude') {
+            return self::extractWithClaude($prompt, [['text' => $text]], $schema, [
+                'max_tokens' => 4000,
+                'timeout' => 30,
+            ]);
+        }
+        if ($provider === 'gemini') {
+            return self::extractWithGemini($prompt . "\n\nNotatka:\n" . $text, [], $schema);
+        }
+        throw new RuntimeException('Rozpoznawanie notatek wymaga klucza AI (Ustawienia -> Czytanie screenów).');
+    }
+
     // ---------------------------------------------------------------- Claude
 
     /**
      * @param array $images  image parts; a PDF (media_type application/pdf) becomes a document
      *                       block and ['text' => ...] a text block
-     * @param array $options model, max_tokens (defaults: ANTHROPIC_MODEL / Sonnet, 16000)
+     * @param array $options model, max_tokens (defaults: ANTHROPIC_MODEL / Haiku, 16000)
      */
     public static function buildClaudeBody($prompt, array $images, array $schema, $withFallbacks = true, array $options = [])
     {
@@ -180,9 +200,9 @@ class AiClient
         ];
         $timeout = $options['timeout'] ?? self::TIMEOUT;
 
-        // Haiku has no server-side refusal fallback - send the beta only for the default (Sonnet) model
-        $model = $options['model'] ?? null;
-        $withFallbacks = $model === null || strpos($model, 'haiku') === false;
+        // Haiku has no server-side refusal fallback - send the beta only for other models
+        $model = $options['model'] ?? (trim($_ENV['ANTHROPIC_MODEL'] ?? '') ?: self::CLAUDE_MODEL);
+        $withFallbacks = strpos($model, 'haiku') === false;
 
         if ($withFallbacks) {
             [$status, $data] = self::post(

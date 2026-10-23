@@ -34,7 +34,7 @@ export default function ForgotPassword() {
                 <div className="mx-auto w-14 h-14 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mb-4">
                     <KeyRound size={26} />
                 </div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-ink">Reset hasła</h1>
+                <h1 className="text-2xl font-display font-semibold tracking-tight text-ink">Reset hasła</h1>
                 <p className="text-sm text-ink-muted mt-1">Podaj e-mail lub login, aby odzyskać dostęp.</p>
             </div>
 

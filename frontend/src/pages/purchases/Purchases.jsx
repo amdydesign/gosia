@@ -90,7 +90,7 @@ export default function Purchases() {
     return (
         <div className="animate-fade-in space-y-5">
             <div className="hidden lg:block">
-                <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Zakupy i zwroty</h1>
+                <h1 className="text-[28px] font-display font-semibold tracking-tight text-ink">Zakupy i zwroty</h1>
                 <p className="text-sm text-ink-muted">Wrzuć screena zamówienia — przypomnę o terminie zwrotu</p>
             </div>
 
@@ -99,12 +99,12 @@ export default function Purchases() {
                 <button
                     type="button"
                     onClick={() => openPurchase()}
-                    className="flex-1 flex items-center gap-3 rounded-2xl bg-primary-600 hover:bg-primary-700 text-white px-4 py-3.5 shadow-float active:scale-[0.99] transition"
+                    className="flex-1 flex items-center gap-3 rounded-2xl bg-accent hover:bg-accent-strong text-on-accent px-4 py-3.5 active:scale-[0.99] transition"
                 >
-                    <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0"><Camera size={22} /></span>
+                    <span className="w-10 h-10 rounded-xl bg-black/10 flex items-center justify-center shrink-0"><Camera size={22} /></span>
                     <span className="text-left min-w-0">
-                        <span className="block font-extrabold">Dodaj ze screena</span>
-                        <span className="block text-xs text-white/75 truncate">Zamówienie, mail ze sklepu, paragon</span>
+                        <span className="block font-display font-semibold">Dodaj ze screena</span>
+                        <span className="block text-xs opacity-75 truncate">Zamówienie, mail ze sklepu, paragon</span>
                     </span>
                 </button>
                 <button
@@ -122,12 +122,12 @@ export default function Purchases() {
                 <div className="grid grid-cols-2 gap-3">
                     <div className="card px-4 py-3">
                         <div className="section-label">Do decyzji</div>
-                        <div className="text-lg font-extrabold text-ink mt-0.5 tabular-nums">{formatCurrency(activeValue)}</div>
+                        <div className="amount text-lg font-display font-semibold text-ink mt-0.5 tabular-nums">{formatCurrency(activeValue)}</div>
                         <div className="text-xs text-ink-muted">{active.length} {active.length === 1 ? 'rzecz' : 'rzeczy'} z terminem zwrotu</div>
                     </div>
                     <div className="card px-4 py-3">
                         <div className="section-label">Odzyskane w {year}</div>
-                        <div className="text-lg font-extrabold text-emerald-700 mt-0.5 tabular-nums">{formatCurrency(recovered)}</div>
+                        <div className="amount text-lg font-display font-semibold text-emerald-700 mt-0.5 tabular-nums">{formatCurrency(recovered)}</div>
                         <div className="text-xs text-ink-muted">ze zwrotów</div>
                     </div>
                 </div>
@@ -253,7 +253,7 @@ function GroupHeader({ open, onToggle, title, count, amount, amountTone = 'text-
                     <span className="text-ink-soft">
                         <span className="font-bold text-ink tabular-nums">{count}</span> {count === 1 ? 'rzecz' : 'rzeczy'}
                     </span>
-                    <span className={`font-bold tabular-nums ${amountTone}`}>{formatCurrency(amount)}</span>
+                    <span className={`amount font-bold tabular-nums ${amountTone}`}>{formatCurrency(amount)}</span>
                     {note && <span className="text-xs text-ink-muted">{note}</span>}
                 </div>
             </div>
@@ -291,7 +291,7 @@ function HistoryCard({ group, returnedView, open, onToggle, onOpen }) {
                                 <div className="text-xs text-ink-muted truncate mt-0.5">kupione {formatDateShort(p.purchase_date)}</div>
                             </div>
                             <div className="text-right shrink-0">
-                                <div className="font-bold text-ink tabular-nums">{formatCurrency(p.amount)}</div>
+                                <div className="amount font-bold text-ink tabular-nums">{formatCurrency(p.amount)}</div>
                                 {returnedView && p.status === 'partial' && (
                                     <div className="text-[11px] font-semibold text-emerald-700">wróciło {formatCurrency(p.returned_amount)}</div>
                                 )}
@@ -415,7 +415,7 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                                         onClick={() => onToggleKeep(p.id)}
                                         aria-pressed={stays}
                                         className={`shrink-0 h-10 px-3 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50 ${
-                                            stays ? 'bg-primary-600 text-white' : 'border border-line-strong text-ink-soft hover:text-primary-700'
+                                            stays ? 'bg-accent text-on-accent' : 'border border-line-strong text-ink-soft hover:text-primary-700'
                                         }`}
                                         title={stays ? 'Jednak do zwrotu' : 'Zostawiam'}
                                     >
@@ -431,7 +431,7 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                             disabled={busy}
                             onClick={() => onSettle(toReturn, toKeep)}
                             className={`w-full h-11 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 active:scale-[0.99] transition disabled:opacity-50 ${
-                                toReturn.length ? 'bg-emerald-600 text-white' : 'bg-primary-600 text-white'
+                                toReturn.length ? 'bg-emerald-600 text-white' : 'bg-accent text-on-accent'
                             }`}
                         >
                             {toReturn.length ? (

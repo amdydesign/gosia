@@ -239,7 +239,7 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                                 disabled={reading}
                                 className="w-full flex items-center gap-3 rounded-2xl border border-dashed border-primary-300 bg-primary-50/50 px-4 py-3 text-left hover:bg-primary-50 transition-colors"
                             >
-                                <span className="w-9 h-9 rounded-xl bg-white text-primary-600 flex items-center justify-center shrink-0 shadow-sm">
+                                <span className="w-9 h-9 rounded-xl bg-surface text-primary-600 flex items-center justify-center shrink-0 shadow-sm">
                                     {reading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
                                 </span>
                                 <span className="min-w-0">
@@ -293,7 +293,7 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                         <div className="relative">
                             <input
                                 id="collab-amount"
-                                className="input !text-2xl !font-extrabold !py-3 !pr-12 tabular-nums"
+                                className="input !text-2xl !font-display font-semibold !py-3 !pr-12 tabular-nums"
                                 value={form.amount}
                                 onChange={(e) => set('amount', e.target.value)}
                                 inputMode="decimal"
@@ -351,7 +351,7 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                         }`}
                         aria-pressed={form.paid}
                     >
-                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 ${form.paid ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-amber-400 bg-white'}`}>
+                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 ${form.paid ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-amber-400 bg-surface'}`}>
                             {form.paid && <Check size={15} strokeWidth={3} />}
                         </span>
                         <span className="flex-1">

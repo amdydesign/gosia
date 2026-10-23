@@ -10,7 +10,7 @@ const QuickActionsContext = createContext(null);
  * Global "add" flows available from every screen (FAB, Start tiles, lists):
  *   openCollab({ id?, prefill?, onSaved? }) - quick add / edit collaboration sheet
  *                                     (onSaved gets the collaboration id)
- *   openPurchase({ files? })        - purchase from screenshot (or manual)
+ *   openPurchase({ files?, manual?, prefill? }) - purchase from screenshot (or manual form)
  *   openQuickAdd()                  - "what do you want to add?" chooser
  *   openAiSettings()                - enter the AI key for screenshot reading
  * `versions` change after every save so lists know when to reload.
@@ -65,6 +65,7 @@ export function QuickActionsProvider({ children }) {
                     key={purchase.key}
                     initialFiles={purchase.files}
                     manual={purchase.manual}
+                    prefill={purchase.prefill}
                     onClose={() => setPurchase(null)}
                     onSaved={() => bump('purchases')}
                 />

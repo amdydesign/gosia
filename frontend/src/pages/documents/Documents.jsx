@@ -767,7 +767,7 @@ export default function Documents() {
                     onClick={() => setSuggestionsOpen(true)}
                     className="w-full mb-3 flex items-center gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 hover:bg-primary-50 px-4 py-3 text-left transition-colors"
                 >
-                    <span className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center shrink-0">
+                    <span className="w-9 h-9 rounded-xl bg-accent text-on-accent flex items-center justify-center shrink-0">
                         <Briefcase size={17} />
                     </span>
                     <span className="flex-1 min-w-0">
@@ -805,7 +805,7 @@ export default function Documents() {
                                 </button>
                             )}
                             {u.error && (
-                                <button type="button" onClick={() => setUploads((prev) => prev.filter((x) => x.key !== u.key))} className="p-2 text-ink-muted hover:bg-black/5 rounded-lg" aria-label="Ukryj">
+                                <button type="button" onClick={() => setUploads((prev) => prev.filter((x) => x.key !== u.key))} className="p-2 text-ink-muted hover:bg-ink/5 rounded-lg" aria-label="Ukryj">
                                     <X size={16} />
                                 </button>
                             )}

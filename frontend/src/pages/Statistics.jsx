@@ -1,20 +1,158 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Award, RotateCcw, Landmark } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Download, Award, RotateCcw, Landmark, Users, Wallet } from 'lucide-react';
 import { apiRequest } from '../utils/api';
+import statsService from '../services/stats';
 import Button from '../components/ui/Button';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import SocialSection from '../components/social/SocialSection';
 import ExportModal from './collaborations/ExportModal';
 import { formatCurrency } from '../utils/format';
+import { PLATFORMS } from '../components/social/SocialSection';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const MONTHS_SHORT = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+
+const TABS = [
+    { value: 'glowna', label: 'Główna', icon: Users },
+    { value: 'finanse', label: 'Finanse', icon: Wallet },
+];
+
+/**
+ * Two tabs: "Główna" = the influencer side (followers and their growth),
+ * "Finanse" = money (earnings, clients, tax threshold, returns).
+ * The tab lives in the URL (?tab=finanse) so links from Start land on the right one.
+ */
+export default function Statistics() {
+    const [params, setParams] = useSearchParams();
+    const tab = params.get('tab') === 'finanse' ? 'finanse' : 'glowna';
+
+    return (
+        <div className="space-y-5 animate-fade-in">
+            <div className="flex items-center justify-between gap-3">
+                <h1 className="hidden lg:block font-display text-[28px] font-semibold tracking-tight text-ink">Statystyki</h1>
+                <div role="tablist" aria-label="Statystyki" className="grid grid-cols-2 gap-1 p-1 rounded-full bg-surface border border-line w-full lg:w-auto">
+                    {TABS.map((t) => (
+                        <button
+                            key={t.value}
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === t.value}
+                            onClick={() => setParams(t.value === 'glowna' ? {} : { tab: t.value }, { replace: true })}
+                            className={`h-10 px-5 rounded-full text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
+                                tab === t.value ? 'nav-active' : 'text-ink-muted hover:text-ink'
+                            }`}
+                        >
+                            <t.icon size={16} /> {t.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            {tab === 'finanse' ? <Finances /> : <Influence />}
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ Główna */
+
+const RANGES = [
+    { value: 30, label: '30 dni' },
+    { value: 90, label: '3 mies.' },
+    { value: 365, label: 'Rok' },
+];
+
+function Influence() {
+    const [days, setDays] = useState(30);
+    const [history, setHistory] = useState(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        statsService
+            .getSocialHistory(days)
+            .then((res) => !cancelled && setHistory(res?.data || {}))
+            .catch(() => !cancelled && setHistory({}));
+        return () => {
+            cancelled = true;
+        };
+    }, [days]);
+
+    // Sum of all platforms per day (missing days carry the last known count forward)
+    const series = useMemo(() => {
+        if (!history) return [];
+        const dates = [...new Set(Object.values(history).flat().map((r) => r.date))].sort();
+        const last = {};
+        return dates.map((date) => {
+            for (const p of PLATFORMS) {
+                const row = (history[p.id] || []).find((r) => r.date === date);
+                if (row) last[p.id] = row.count;
+            }
+            return { date, total: Object.values(last).reduce((a, b) => a + b, 0) };
+        });
+    }, [history]);
+
+    const total = series.length ? series[series.length - 1].total : 0;
+    const growth = series.length > 1 ? total - series[0].total : 0;
+
+    return (
+        <>
+            <section className="rounded-[28px] bg-accent text-on-accent p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div className="text-sm font-semibold opacity-80">Obserwujący razem</div>
+                        <div className="font-display text-4xl sm:text-5xl font-semibold tracking-tight mt-1 tabular-nums">{total.toLocaleString('pl-PL')}</div>
+                        <div className="text-sm font-semibold mt-1">
+                            {growth === 0 ? 'bez zmian' : `${growth > 0 ? '+' : ''}${growth.toLocaleString('pl-PL')}`} w {RANGES.find((r) => r.value === days)?.label.replace('3 mies.', '3 miesiące').replace('Rok', 'rok')}
+                        </div>
+                    </div>
+                    <div role="group" aria-label="Zakres" className="flex gap-1 p-1 rounded-full bg-black/10">
+                        {RANGES.map((r) => (
+                            <button
+                                key={r.value}
+                                type="button"
+                                aria-pressed={days === r.value}
+                                onClick={() => setDays(r.value)}
+                                className={`h-9 px-3 rounded-full text-xs font-semibold ${days === r.value ? 'bg-on-accent text-accent' : ''}`}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <GrowthChart series={series} />
+            </section>
+
+            <SocialSection />
+        </>
+    );
+}
+
+function GrowthChart({ series }) {
+    if (series.length < 2) {
+        return <p className="text-sm mt-4 opacity-80">Wykres pojawi się, gdy zbierze się kilka dni danych (liczby odświeżają się same raz dziennie).</p>;
+    }
+    const W = 600;
+    const H = 120;
+    const values = series.map((s) => s.total);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = Math.max(1, max - min);
+    const pts = series.map((s, i) => [(i / (series.length - 1)) * W, H - 8 - ((s.total - min) / span) * (H - 24)]);
+    const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+    return (
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-28 mt-4" role="img" aria-label="Wzrost liczby obserwujących">
+            <path d={`${line} L${W},${H} L0,${H} Z`} fill="currentColor" opacity="0.08" />
+            <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+/* ------------------------------------------------------------------ Finanse */
 
 /**
  * One year at a glance: how much you earned, month by month, who paid the most,
  * how far from the tax threshold, what returns saved.
  */
-export default function Statistics() {
+function Finances() {
     const currentYear = new Date().getFullYear();
     const [year, setYear] = useState(currentYear);
     const [data, setData] = useState(null);
@@ -62,16 +200,15 @@ export default function Statistics() {
     const topMax = Math.max(1, ...(data?.top_brands || []).map((b) => b.net));
 
     return (
-        <div className="space-y-5 animate-fade-in">
+        <div className="space-y-5">
             {/* Year switcher */}
-            <div className="flex items-center justify-between gap-3">
-                <h1 className="hidden lg:block text-[28px] font-extrabold tracking-tight text-ink">Statystyki</h1>
-                <div className="flex items-center gap-1 mx-auto lg:mx-0 bg-surface border border-line rounded-2xl p-1 shadow-card">
-                    <button type="button" onClick={() => changeYear(years[idx + 1])} disabled={idx === -1 || idx >= years.length - 1} className="p-2 rounded-xl text-ink-soft hover:bg-black/5 disabled:opacity-30" aria-label="Poprzedni rok">
+            <div className="flex items-center justify-center lg:justify-start gap-3">
+                <div className="flex items-center gap-1 bg-surface border border-line rounded-full p-1">
+                    <button type="button" onClick={() => changeYear(years[idx + 1])} disabled={idx === -1 || idx >= years.length - 1} className="p-2 rounded-xl text-ink-soft hover:bg-ink/5 disabled:opacity-30" aria-label="Poprzedni rok">
                         <ChevronLeft size={20} />
                     </button>
-                    <span className="px-4 text-lg font-extrabold tabular-nums text-ink">{year}</span>
-                    <button type="button" onClick={() => changeYear(years[idx - 1])} disabled={idx <= 0} className="p-2 rounded-xl text-ink-soft hover:bg-black/5 disabled:opacity-30" aria-label="Następny rok">
+                    <span className="px-4 font-display text-lg font-semibold tabular-nums text-ink">{year}</span>
+                    <button type="button" onClick={() => changeYear(years[idx - 1])} disabled={idx <= 0} className="p-2 rounded-xl text-ink-soft hover:bg-ink/5 disabled:opacity-30" aria-label="Następny rok">
                         <ChevronRight size={20} />
                     </button>
                 </div>
@@ -80,17 +217,17 @@ export default function Statistics() {
             {error && <div className="bg-red-50 text-red-700 border border-red-100 p-3.5 rounded-xl text-sm">{error}</div>}
 
             {/* Hero */}
-            <section className="rounded-3xl bg-gradient-to-br from-primary-600 to-primary-800 text-white p-5 sm:p-6 shadow-float">
-                <div className="text-sm font-semibold text-white/75">Zarobione na rękę w {year}</div>
-                <div className="text-4xl sm:text-5xl font-extrabold tracking-tight mt-1 tabular-nums">{formatCurrency(totals.net)}</div>
-                <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-white/80">
-                    <span>brutto <strong className="text-white">{formatCurrency(totals.gross)}</strong></span>
-                    <span><strong className="text-white">{totals.count}</strong> opłaconych współprac</span>
-                    <span>średnio <strong className="text-white">{formatCurrency(Math.round(totals.net / monthsSoFar))}</strong> / mies.</span>
+            <section className="rounded-[28px] bg-accent text-on-accent p-5 sm:p-6">
+                <div className="text-sm font-semibold opacity-80">Zarobione na rękę w {year}</div>
+                <div className="amount font-display text-4xl sm:text-5xl font-semibold tracking-tight mt-1 tabular-nums inline-block">{formatCurrency(totals.net)}</div>
+                <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm opacity-90">
+                    <span>brutto <strong className="amount">{formatCurrency(totals.gross)}</strong></span>
+                    <span><strong>{totals.count}</strong> opłaconych współprac</span>
+                    <span>średnio <strong className="amount">{formatCurrency(Math.round(totals.net / monthsSoFar))}</strong> / mies.</span>
                 </div>
                 {data?.pending?.count > 0 && (
-                    <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-sm">
-                        Czeka jeszcze <strong>{formatCurrency(data.pending.gross)}</strong> ({data.pending.count})
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-black/10 px-3 py-1.5 text-sm">
+                        Czeka jeszcze <strong className="amount">{formatCurrency(data.pending.gross)}</strong> ({data.pending.count})
                     </div>
                 )}
             </section>
@@ -101,7 +238,7 @@ export default function Statistics() {
                     <h2 className="card-title">Miesiąc po miesiącu</h2>
                     {best?.net > 0 && <span className="text-xs text-ink-muted">najlepszy: {MONTHS[best.month - 1].toLowerCase()}</span>}
                 </div>
-                <div className="flex items-end gap-1 sm:gap-2 h-40">
+                <div className="amount flex items-end gap-1 sm:gap-2 h-40">
                     {months.map((m) => {
                         const h = m.net > 0 ? Math.max(4, (m.net / max) * 100) : 2;
                         const active = m.month === selectedMonth;
@@ -115,7 +252,7 @@ export default function Statistics() {
                                 aria-label={`${MONTHS[m.month - 1]}: ${formatCurrency(m.net)}`}
                             >
                                 <div
-                                    className={`w-full rounded-t-lg rounded-b-sm transition-all ${active ? 'bg-secondary' : future ? 'bg-slate-100' : 'bg-primary-500 group-hover:bg-primary-600'}`}
+                                    className={`w-full rounded-t-lg rounded-b-sm transition-all ${active ? 'bg-chart' : future ? 'bg-surface-2' : 'bg-line-strong group-hover:bg-ink-muted'}`}
                                     style={{ height: `${h}%` }}
                                 />
                                 <span className={`text-[10px] sm:text-[11px] font-semibold ${active ? 'text-ink' : 'text-ink-muted'}`}>{MONTHS_SHORT[m.month - 1]}</span>
@@ -127,7 +264,7 @@ export default function Statistics() {
                     <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-canvas border border-line px-4 py-3">
                         <span className="font-bold text-ink">{MONTHS[selected.month - 1]}</span>
                         <span className="text-sm text-ink-muted text-right">
-                            <strong className="text-ink text-base tabular-nums">{formatCurrency(selected.net)}</strong> na rękę
+                            <strong className="amount text-ink text-base tabular-nums">{formatCurrency(selected.net)}</strong> na rękę
                             {selected.count > 0 && <> · {selected.count} {selected.count === 1 ? 'współpraca' : 'współprac'}</>}
                         </span>
                     </div>
@@ -137,7 +274,7 @@ export default function Statistics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Top brands */}
                 <section className="card card-pad">
-                    <h2 className="card-title flex items-center gap-2 mb-3"><Award size={16} className="text-secondary" /> Najlepsi klienci</h2>
+                    <h2 className="card-title flex items-center gap-2 mb-3"><Award size={16} className="text-primary-600" /> Najlepsi klienci</h2>
                     {!data?.top_brands?.length ? (
                         <p className="text-sm text-ink-muted">Brak opłaconych współprac w {year}.</p>
                     ) : (
@@ -146,10 +283,10 @@ export default function Statistics() {
                                 <div key={b.brand}>
                                     <div className="flex items-baseline justify-between gap-2 text-sm">
                                         <span className="font-semibold text-ink truncate">{i + 1}. {b.brand}</span>
-                                        <span className="text-ink-muted whitespace-nowrap"><strong className="text-ink tabular-nums">{formatCurrency(b.net)}</strong> · {b.count}×</span>
+                                        <span className="text-ink-muted whitespace-nowrap"><strong className="amount text-ink tabular-nums">{formatCurrency(b.net)}</strong> · {b.count}×</span>
                                     </div>
-                                    <div className="h-1.5 rounded-full bg-slate-100 mt-1.5 overflow-hidden">
-                                        <div className="h-full rounded-full bg-primary-500" style={{ width: `${(b.net / topMax) * 100}%` }} />
+                                    <div className="h-1.5 rounded-full bg-line mt-1.5 overflow-hidden">
+                                        <div className="h-full rounded-full bg-chart" style={{ width: `${(b.net / topMax) * 100}%` }} />
                                     </div>
                                 </div>
                             ))}
@@ -160,14 +297,14 @@ export default function Statistics() {
                 {/* Tax + returns */}
                 <div className="space-y-4">
                     <section className="card card-pad">
-                        <h2 className="card-title flex items-center gap-2"><Landmark size={16} className="text-primary-500" /> Próg podatkowy</h2>
-                        <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden mt-3">
-                            <div className={`h-full rounded-full ${progress >= 90 ? 'bg-red-500' : progress >= 70 ? 'bg-amber-400' : 'bg-primary-500'}`} style={{ width: `${progress}%` }} />
+                        <h2 className="card-title flex items-center gap-2"><Landmark size={16} className="text-primary-600" /> Próg podatkowy</h2>
+                        <div className="h-2.5 rounded-full bg-line overflow-hidden mt-3">
+                            <div className={`h-full rounded-full ${progress >= 90 ? 'bg-secondary' : progress >= 70 ? 'bg-amber-400' : 'bg-chart'}`} style={{ width: `${progress}%` }} />
                         </div>
                         <p className="text-sm text-ink-soft mt-2">
                             {progress >= 100
                                 ? 'Próg przekroczony — nadwyżka liczona jest według 32%.'
-                                : <>Do progu 120 tys. zostało <strong className="text-ink">{formatCurrency(Math.max(0, tax.threshold - tax.income))}</strong> dochodu.</>}
+                                : <>Do progu 120 tys. zostało <strong className="amount text-ink">{formatCurrency(Math.max(0, tax.threshold - tax.income))}</strong> dochodu.</>}
                         </p>
                         {data?.cash > 0 && <p className="text-xs text-ink-muted mt-1">Gotówka poza PIT: {formatCurrency(data.cash)}</p>}
                     </section>
@@ -183,8 +320,6 @@ export default function Statistics() {
                 </div>
             </div>
 
-            <SocialSection />
-
             <div className="flex justify-center pt-1">
                 <Button variant="secondary" icon={Download} onClick={() => setExportOpen(true)}>Eksport CSV dla księgowej</Button>
             </div>
@@ -198,7 +333,7 @@ function MiniStat({ label, value, sub, tone = 'text-ink' }) {
     return (
         <div className="rounded-xl bg-canvas border border-line px-2 py-2.5">
             <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{label}</div>
-            <div className={`text-base font-extrabold mt-0.5 tabular-nums ${tone}`}>{value}</div>
+            <div className={`amount font-display text-base font-semibold mt-0.5 tabular-nums ${tone}`}>{value}</div>
             <div className="text-[11px] text-ink-muted">{sub}</div>
         </div>
     );

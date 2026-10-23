@@ -100,6 +100,23 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);
 
+    // Start's "Dziś ogarnięte": one entry per store - a parcel with 3 items is one thing done
+    if (isset($data->status) || isset($data->kept_confirmed)) {
+        require_once __DIR__ . '/../utils/DoneLog.php';
+        $row = $conn->prepare("SELECT store, status, kept_confirmed FROM purchases WHERE id = :id");
+        $row->execute(['id' => $params['id']]);
+        $p = $row->fetch(PDO::FETCH_ASSOC) ?: [];
+        $store = trim((string) ($p['store'] ?? ''));
+        $refKey = 'return:' . mb_strtolower($store);
+        if (in_array($p['status'] ?? '', ['returned', 'partial'], true)) {
+            DoneLog::record($conn, $userId, $refKey, 'Zwrot ' . $store);
+        } elseif (!empty($p['kept_confirmed'])) {
+            DoneLog::record($conn, $userId, $refKey, 'Zostaje: ' . $store);
+        } else {
+            DoneLog::forget($conn, $userId, $refKey);
+        }
+    }
+
     Response::success(['message' => 'Purchase updated']);
 
 } catch (Exception $e) {

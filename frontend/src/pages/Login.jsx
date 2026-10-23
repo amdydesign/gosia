@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, LogIn, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import Field from '../components/ui/Field';
+import Logo from '../components/ui/Logo';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -35,10 +36,10 @@ export default function Login() {
     return (
         <AuthShell>
             <div className="text-center mb-8">
-                <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white flex items-center justify-center shadow-float mb-4">
-                    <Sparkles size={26} />
+                <div className="flex justify-center mb-5">
+                    <Logo size="lg" />
                 </div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-ink">Cześć, Gosia</h1>
+                <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">Cześć, Gosia</h1>
                 <p className="text-sm text-ink-muted mt-1">Zaloguj się do swojego panelu</p>
             </div>
 
@@ -102,10 +103,8 @@ export default function Login() {
 
 export function AuthShell({ children }) {
     return (
-        <div className="min-h-dvh flex items-center justify-center p-4 bg-canvas relative overflow-hidden">
-            <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-primary-200/50 blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-secondary-light/70 blur-3xl pointer-events-none" />
-            <div className="relative w-full max-w-sm bg-surface rounded-3xl shadow-card border border-line p-7 sm:p-9 animate-scale-in">{children}</div>
+        <div className="min-h-dvh flex items-center justify-center p-4 bg-canvas">
+            <div className="w-full max-w-sm bg-surface rounded-[28px] border border-line p-7 sm:p-9 animate-scale-in">{children}</div>
         </div>
     );
 }

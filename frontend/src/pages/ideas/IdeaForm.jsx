@@ -80,7 +80,7 @@ export default function IdeaForm() {
     return (
         <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-4 animate-fade-in">
             <div className="hidden lg:block mb-2">
-                <h1 className="text-2xl font-extrabold tracking-tight text-ink">{isEdit ? 'Edycja pomysłu' : 'Nowy pomysł'}</h1>
+                <h1 className="text-2xl font-display font-semibold tracking-tight text-ink">{isEdit ? 'Edycja pomysłu' : 'Nowy pomysł'}</h1>
                 <p className="text-sm text-ink-muted">Tytuł to temat rolki, treść to tekst, który przeczytasz z promptera.</p>
             </div>
 

@@ -51,14 +51,14 @@ export default function SocialCallback() {
                 {status === 'processing' && (
                     <>
                         <Spinner size={36} className="mx-auto mb-5" />
-                        <h2 className="text-xl font-extrabold text-ink tracking-tight">Autoryzacja…</h2>
+                        <h2 className="text-xl font-display font-semibold text-ink tracking-tight">Autoryzacja…</h2>
                         <p className="text-sm text-ink-muted mt-1">Trwa łączenie z kontem {platform}.</p>
                     </>
                 )}
                 {status === 'success' && (
                     <>
                         <CheckCircle2 size={44} className="mx-auto text-emerald-500 mb-4" />
-                        <h2 className="text-xl font-extrabold text-ink tracking-tight">Połączono</h2>
+                        <h2 className="text-xl font-display font-semibold text-ink tracking-tight">Połączono</h2>
                         <p className="text-sm text-ink-soft mt-1 mb-6 whitespace-pre-line">{message}</p>
                         <Button variant="primary" block onClick={() => navigate('/statistics')}>Wróć do statystyk</Button>
                     </>
@@ -66,7 +66,7 @@ export default function SocialCallback() {
                 {status === 'error' && (
                     <>
                         <XCircle size={44} className="mx-auto text-red-500 mb-4" />
-                        <h2 className="text-xl font-extrabold text-ink tracking-tight">Nie udało się</h2>
+                        <h2 className="text-xl font-display font-semibold text-ink tracking-tight">Nie udało się</h2>
                         <p className="text-sm text-ink-soft mt-1 mb-6">{message}</p>
                         <Button variant="secondary" block onClick={() => navigate('/statistics')}>Wróć</Button>
                     </>

@@ -54,8 +54,8 @@ export const statsService = {
         return await api.post('/stats/social/profiles.php', profiles);
     },
 
-    async getSocialHistory() {
-        return await api.get('/stats/social/history.php');
+    async getSocialHistory(days = 30) {
+        return await api.get(`/stats/social/history.php?days=${days}`);
     },
 
     async scrapeInstagram() {

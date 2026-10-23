@@ -1,43 +1,55 @@
 @import "tailwindcss";
 
 /* ========================================
-   GOSIA — DESIGN TOKENS (Tailwind v4 theme)
+   GONIA — DESIGN TOKENS (Tailwind v4 theme)
+   Light values here; dark values override the same variables under
+   :root[data-theme='dark'] below, so every token-based utility follows the theme.
    ======================================== */
 @theme {
-  /* Brand: clear blue */
-  --color-primary-50: #eef4ff;
-  --color-primary-100: #dbe7fe;
-  --color-primary-200: #bfd4fe;
-  --color-primary-300: #93b7fd;
-  --color-primary-400: #6092fa;
-  --color-primary-500: #3b72f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4fd8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-  --color-primary: #2563eb;
-  --color-primary-light: #bfd4fe;
-  --color-primary-dark: #1d4fd8;
+  /* Brand: olive/lime (text-safe shades; the bright lime fill is `accent`) */
+  --color-primary-50: #f6fbe6;
+  --color-primary-100: #ecf6cb;
+  --color-primary-200: #dcefa0;
+  --color-primary-300: #c3e26a;
+  --color-primary-400: #a3cf3a;
+  --color-primary-500: #84b01f;
+  --color-primary-600: #4d7c0f;
+  --color-primary-700: #3f6212;
+  --color-primary-800: #365314;
+  --color-primary-900: #1a2e05;
+  --color-primary: #4d7c0f;
+  --color-primary-light: #dcefa0;
+  --color-primary-dark: #3f6212;
 
-  /* Accent: warm orange */
-  --color-secondary: #f97316;
-  --color-secondary-light: #ffedd5;
-  --color-secondary-dark: #c2410c;
+  /* Bright lime fill for the one main action ("Teraz", Dodaj) - always with on-accent text */
+  --color-accent: #d4f25a;
+  --color-accent-strong: #c5e63f;
+  --color-on-accent: #0b0b0d;
+  /* Chart bars / progress fills (lime in dark, deeper green in light for contrast) */
+  --color-chart: #65a30d;
 
-  /* Surfaces (cool neutrals) */
-  --color-canvas: #f5f7fb;
+  /* Warm coral for "late" / warnings */
+  --color-secondary: #c2410c;
+  --color-secondary-light: #fff1ea;
+  --color-secondary-dark: #9a3412;
+  --color-on-secondary: #ffffff;
+
+  /* Surfaces */
+  --color-canvas: #f3f3ef;
   --color-surface: #ffffff;
-  --color-ink: #0f172a;
-  --color-ink-soft: #475569;
-  --color-ink-muted: #7c8798;
-  --color-line: #e6eaf1;
-  --color-line-strong: #d2d9e4;
+  --color-surface-2: #f7f7f4;
+  --color-ink: #111113;
+  --color-ink-soft: #3f3f46;
+  --color-ink-muted: #5c5c63;
+  --color-line: #e4e4de;
+  --color-line-strong: #cfcfc8;
 
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
 
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px -8px rgba(15, 23, 42, 0.08);
-  --shadow-float: 0 10px 30px -10px rgba(37, 99, 235, 0.45);
-  --shadow-sheet: 0 -8px 40px -12px rgba(15, 23, 42, 0.25);
+  --shadow-card: 0 1px 2px rgba(17, 17, 19, 0.03);
+  --shadow-float: 0 12px 32px -14px rgba(17, 17, 19, 0.35);
+  --shadow-sheet: 0 -8px 40px -12px rgba(17, 17, 19, 0.25);
 
   --animate-fade-in: fade-in 0.18s ease-out both;
   --animate-scale-in: scale-in 0.18s ease-out both;
@@ -62,6 +74,111 @@
   }
 }
 
+/* ========================================
+   DARK THEME (set by ThemeContext on <html data-theme="dark">)
+   Tints (50-200) become dark washes, text shades (700-900) become light,
+   500/600 stay mid-tone so solid buttons keep white text.
+   ======================================== */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-canvas: #0b0b0d;
+  --color-surface: #151518;
+  --color-surface-2: #1c1c20;
+  --color-ink: #f4f4f5;
+  --color-ink-soft: #d4d4d8;
+  --color-ink-muted: #a1a1aa;
+  --color-line: #26262b;
+  --color-line-strong: #3a3a42;
+
+  --color-primary-50: #1a1f0e;
+  --color-primary-100: #232b10;
+  --color-primary-200: #34421a;
+  --color-primary-300: #5b7424;
+  --color-primary-400: #9cc23a;
+  --color-primary-500: #b5da45;
+  --color-primary-600: #a3cf3a;
+  --color-primary-700: #d4f25a;
+  --color-primary-800: #e3f79a;
+  --color-primary-900: #f1fbd0;
+  --color-primary: #a3cf3a;
+  --color-chart: #d4f25a;
+
+  --color-secondary: #ff8a6b;
+  --color-secondary-light: #2e1a14;
+  --color-secondary-dark: #ffb39e;
+  --color-on-secondary: #0b0b0d;
+
+  --color-slate-50: #17171a;
+  --color-slate-100: #1f1f23;
+  --color-slate-200: #2a2a30;
+  --color-slate-300: #3a3a42;
+  --color-slate-400: #71717a;
+  --color-slate-500: #a1a1aa;
+  --color-slate-600: #c4c4cc;
+  --color-slate-700: #d4d4d8;
+  --color-slate-800: #e4e4e7;
+  --color-slate-900: #f4f4f5;
+
+  --color-red-50: #2a1512;
+  --color-red-100: #3a1a15;
+  --color-red-200: #5a241b;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-red-900: #fee2e2;
+
+  --color-emerald-50: #0f2219;
+  --color-emerald-100: #12301f;
+  --color-emerald-200: #1a4a2e;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-emerald-900: #d1fae5;
+
+  --color-amber-50: #2a2210;
+  --color-amber-100: #3a2e12;
+  --color-amber-200: #5a4518;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-amber-900: #fef3c7;
+
+  --color-orange-50: #2a1a10;
+  --color-orange-100: #3a2312;
+  --color-orange-200: #5a3518;
+  --color-orange-700: #fdba74;
+  --color-orange-800: #fed7aa;
+
+  --color-sky-50: #0e1f2a;
+  --color-sky-100: #12293a;
+  --color-sky-200: #1a3d55;
+  --color-sky-700: #7dd3fc;
+  --color-sky-800: #bae6fd;
+
+  --color-violet-50: #1c1530;
+  --color-violet-100: #251c40;
+  --color-violet-700: #c4b5fd;
+
+  --color-rose-50: #2a1219;
+  --color-rose-100: #3a1822;
+  --color-rose-700: #fda4af;
+
+  --color-teal-50: #0f2221;
+  --color-teal-100: #12302e;
+  --color-teal-700: #5eead4;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 16px 40px -12px rgba(0, 0, 0, 0.8);
+  --shadow-sheet: 0 -8px 40px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* "Ukryj kwoty": anything marked .amount is blurred until shown again */
+:root[data-hide-amounts='true'] .amount {
+  filter: blur(7px);
+  user-select: none;
+}
+.amount {
+  transition: filter 0.2s ease;
+}
+
 @layer base {
   * {
     box-sizing: border-box;
@@ -81,7 +198,7 @@
   }
 
   :focus-visible {
-    @apply outline-2 outline-primary-400 outline-offset-2 rounded-md;
+    @apply outline-2 outline-primary-500 outline-offset-2 rounded-md;
   }
 
   /* PWA: no 300ms tap delay / double-tap zoom on controls, no long-press callouts */

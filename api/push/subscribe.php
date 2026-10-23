@@ -3,7 +3,8 @@
  * Save Push Subscription
  * POST /api/push/subscribe.php
  * Body: { "endpoint": "...", "keys": { "p256dh": "...", "auth": "..." } }
- * Sends a welcome notification so the user immediately sees it works.
+ * Sends a welcome notification so the user immediately sees it works
+ * (skipped with "silent": true - the app re-syncs its subscription on every start).
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -54,12 +55,13 @@ try {
 
     // Best-effort welcome push - confirms the whole pipeline works
     $delivered = 0;
-    if (WebPush::isConfigured()) {
+    if (WebPush::isConfigured() && empty($input['silent'])) {
         try {
             $webPush = new WebPush();
             $status = $webPush->send($endpoint, $p256dh, $auth, [
-                'title' => 'Powiadomienia włączone 🎉',
-                'body' => 'Będziesz dostawać przypomnienia o zwrotach i zaległych płatnościach.',
+                'title' => 'Powiadomienia włączone',
+                'body' => 'Rano dostaniesz krótkie „Na dziś”, a w ciągu dnia tylko to, co pilne.',
+                'tag' => 'welcome',
                 'url' => '/dashboard',
             ]);
             $delivered = ($status >= 200 && $status < 300) ? 1 : 0;

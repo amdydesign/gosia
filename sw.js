@@ -1,6 +1,6 @@
 /* Service Worker: app-shell cache + Web Push */
 
-const CACHE_NAME = 'gosia-v6';
+const CACHE_NAME = 'gonia-v1';
 const SHARE_CACHE = 'gosia-share';
 const PRECACHE = ['/', '/index.html', '/manifest.json'];
 
@@ -20,7 +20,7 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Android share sheet -> "Gosia": keep the shared screenshots and open the purchase flow
+// Android share sheet -> "Gonia": keep the shared screenshots and open the purchase flow
 async function handleShare(request) {
     try {
         const form = await request.formData();
@@ -98,14 +98,22 @@ self.addEventListener('push', (event) => {
         data = { body: event.data ? event.data.text() : '' };
     }
 
-    event.waitUntil(
-        self.registration.showNotification(data.title || 'Gosia', {
+    const jobs = [
+        self.registration.showNotification(data.title || 'Gonia', {
             body: data.body || '',
             icon: '/icons/icon-192.png',
             badge: '/icons/badge-96.png',
+            // same tag replaces the older message instead of stacking a pile of them
+            tag: data.tag || undefined,
+            renotify: Boolean(data.tag),
             data: { url: data.url || '/' },
-        })
-    );
+        }),
+    ];
+    // number on the app icon (iOS 16.4+ home-screen app)
+    if (typeof data.badge === 'number' && self.navigator.setAppBadge) {
+        jobs.push(data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge());
+    }
+    event.waitUntil(Promise.all(jobs).catch(() => {}));
 });
 
 self.addEventListener('notificationclick', (event) => {
@@ -113,11 +121,13 @@ self.addEventListener('notificationclick', (event) => {
     const url = (event.notification.data && event.notification.data.url) || '/';
 
     event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windows) => {
             for (const client of windows) {
                 if ('focus' in client) {
-                    client.navigate(url);
-                    return client.focus();
+                    await client.focus();
+                    // iOS cannot navigate() an open app window - let the app route itself
+                    client.postMessage({ type: 'open-url', url });
+                    return undefined;
                 }
             }
             return self.clients.openWindow(url);

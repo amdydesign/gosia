@@ -116,7 +116,7 @@ export default function AiSettingsSheet({ onClose }) {
             ) : (
                 <div className="space-y-5 pt-1">
                     <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${info.enabled ? 'bg-emerald-50 border-emerald-100' : 'bg-canvas border-line'}`}>
-                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${info.enabled ? 'bg-white text-emerald-600' : 'bg-white text-ink-muted'}`}>
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${info.enabled ? 'bg-surface text-emerald-600' : 'bg-surface text-ink-muted'}`}>
                             <Sparkles size={18} />
                         </span>
                         <span className="text-sm">

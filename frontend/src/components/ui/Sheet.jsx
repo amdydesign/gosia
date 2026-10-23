@@ -23,7 +23,7 @@ export default function Sheet({ open, onClose, title, description, children, foo
 
     return (
         <div
-            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-ink/40 backdrop-blur-[2px] animate-fade-in"
+            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] animate-fade-in"
             onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
             role="dialog"
             aria-modal="true"
@@ -48,7 +48,7 @@ export default function Sheet({ open, onClose, title, description, children, foo
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="shrink-0 -mr-2 -mt-1 p-2 rounded-full text-ink-muted hover:bg-black/5 hover:text-ink transition-colors"
+                                className="shrink-0 -mr-2 -mt-1 p-2 rounded-full text-ink-muted hover:bg-ink/5 hover:text-ink transition-colors"
                                 aria-label="Zamknij"
                             >
                                 <X size={20} />

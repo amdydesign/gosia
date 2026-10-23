@@ -97,7 +97,7 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                         {thumb.loading ? (
                             <Loader2 size={20} className="animate-spin text-ink-muted" />
                         ) : thumb.data ? (
-                            <img src={thumb.data.url} alt="Pierwsza strona" className="w-full h-full object-cover object-top bg-white" />
+                            <img src={thumb.data.url} alt="Pierwsza strona" className="w-full h-full object-cover object-top bg-surface" />
                         ) : (
                             <FileText size={34} className="text-ink-muted" />
                         )}

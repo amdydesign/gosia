@@ -20,7 +20,7 @@ class ErrorBoundary extends React.Component {
                 <div className="min-h-dvh flex items-center justify-center p-6 bg-canvas">
                     <div className="max-w-md w-full bg-surface border border-line rounded-3xl shadow-card p-8 text-center">
                         <div className="mx-auto w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center text-2xl mb-4">!</div>
-                        <h1 className="text-xl font-extrabold text-ink tracking-tight">Coś poszło nie tak</h1>
+                        <h1 className="text-xl font-display font-semibold text-ink tracking-tight">Coś poszło nie tak</h1>
                         <p className="text-sm text-ink-soft mt-2">Aplikacja napotkała błąd podczas wyświetlania tego widoku. Odśwież stronę albo wróć na start.</p>
                         {this.state.error && (
                             <pre className="mt-4 text-left text-[11px] text-ink-muted bg-canvas border border-line rounded-xl p-3 overflow-auto max-h-40 whitespace-pre-wrap">

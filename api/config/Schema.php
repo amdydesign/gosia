@@ -93,6 +93,59 @@ class Schema
                 UNIQUE KEY idx_user_name (user_id, name)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        // Things to do typed into "Zrzuć tutaj" (not a purchase / collaboration / idea)
+        'tasks' => "
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                due_date DATE NULL,
+                done_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_open (user_id, done_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // "Przypomnij jutro 9:00": hides the item until remind_at, then a push is sent
+        'reminders' => "
+            CREATE TABLE IF NOT EXISTS reminders (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                ref_key VARCHAR(120) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                url VARCHAR(255) NOT NULL DEFAULT '/dashboard',
+                remind_at DATETIME NOT NULL,
+                sent_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_due (sent_at, remind_at),
+                INDEX idx_user_ref (user_id, ref_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // What got done today - feeds "Dziś ogarnięte X z Y"
+        'done_log' => "
+            CREATE TABLE IF NOT EXISTS done_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                ref_key VARCHAR(120) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                done_at DATETIME NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_done (user_id, done_at),
+                INDEX idx_user_ref (user_id, ref_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // One row per push actually sent - the cron runs every 15 min and must not repeat itself
+        'push_log' => "
+            CREATE TABLE IF NOT EXISTS push_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                dedup_key VARCHAR(150) NOT NULL,
+                sent_at DATETIME NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE KEY idx_user_key (user_id, dedup_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
         'social_refresh_log' => "
             CREATE TABLE IF NOT EXISTS social_refresh_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,

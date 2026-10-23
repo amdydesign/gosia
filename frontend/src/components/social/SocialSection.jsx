@@ -170,7 +170,7 @@ export default function SocialSection({ compact = false }) {
                             <div key={p.id} className="card px-3 py-2.5 flex items-center gap-2.5">
                                 <span className={`w-8 h-8 rounded-lg ${p.color} text-white flex items-center justify-center shrink-0`}>{SocialIcons[p.id]}</span>
                                 <div className="min-w-0">
-                                    <div className="text-base font-extrabold text-ink leading-none tabular-nums">{Number(data.count || 0).toLocaleString('pl-PL')}</div>
+                                    <div className="text-base font-display font-semibold text-ink leading-none tabular-nums">{Number(data.count || 0).toLocaleString('pl-PL')}</div>
                                     <div className="text-[10px] text-ink-muted mt-0.5 flex items-center gap-1">
                                         {change ? <Change diff={change.diff} /> : <span>{p.label}</span>}
                                     </div>
@@ -199,7 +199,7 @@ export default function SocialSection({ compact = false }) {
                                             autoFocus
                                         />
                                     ) : (
-                                        <div className="text-xl font-extrabold text-ink tracking-tight truncate tabular-nums">{Number(data.count || 0).toLocaleString('pl-PL')}</div>
+                                        <div className="text-xl font-display font-semibold text-ink tracking-tight truncate tabular-nums">{Number(data.count || 0).toLocaleString('pl-PL')}</div>
                                     )}
                                 </div>
                             </div>
@@ -213,7 +213,7 @@ export default function SocialSection({ compact = false }) {
                                             Ustaw profil
                                         </button>
                                     )}
-                                    <button type="button" onClick={() => setEditing({ platform: p.id, value: String(data.count || 0) })} className="p-1 rounded-md hover:bg-black/5" title="Wpisz ręcznie" aria-label="Wpisz ręcznie">
+                                    <button type="button" onClick={() => setEditing({ platform: p.id, value: String(data.count || 0) })} className="p-1 rounded-md hover:bg-ink/5" title="Wpisz ręcznie" aria-label="Wpisz ręcznie">
                                         <Pencil size={12} />
                                     </button>
                                 </div>

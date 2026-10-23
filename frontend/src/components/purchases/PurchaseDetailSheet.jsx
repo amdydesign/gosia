@@ -154,8 +154,8 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
                 <div className="space-y-4">
                     <div>
                         <div className="text-xs font-semibold text-ink-muted">{purchase.store} · {formatDateLong(purchase.purchase_date)}</div>
-                        <h2 className="text-2xl font-extrabold tracking-tight text-ink mt-1 break-words">{purchase.items}</h2>
-                        <div className="text-xl font-extrabold text-ink mt-1 tabular-nums">{formatCurrency(purchase.amount)}</div>
+                        <h2 className="text-2xl font-display font-semibold tracking-tight text-ink mt-1 break-words">{purchase.items}</h2>
+                        <div className="text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(purchase.amount)}</div>
                     </div>
 
                     {state === 'active' && (
