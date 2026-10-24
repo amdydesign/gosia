@@ -33,6 +33,9 @@ class AiClient
     /** Settings saved in the app: ['provider' => ..., 'claude' => key, 'gemini' => key] */
     private static $config = [];
 
+    /** Model and token usage of the last Claude reply (for the model test script). */
+    public static $lastUsage = null;
+
     public static function configure(array $config)
     {
         self::$config = $config;
@@ -247,6 +250,7 @@ class AiClient
         if ($status !== 200) {
             throw new RuntimeException(self::httpErrorMessage('Claude', $status, $data['error']['message'] ?? ''));
         }
+        self::$lastUsage = ['model' => $data['model'] ?? $model] + ($data['usage'] ?? []);
         return self::parseClaudeResponse($data);
     }
 
