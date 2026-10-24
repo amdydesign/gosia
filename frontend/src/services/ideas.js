@@ -21,9 +21,14 @@ export const ideasService = {
         return apiRequest(`/ideas/delete.php?id=${id}`, 'DELETE', null, token);
     },
 
-    /** "Generator rolek": new ideas with scripts in the style of the recorded ones (nothing saved). */
-    generate: async (exclude = []) => {
-        return apiRequest('/ai/reels.php', 'POST', { exclude });
+    /** "Generator rolek", step 1: 3 new topics in the style of the recorded reels (nothing saved). */
+    generateTopics: async (exclude = []) => {
+        return apiRequest('/ai/reels.php', 'POST', { step: 'topics', exclude });
+    },
+
+    /** "Generator rolek", step 2: script for a picked or own topic (nothing saved). */
+    writeScript: async (title, pitch = '') => {
+        return apiRequest('/ai/reels.php', 'POST', { step: 'script', title, pitch });
     },
 
     /** Is AI available on the server (same key as screenshot reading)? */
