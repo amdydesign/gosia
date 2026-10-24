@@ -25,6 +25,7 @@ class AiClient
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     const CLAUDE_DOCS_MODEL = 'claude-sonnet-5-5';
     const CLAUDE_NOTES_MODEL = 'claude-sonnet-5-5';
+    const CLAUDE_IDEAS_MODEL = 'claude-sonnet-5-5';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
     const GEMINI_MODEL = 'gemini-flash-latest';
     const TIMEOUT = 90;
@@ -133,6 +134,27 @@ class AiClient
             return self::extractWithGemini($prompt . "\n\nNotatka:\n" . $text, [], $schema);
         }
         throw new RuntimeException('Rozpoznawanie notatek wymaga klucza AI (Ustawienia -> Czytanie screenów).');
+    }
+
+    /**
+     * Write new reel ideas with scripts ("Generator rolek") in the style of the recorded ones.
+     * Creative writing, so Sonnet with a bit more thinking than the note sorter.
+     */
+    public static function writeIdeas($prompt, $examples, array $schema)
+    {
+        $provider = self::provider();
+        if ($provider === 'claude') {
+            return self::extractWithClaude($prompt, [['text' => $examples]], $schema, [
+                'model' => trim($_ENV['ANTHROPIC_IDEAS_MODEL'] ?? '') ?: self::CLAUDE_IDEAS_MODEL,
+                'max_tokens' => 16000,
+                'effort' => 'medium',
+                'timeout' => 120,
+            ]);
+        }
+        if ($provider === 'gemini') {
+            return self::extractWithGemini($prompt . "\n\n" . $examples, [], $schema);
+        }
+        throw new RuntimeException('Generator rolek wymaga klucza AI (Ustawienia -> Czytanie screenów).');
     }
 
     // ---------------------------------------------------------------- Claude

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Lightbulb, CheckCircle2, Circle, Clock, Play, CalendarCheck } from 'lucide-react';
+import { Plus, Lightbulb, CheckCircle2, Circle, Clock, Play, CalendarCheck, Sparkles } from 'lucide-react';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -12,6 +12,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { CardSkeleton } from '../../components/ui/Skeleton';
 import { estimateSpeechSeconds, formatSeconds, formatDateShort } from '../../utils/format';
 import { isPlanned, localToday, planIdea } from '../../services/agenda';
+import ReelGenerator from '../../components/ideas/ReelGenerator';
 
 const FILTERS = [
     { value: 'draft', label: 'Do nagrania' },
@@ -27,6 +28,12 @@ export default function IdeaList() {
     const [error, setError] = useState('');
     const [filter, setFilter] = useState('draft');
     const [query, setQuery] = useState('');
+    const [aiEnabled, setAiEnabled] = useState(false);
+    const [generatorOpen, setGeneratorOpen] = useState(false);
+
+    useEffect(() => {
+        ideasService.aiEnabled().then(setAiEnabled).catch(() => setAiEnabled(false));
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -97,9 +104,16 @@ export default function IdeaList() {
                 title="Pomysły na rolki"
                 subtitle="Scenariusze, inspiracje i prompter"
                 actions={
-                    <Button to="/ideas/new" variant="primary" icon={Plus} className="hidden lg:inline-flex">
-                        Nowy pomysł
-                    </Button>
+                    <>
+                        {aiEnabled && (
+                            <Button variant="secondary" icon={Sparkles} onClick={() => setGeneratorOpen(true)}>
+                                Generuj rolki
+                            </Button>
+                        )}
+                        <Button to="/ideas/new" variant="primary" icon={Plus} className="hidden lg:inline-flex">
+                            Nowy pomysł
+                        </Button>
+                    </>
                 }
             >
                 <div className="flex flex-col sm:flex-row gap-2.5">
@@ -182,6 +196,16 @@ export default function IdeaList() {
                     })}
                 </div>
             )}
+
+            <ReelGenerator
+                open={generatorOpen}
+                onClose={() => setGeneratorOpen(false)}
+                onAdded={(idea) => {
+                    setIdeas((prev) => [idea, ...prev]);
+                    setFilter((f) => (f === 'recorded' ? 'draft' : f));
+                }}
+                onRemoved={(id) => setIdeas((prev) => prev.filter((i) => i.id !== id))}
+            />
         </div>
     );
 }

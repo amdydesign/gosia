@@ -19,7 +19,18 @@ export const ideasService = {
 
     delete: async (token, id) => {
         return apiRequest(`/ideas/delete.php?id=${id}`, 'DELETE', null, token);
-    }
+    },
+
+    /** "Generator rolek": new ideas with scripts in the style of the recorded ones (nothing saved). */
+    generate: async (exclude = []) => {
+        return apiRequest('/ai/reels.php', 'POST', { exclude });
+    },
+
+    /** Is AI available on the server (same key as screenshot reading)? */
+    aiEnabled: async () => {
+        const data = await apiRequest('/ai/status.php', 'GET');
+        return !!data?.enabled;
+    },
 };
 
 export default ideasService;
