@@ -140,11 +140,11 @@ class AiClient
      * Write new reel ideas with scripts ("Generator rolek") in the style of the recorded ones.
      * Creative writing, so Sonnet with a bit more thinking than the note sorter.
      */
-    public static function writeIdeas($prompt, $examples, array $schema)
+    public static function writeIdeas($prompt, $examples, array $schema, array $options = [])
     {
         $provider = self::provider();
         if ($provider === 'claude') {
-            return self::extractWithClaude($prompt, [['text' => $examples]], $schema, [
+            return self::extractWithClaude($prompt, [['text' => $examples]], $schema, $options + [
                 'model' => trim($_ENV['ANTHROPIC_IDEAS_MODEL'] ?? '') ?: self::CLAUDE_IDEAS_MODEL,
                 'max_tokens' => 16000,
                 'effort' => 'medium',

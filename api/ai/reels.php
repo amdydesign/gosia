@@ -1,9 +1,11 @@
 <?php
 /**
- * "Generator rolek" - new reel ideas with scripts, written in the style of the recorded ones.
+ * "Generator rolek" - in two steps, both in the style of the recorded reels:
  *
- * POST /api/ai/reels.php  { exclude: ["tytuł już pokazany", ...] }
- * -> { ideas: [{ title, content, based_on }], source: number of scripts used }
+ * POST /api/ai/reels.php  { step: "topics", exclude: ["tytuł już pokazany", ...] }
+ *   -> { topics: [{ title, pitch, based_on }] }       3 short ideas to pick from
+ * POST /api/ai/reels.php  { step: "script", title: "...", pitch: "..." }
+ *   -> { title, content }                              script for the picked or own topic
  *
  * Nothing is saved here - the app adds an idea only when "Dodaj do pomysłów" is tapped.
  */
@@ -18,13 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed', 405);
 }
 
-const REELS_COUNT = 3;
+const REELS_TOPICS = 3;
 const REELS_EXAMPLES = 15;
 
 try {
     $userId = getCurrentUserId();
     $input = json_decode(file_get_contents('php://input'), true) ?: [];
-    $exclude = array_slice(array_filter(array_map('strval', (array) ($input['exclude'] ?? []))), 0, 50);
+    $step = ($input['step'] ?? 'topics') === 'script' ? 'script' : 'topics';
 
     $db = new Database();
     $conn = $db->getConnection();
@@ -33,7 +35,7 @@ try {
         Response::error('Generator rolek wymaga klucza AI (Ustawienia -> Czytanie screenów).', 503);
     }
 
-    // Recorded scripts first (they show what really went out), then drafts if there are too few
+    // Recorded scripts first (they show what really went out), then drafts
     $stmt = $conn->prepare("
         SELECT title, content, status FROM ideas
         WHERE user_id = :user_id AND content IS NOT NULL AND TRIM(content) <> ''
@@ -42,43 +44,65 @@ try {
     );
     $stmt->execute(['user_id' => $userId]);
     $examples = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if (!$examples) {
-        Response::error('Najpierw zapisz kilka rolek ze scenariuszem - generator uczy się na nich.', 422);
+
+    $text = '';
+    if ($examples) {
+        $text = "Moje rolki (scenariusze):\n\n";
+        foreach ($examples as $i => $e) {
+            $text .= '### ' . ($i + 1) . '. ' . $e['title'] . ($e['status'] === 'recorded' ? ' (nagrana)' : '') . "\n"
+                . mb_substr(trim($e['content']), 0, 2500) . "\n\n";
+        }
     }
 
+    if ($step === 'script') {
+        $title = trim((string) ($input['title'] ?? ''));
+        if ($title === '') {
+            Response::validationError(['title' => 'Wpisz temat']);
+        }
+        $pitch = trim((string) ($input['pitch'] ?? ''));
+        $text .= "Temat nowej rolki: " . mb_substr($title, 0, 300) . ($pitch !== '' ? "\nO czym: " . mb_substr($pitch, 0, 500) : '');
+
+        $result = AiClient::writeIdeas(scriptPrompt(date('Y-m-d'), (bool) $examples), $text, scriptSchema());
+        $content = trim((string) ($result['content'] ?? ''));
+        if ($content === '') {
+            Response::error('AI nie napisało scenariusza. Spróbuj jeszcze raz.', 502);
+        }
+        Response::success([
+            'title' => mb_substr(trim((string) ($result['title'] ?? '')) ?: $title, 0, 200),
+            'content' => $content,
+        ]);
+    }
+
+    if (!$examples) {
+        Response::error('Najpierw zapisz kilka rolek ze scenariuszem albo wpisz własny temat.', 422);
+    }
+
+    $exclude = array_slice(array_filter(array_map('strval', (array) ($input['exclude'] ?? []))), 0, 50);
     $stmt = $conn->prepare("SELECT title FROM ideas WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 200");
     $stmt->execute(['user_id' => $userId]);
     $taken = array_merge($stmt->fetchAll(PDO::FETCH_COLUMN), $exclude);
-
-    $text = "Moje rolki (scenariusze):\n\n";
-    foreach ($examples as $i => $e) {
-        $text .= '### ' . ($i + 1) . '. ' . $e['title'] . ($e['status'] === 'recorded' ? ' (nagrana)' : '') . "\n"
-            . mb_substr(trim($e['content']), 0, 2500) . "\n\n";
-    }
     $text .= "Tematy, które już mam (nie powtarzaj ich):\n- " . implode("\n- ", array_map(function ($t) {
         return mb_substr($t, 0, 120);
     }, $taken));
 
-    $result = AiClient::writeIdeas(reelsPrompt(date('Y-m-d')), $text, reelsSchema());
+    $result = AiClient::writeIdeas(topicsPrompt(date('Y-m-d')), $text, topicsSchema(), ['effort' => 'low', 'max_tokens' => 4000]);
 
-    $ideas = [];
-    foreach (($result['ideas'] ?? []) as $idea) {
-        $title = trim((string) ($idea['title'] ?? ''));
-        $content = trim((string) ($idea['content'] ?? ''));
-        if ($title === '' || $content === '') {
+    $topics = [];
+    foreach (($result['topics'] ?? []) as $t) {
+        $title = trim((string) ($t['title'] ?? ''));
+        if ($title === '') {
             continue;
         }
-        $ideas[] = [
+        $topics[] = [
             'title' => mb_substr($title, 0, 200),
-            'content' => $content,
-            'based_on' => trim((string) ($idea['based_on'] ?? '')),
+            'pitch' => trim((string) ($t['pitch'] ?? '')),
+            'based_on' => trim((string) ($t['based_on'] ?? '')),
         ];
     }
-    if (!$ideas) {
+    if (!$topics) {
         Response::error('AI nie wymyśliło nic nowego. Spróbuj jeszcze raz.', 502);
     }
-
-    Response::success(['ideas' => array_slice($ideas, 0, REELS_COUNT), 'source' => count($examples)]);
+    Response::success(['topics' => array_slice($topics, 0, REELS_TOPICS)]);
 
 } catch (RuntimeException $e) {
     Response::error($e->getMessage(), 502);
@@ -89,47 +113,74 @@ try {
     Response::error('Nie udało się wygenerować rolek', 500);
 }
 
-function reelsPrompt($today)
+function topicsPrompt($today)
 {
-    $count = REELS_COUNT;
+    $count = REELS_TOPICS;
     return <<<PROMPT
-Jesteś autorem scenariuszy rolek (Instagram Reels / TikTok) dla stylistki i influencerki modowej.
-Dzisiaj jest {$today}. Powyżej są jej dotychczasowe scenariusze - to jej głos, styl mówienia i tematy, które działają.
+Jesteś pomysłodawcą rolek (Instagram Reels / TikTok) dla stylistki i influencerki modowej.
+Dzisiaj jest {$today}. Powyżej są jej dotychczasowe scenariusze - tematy i styl, które u niej działają.
 
-Wymyśl {$count} NOWE pomysły na rolki, każdy z gotowym scenariuszem do przeczytania z promptera.
-
-Zasady:
-- Pisz jej głosem: ta sama osoba (forma żeńska, "ja"), podobna długość, rytm i słownictwo co w jej scenariuszach.
-- Każdy pomysł inny: rozwiń temat, który u niej działa, pokaż go z nowej strony albo połącz z sezonem / okazją (dziś {$today}).
-- Nie powtarzaj tematów z listy "Tematy, które już mam" ani nie przepisuj jej scenariuszy.
-- title: krótki, konkretny tytuł po polsku (do 60 znaków), bez kropki na końcu.
-- content: sam tekst do powiedzenia do kamery, zaczynający się od mocnego pierwszego zdania (hook) w pierwszych 2 sekundach.
-  Zwykłe akapity, bez nagłówków, bez emoji, bez opisów ujęć i bez hashtagów. Zwykle 60-150 słów, chyba że jej scenariusze są wyraźnie dłuższe lub krótsze.
+Wymyśl {$count} NOWE, wyraźnie różne tematy rolek (jeszcze bez scenariusza).
+- Rozwiń to, co u niej działa, pokaż z nowej strony albo połącz z sezonem / okazją (dziś {$today}).
+- Nie powtarzaj tematów z listy "Tematy, które już mam".
+- title: krótki, chwytliwy tytuł po polsku (do 60 znaków), bez kropki na końcu.
+- pitch: jedno krótkie zdanie, o czym będzie rolka (do 120 znaków).
 - based_on: tytuł jej rolki, która była główną inspiracją (dokładnie jak na liście), albo pusty tekst.
-- Nie wymyślaj nazw marek, cen ani współprac, których nie ma w jej scenariuszach.
+- Nie wymyślaj marek ani współprac, których nie ma w jej scenariuszach.
 PROMPT;
 }
 
-function reelsSchema()
+function scriptPrompt($today, $hasExamples)
+{
+    $voice = $hasExamples
+        ? 'Pisz jej głosem: ta sama osoba (forma żeńska, "ja"), podobna długość, rytm i słownictwo co w jej scenariuszach powyżej. Nie przepisuj ich.'
+        : 'Pisz w pierwszej osobie, forma żeńska, lekko i naturalnie, jak do koleżanki.';
+    return <<<PROMPT
+Jesteś autorem scenariuszy rolek (Instagram Reels / TikTok) dla stylistki i influencerki modowej. Dzisiaj jest {$today}.
+Napisz scenariusz do przeczytania z promptera na podany na końcu temat.
+
+Zasady:
+- {$voice}
+- content: sam tekst do powiedzenia do kamery, zaczynający się od mocnego pierwszego zdania (hook) w pierwszych 2 sekundach.
+  Zwykłe akapity, bez nagłówków, bez emoji, bez opisów ujęć i bez hashtagów. Zwykle 60-150 słów.
+- title: krótki tytuł po polsku (do 60 znaków), z wielkiej litery, bez kropki na końcu - na bazie podanego tematu.
+- Nie wymyślaj marek, cen ani współprac, których nie ma w temacie ani w jej scenariuszach.
+PROMPT;
+}
+
+function topicsSchema()
 {
     return [
         'type' => 'object',
         'properties' => [
-            'ideas' => [
+            'topics' => [
                 'type' => 'array',
                 'items' => [
                     'type' => 'object',
                     'properties' => [
                         'title' => ['type' => 'string'],
-                        'content' => ['type' => 'string'],
+                        'pitch' => ['type' => 'string'],
                         'based_on' => ['type' => 'string'],
                     ],
-                    'required' => ['title', 'content', 'based_on'],
+                    'required' => ['title', 'pitch', 'based_on'],
                     'additionalProperties' => false,
                 ],
             ],
         ],
-        'required' => ['ideas'],
+        'required' => ['topics'],
+        'additionalProperties' => false,
+    ];
+}
+
+function scriptSchema()
+{
+    return [
+        'type' => 'object',
+        'properties' => [
+            'title' => ['type' => 'string'],
+            'content' => ['type' => 'string'],
+        ],
+        'required' => ['title', 'content'],
         'additionalProperties' => false,
     ];
 }
