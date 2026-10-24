@@ -25,7 +25,7 @@ class AiClient
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     const CLAUDE_DOCS_MODEL = 'claude-sonnet-5-5';
     const CLAUDE_NOTES_MODEL = 'claude-sonnet-5-5';
-    const CLAUDE_IDEAS_MODEL = 'claude-sonnet-5-5';
+    const CLAUDE_IDEAS_MODEL = 'claude-opus-5-5';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
     const GEMINI_MODEL = 'gemini-flash-latest';
     const TIMEOUT = 90;
@@ -141,7 +141,8 @@ class AiClient
 
     /**
      * Write new reel ideas with scripts ("Generator rolek") in the style of the recorded ones.
-     * Creative writing, so Sonnet with a bit more thinking than the note sorter.
+     * Creative writing - Opus 5.5 won the model test (api/cron/compare_models.php): best hooks,
+     * real examples, kept to the length; Sonnet and Fable ran long, Haiku was flat.
      */
     public static function writeIdeas($prompt, $examples, array $schema, array $options = [])
     {

@@ -72,7 +72,8 @@ Napisz scenariusz do przeczytania z promptera na podany na końcu temat.
 Zasady:
 - {$voice}
 - content: sam tekst do powiedzenia do kamery, zaczynający się od mocnego pierwszego zdania (hook) w pierwszych 2 sekundach.
-  Zwykłe akapity, bez nagłówków, bez emoji, bez opisów ujęć i bez hashtagów. Zwykle 60-150 słów.
+  Zwykłe akapity, bez nagłówków, bez emoji, bez opisów ujęć, bez hashtagów i bez wskazówek wymowy w nawiasach.
+- Długość: 60-150 słów (do ok. minuty mówienia), chyba że jej scenariusze są wyraźnie krótsze.
 - title: krótki tytuł po polsku (do 60 znaków), z wielkiej litery, bez kropki na końcu - na bazie podanego tematu.
 - Nie wymyślaj marek, cen ani współprac, których nie ma w temacie ani w jej scenariuszach.
 PROMPT;
