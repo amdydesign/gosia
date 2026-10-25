@@ -25,16 +25,14 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
-    $stmt = $conn->prepare("SELECT id, username, email, last_login FROM users WHERE id = :id LIMIT 1");
-    $stmt->execute(['id' => $tokenData['sub']]);
-    $user = $stmt->fetch();
+    $user = Users::find($conn, $tokenData['sub']);
 
     if (!$user) {
         Response::error('User not found', 404);
     }
 
     Response::success([
-        'user' => $user
+        'user' => Users::publicData($user)
     ], 'Token valid');
 
 } catch (Exception $e) {

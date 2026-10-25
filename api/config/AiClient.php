@@ -41,12 +41,15 @@ class AiClient
         self::$config = $config;
     }
 
-    /** API key for "claude" | "gemini": app settings first, then api/.env. */
+    /** API key for "claude" | "gemini": app settings first, then api/.env (owner's account only). */
     public static function key($provider)
     {
         $fromApp = trim((string) (self::$config[$provider] ?? ''));
         if ($fromApp !== '') {
             return $fromApp;
+        }
+        if (!(self::$config['allow_env'] ?? true)) {
+            return '';
         }
         return trim($_ENV[$provider === 'claude' ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY'] ?? '');
     }

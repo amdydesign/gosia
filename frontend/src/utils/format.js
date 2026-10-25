@@ -306,5 +306,7 @@ export function yesterdayDate() {
 }
 
 // ---------- People ----------
-// The panel is Gosia's - greet her by name whatever the login is ("admin")
-export const OWNER_NAME = 'Gosia';
+// Each account has its own name ("Gosia"); the login ("admin") is only a fallback
+export function userName(user) {
+    return (user?.display_name || user?.username || '').trim();
+}

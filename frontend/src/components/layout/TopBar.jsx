@@ -3,7 +3,8 @@ import { ArrowLeft, Eye, EyeOff, Plus } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 import { usePreferences } from '../../context/PreferencesContext';
 import Logo from '../ui/Logo';
-import { OWNER_NAME } from '../../utils/format';
+import { userName } from '../../utils/format';
+import { useAuth } from '../../context/AuthContext';
 import { NAV_ITEMS } from './navItems';
 
 /**
@@ -14,7 +15,8 @@ export default function TopBar({ meta, onOpenProfile, onAdd }) {
     const navigate = useNavigate();
     const { badges } = useDashboard();
     const { amountsHidden, toggleAmounts } = usePreferences();
-    const initial = OWNER_NAME.charAt(0);
+    const { user } = useAuth();
+    const initial = userName(user).charAt(0).toUpperCase() || '•';
 
     const privacyButton = (
         <button
