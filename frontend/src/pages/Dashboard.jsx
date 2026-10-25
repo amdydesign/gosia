@@ -9,7 +9,8 @@ import Button from '../components/ui/Button';
 import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
-import { OWNER_NAME, formatCurrency, formatWeekdayDate, greetingForHour } from '../utils/format';
+import { useAuth } from '../context/AuthContext';
+import { formatCurrency, formatWeekdayDate, greetingForHour, userName } from '../utils/format';
 import {
     SNOOZE_PRESETS,
     cancelSnooze,
@@ -67,6 +68,7 @@ function writeFlag(key, on) {
  */
 export default function Dashboard() {
     const { data, loading, error, refresh } = useDashboard();
+    const { user } = useAuth();
     const [focus, setFocus] = useState(() => readFlag(FOCUS_KEY));
     const [skip, setSkip] = useState(0);
     const actions = useAgendaActions();
@@ -117,7 +119,7 @@ export default function Dashboard() {
             <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
                 <div className="flex-1 min-w-[220px]">
                     <h2 className="font-display text-2xl lg:text-[28px] font-semibold tracking-tight text-ink">
-                        {greetingForHour()}, {OWNER_NAME}
+                        {greetingForHour()}{userName(user) ? `, ${userName(user)}` : ''}
                     </h2>
                     <p className="text-sm text-ink-muted mt-0.5">
                         {formatWeekdayDate()}

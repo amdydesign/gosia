@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../config/JWTHandler.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/Database.php';
+require_once __DIR__ . '/../config/Users.php';
 
 class AuthMiddleware
 {
@@ -42,12 +43,16 @@ class AuthMiddleware
             $db = new Database();
             $conn = $db->getConnection();
 
-            $stmt = $conn->prepare("SELECT token_version FROM users WHERE id = :id");
+            Users::ensure($conn);
+            $stmt = $conn->prepare("SELECT token_version, is_active FROM users WHERE id = :id");
             $stmt->execute(['id' => $payload['sub']]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$user) {
                 Response::unauthorized('User not found');
+            }
+            if ((int) $user['is_active'] !== 1) {
+                Response::unauthorized('Konto jest zablokowane');
             }
 
             // If token has no version (old token) or versions don't match -> Unauthorized
@@ -89,4 +94,16 @@ function getCurrentUserId()
 {
     $auth = new AuthMiddleware();
     return $auth->getUserId();
+}
+
+/**
+ * Logged-in admin's id, or 403 for everyone else (managing accounts).
+ */
+function requireAdminId(PDO $conn)
+{
+    $userId = getCurrentUserId();
+    if (!Users::isAdmin($conn, $userId)) {
+        Response::error('Tylko administrator może zarządzać kontami', 403);
+    }
+    return (int) $userId;
 }

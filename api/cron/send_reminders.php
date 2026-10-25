@@ -24,6 +24,7 @@ require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/WebPush.php';
 require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/PushPrefs.php';
+require_once __DIR__ . '/../config/Users.php';
 require_once __DIR__ . '/../utils/TodayAgenda.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
@@ -62,7 +63,11 @@ try {
     $today = $now->format('Y-m-d');
     $report = [];
 
-    $userIds = $conn->query("SELECT DISTINCT user_id FROM push_subscriptions")->fetchAll(PDO::FETCH_COLUMN);
+    Users::ensure($conn);
+    $userIds = $conn->query("
+        SELECT DISTINCT s.user_id FROM push_subscriptions s
+        JOIN users u ON u.id = s.user_id AND u.is_active = 1
+    ")->fetchAll(PDO::FETCH_COLUMN);
 
     foreach ($userIds as $userId) {
         $userId = (int) $userId;

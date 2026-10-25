@@ -14,6 +14,7 @@
  */
 
 require_once __DIR__ . '/Schema.php';
+require_once __DIR__ . '/Users.php';
 
 class SocialFetcher
 {
@@ -60,11 +61,12 @@ class SocialFetcher
             }
         }
 
-        // Legacy fallbacks from social_credentials.php
-        if (empty($profiles['instagram']) && !empty($this->creds['rapidapi']['username'])) {
+        // Legacy fallbacks from social_credentials.php - those are Gosia's profiles, so the owner's account only
+        $owner = Users::isAdmin($this->conn, $userId);
+        if ($owner && empty($profiles['instagram']) && !empty($this->creds['rapidapi']['username'])) {
             $profiles['instagram'] = $this->creds['rapidapi']['username'];
         }
-        if (empty($profiles['facebook']) && !empty($this->creds['facebook_rapidapi']['url'])) {
+        if ($owner && empty($profiles['facebook']) && !empty($this->creds['facebook_rapidapi']['url'])) {
             $profiles['facebook'] = $this->creds['facebook_rapidapi']['url'];
         }
         if (empty($profiles['youtube'])) {

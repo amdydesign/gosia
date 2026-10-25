@@ -38,7 +38,8 @@ try {
     $conn = $db->getConnection();
     $fetcher = new SocialFetcher($conn);
 
-    $users = $conn->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
+    Users::ensure($conn);
+    $users = $conn->query("SELECT id FROM users WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN);
     $summary = [];
     foreach ($users as $userId) {
         $results = $fetcher->refreshUser($userId, null, $force);

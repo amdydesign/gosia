@@ -1,11 +1,11 @@
 /**
  * Label + control wrapper. Pass `suffix` (e.g. "zł") to render an inline unit.
  */
-export default function Field({ label, hint, error, suffix, required, children, className = '' }) {
+export default function Field({ label, hint, error, suffix, required, htmlFor, children, className = '' }) {
     return (
         <div className={className}>
             {label && (
-                <label className="label">
+                <label className="label" htmlFor={htmlFor}>
                     {label}
                     {required && <span className="text-primary-500 ml-0.5">*</span>}
                 </label>

@@ -86,6 +86,20 @@ export async function unsubscribeFromPush() {
 }
 
 /**
+ * On logout: stop sending this account's reminders to this device, but keep the
+ * permission - whoever logs in next gets the device via resyncPush().
+ */
+export async function detachPushFromAccount() {
+    try {
+        const registration = await getRegistration();
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) await api.post('/push/unsubscribe.php', { endpoint: subscription.endpoint });
+    } catch {
+        // best effort - logging out must never get stuck here
+    }
+}
+
+/**
  * Called on every app start: keeps the server's copy of this device's subscription
  * fresh (iOS may rotate it) without the welcome notification.
  */

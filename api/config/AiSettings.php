@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/Schema.php';
 require_once __DIR__ . '/AiClient.php';
+require_once __DIR__ . '/Users.php';
 
 class AiSettings
 {
@@ -32,6 +33,8 @@ class AiSettings
             'provider' => in_array($rows['ai_provider'] ?? '', self::PROVIDERS, true) ? $rows['ai_provider'] : null,
             'claude' => isset($rows['ai_key_claude']) ? self::decrypt($rows['ai_key_claude']) : null,
             'gemini' => isset($rows['ai_key_gemini']) ? self::decrypt($rows['ai_key_gemini']) : null,
+            // the server key in api/.env is the owner's - other accounts bring their own
+            'allow_env' => Users::isAdmin($conn, $userId),
         ];
     }
 

@@ -11,6 +11,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/JWTHandler.php';
 require_once __DIR__ . '/../config/Response.php';
+require_once __DIR__ . '/../config/Users.php';
 
 // Only allow POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -37,7 +38,8 @@ try {
     $conn = $db->getConnection();
 
     // Find user by username
-    $stmt = $conn->prepare("SELECT id, username, password_hash, email, token_version FROM users WHERE username = :username LIMIT 1");
+    Users::ensure($conn);
+    $stmt = $conn->prepare("SELECT id, username, password_hash, email, display_name, is_admin, is_active, token_version FROM users WHERE username = :username LIMIT 1");
     $stmt->execute(['username' => $username]);
     $user = $stmt->fetch();
 
@@ -51,6 +53,10 @@ try {
         Response::error('Invalid username or password', 401);
     }
 
+    if ((int) $user['is_active'] !== 1) {
+        Response::error('To konto jest zablokowane. Napisz do administratora.', 403);
+    }
+
     // Update last login
     $updateStmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE id = :id");
     $updateStmt->execute(['id' => $user['id']]);
@@ -62,11 +68,7 @@ try {
     $token = $jwtHandler->generateToken($user['id'], $user['username'], $tokenVersion);
 
     // Prepare user data (without password)
-    $userData = [
-        'id' => $user['id'],
-        'username' => $user['username'],
-        'email' => $user['email']
-    ];
+    $userData = Users::publicData($user);
 
     // Send success response
     Response::success([

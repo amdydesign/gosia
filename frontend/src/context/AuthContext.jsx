@@ -2,8 +2,16 @@
  * Auth Context - Global authentication state
  */
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import authService from '../services/auth';
+import { fetchMe } from '../services/users';
+import { detachPushFromAccount } from '../services/push';
+
+/** Keep the stored copy of the user in the same storage the token lives in. */
+function storeUser(user) {
+    const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
+    storage.setItem('user', JSON.stringify(user));
+}
 
 const AuthContext = createContext(null);
 
@@ -23,6 +31,15 @@ export function AuthProvider({ children }) {
                 setUser(storedUser);
                 setToken(storedToken);
                 setIsAuthenticated(true);
+                // refresh name and role (sessions from before accounts lack them)
+                fetchMe()
+                    .then((data) => {
+                        if (data?.user) {
+                            setUser(data.user);
+                            storeUser(data.user);
+                        }
+                    })
+                    .catch(() => {});
             }
             setLoading(false);
         };
@@ -39,13 +56,27 @@ export function AuthProvider({ children }) {
         return data;
     };
 
-    // Logout
-    const logout = () => {
+    // Logout - this device stops getting this account's reminders; account-specific
+    // leftovers in the browser go too, so the next person starts clean
+    const logout = async () => {
+        await detachPushFromAccount();
+        try {
+            sessionStorage.removeItem('gonia.reelGenerator');
+            localStorage.removeItem('gosia-return-keep');
+            localStorage.removeItem('gosia-return-open');
+        } catch {
+            // storage blocked - nothing to clean
+        }
         authService.logout();
         setUser(null);
         setToken(null);
         setIsAuthenticated(false);
     };
+
+    const updateUser = useCallback((next) => {
+        setUser(next);
+        storeUser(next);
+    }, []);
 
     const value = {
         user,
@@ -53,7 +84,8 @@ export function AuthProvider({ children }) {
         loading,
         isAuthenticated,
         login,
-        logout
+        logout,
+        updateUser
     };
 
     return (

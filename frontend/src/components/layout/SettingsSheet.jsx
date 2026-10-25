@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff } from 'lucide-react';
+import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Logo from '../ui/Logo';
 import Switch from '../ui/Switch';
-import { OWNER_NAME } from '../../utils/format';
+import { userName } from '../../utils/format';
+import { updateProfile } from '../../services/users';
+import { useToast } from '../../context/ToastContext';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
 import ExportModal from '../../pages/collaborations/ExportModal';
 import NotificationsSheet from '../settings/NotificationsSheet';
+import UsersSheet from '../settings/UsersSheet';
 import { useAuth } from '../../context/AuthContext';
 import { usePush } from '../../hooks/usePush';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -26,7 +29,8 @@ const THEMES = [
  */
 export default function SettingsSheet({ open, onClose }) {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const { user, logout, updateUser } = useAuth();
+    const toast = useToast();
     const push = usePush();
     const confirm = useConfirm();
     const { data: dashboard } = useDashboard();
@@ -36,10 +40,28 @@ export default function SettingsSheet({ open, onClose }) {
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [usersOpen, setUsersOpen] = useState(false);
+    const [editingName, setEditingName] = useState(false);
+    const [nameDraft, setNameDraft] = useState('');
+    const name = userName(user);
+
+    const saveName = async (e) => {
+        e.preventDefault();
+        const next = nameDraft.trim();
+        setEditingName(false);
+        if (!next || next === name) return;
+        try {
+            const data = await updateProfile(next);
+            updateUser(data.user);
+            toast.success(`Zapisane — cześć, ${data.user.display_name}!`);
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się zapisać imienia');
+        }
+    };
 
     const handleLogout = async () => {
-        if (await confirm({ title: 'Wylogować?', message: 'Będziesz musiała zalogować się ponownie.', confirmLabel: 'Wyloguj' })) {
-            logout();
+        if (await confirm({ title: 'Wylogować?', message: 'Żeby wrócić, zaloguj się ponownie.', confirmLabel: 'Wyloguj' })) {
+            await logout();
         }
     };
 
@@ -54,15 +76,42 @@ export default function SettingsSheet({ open, onClose }) {
 
     return (
         <>
-            <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
+            <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen && !usersOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
                 <div className="flex items-center gap-3 mb-5">
-                    <div className="w-12 h-12 rounded-full bg-surface-2 border border-line text-ink flex items-center justify-center font-semibold text-lg">
-                        {OWNER_NAME.charAt(0)}
+                    <div className="w-12 h-12 shrink-0 rounded-full bg-surface-2 border border-line text-ink flex items-center justify-center font-semibold text-lg">
+                        {name.charAt(0).toUpperCase()}
                     </div>
-                    <div className="min-w-0">
-                        <div className="font-semibold text-ink truncate">{OWNER_NAME}</div>
-                        <div className="text-xs text-ink-muted truncate">Login: {user?.username || '—'}</div>
-                    </div>
+                    {editingName ? (
+                        <form onSubmit={saveName} className="flex-1 min-w-0 flex gap-2">
+                            <input
+                                className="input flex-1 min-w-0 !py-2"
+                                value={nameDraft}
+                                onChange={(e) => setNameDraft(e.target.value)}
+                                maxLength={100}
+                                autoFocus
+                                aria-label="Twoje imię"
+                            />
+                            <button type="submit" className="btn btn-sm btn-primary" aria-label="Zapisz imię">
+                                <Check size={16} />
+                            </button>
+                        </form>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setNameDraft(name);
+                                setEditingName(true);
+                            }}
+                            className="min-w-0 flex-1 text-left group"
+                            title="Zmień imię"
+                        >
+                            <span className="flex items-center gap-1.5 font-semibold text-ink">
+                                <span className="truncate">{name}</span>
+                                <Pencil size={13} className="shrink-0 text-ink-muted group-hover:text-ink" />
+                            </span>
+                            <span className="block text-xs text-ink-muted truncate">Login: {user?.username || '—'}</span>
+                        </button>
+                    )}
                 </div>
 
                 <div className="mb-5">
@@ -152,6 +201,18 @@ export default function SettingsSheet({ open, onClose }) {
                         <span className="flex-1 text-sm font-semibold text-ink">Eksport współprac (CSV)</span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
+                    {user?.is_admin && (
+                        <button type="button" onClick={() => setUsersOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                            <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
+                                <Users size={18} />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block text-sm font-semibold text-ink">Konta</span>
+                                <span className="block text-xs text-ink-muted">Dodaj osobę, nowe hasło, blokada</span>
+                            </span>
+                            <ChevronRight size={18} className="text-ink-muted" />
+                        </button>
+                    )}
                     <button type="button" onClick={() => setPasswordOpen(true)} className="row w-full text-left hover:bg-surface-2">
                         <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
                             <KeyRound size={18} />
@@ -175,6 +236,7 @@ export default function SettingsSheet({ open, onClose }) {
             <ChangePasswordModal isOpen={passwordOpen} onClose={() => setPasswordOpen(false)} />
             <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
             <NotificationsSheet open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+            <UsersSheet open={usersOpen} onClose={() => setUsersOpen(false)} />
         </>
     );
 }
