@@ -88,26 +88,36 @@ try {
     }
 
     $exclude = array_slice(array_filter(array_map('strval', (array) ($input['exclude'] ?? []))), 0, 50);
-    $parts = [['text' => $text, 'cache' => true], ['text' => reelTakenTopics($conn, $userId, $exclude)]];
+    $taken = reelTaken($conn, $userId, $exclude);
 
-    $result = AiClient::writeIdeas(topicsPrompt(date('Y-m-d')), $parts, topicsSchema(), REELS_TOPICS_OPTIONS);
-
+    // The model still repeats now and then - what is too close to an idea, a recorded reel
+    // or an earlier suggestion is dropped here; one more round only when nothing new came back
     $topics = [];
-    foreach (($result['topics'] ?? []) as $t) {
-        $title = trim((string) ($t['title'] ?? ''));
-        if ($title === '') {
-            continue;
+    $rejected = [];
+    for ($round = 0; $round < 2 && !$topics; $round++) {
+        $parts = [['text' => $text, 'cache' => true], ['text' => reelTakenTopics($conn, $userId, array_merge($exclude, $rejected))]];
+        $result = AiClient::writeIdeas(topicsPrompt(date('Y-m-d')), $parts, topicsSchema(), REELS_TOPICS_OPTIONS);
+
+        $candidates = [];
+        foreach (($result['topics'] ?? []) as $t) {
+            $title = trim((string) ($t['title'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+            $candidates[] = [
+                'title' => mb_substr($title, 0, 200),
+                'pitch' => trim((string) ($t['pitch'] ?? '')),
+                'based_on' => trim((string) ($t['based_on'] ?? '')),
+            ];
         }
-        $topics[] = [
-            'title' => mb_substr($title, 0, 200),
-            'pitch' => trim((string) ($t['pitch'] ?? '')),
-            'based_on' => trim((string) ($t['based_on'] ?? '')),
-        ];
+        $topics = array_slice(reelFilterNew($candidates, $taken), 0, REELS_TOPICS);
+        $rejected = array_merge($rejected, array_column($candidates, 'title'));
     }
     if (!$topics) {
-        Response::error('AI nie wymyśliło nic nowego. Spróbuj jeszcze raz.', 502);
+        Response::error('AI proponuje tylko to, co już masz. Wpisz własny temat albo spróbuj później.', 502);
     }
-    Response::success(['topics' => array_slice($topics, 0, REELS_TOPICS)]);
+    reelRememberTopics($conn, $userId, array_column($topics, 'title'));
+    Response::success(['topics' => $topics]);
 
 } catch (RuntimeException $e) {
     Response::error($e->getMessage(), 502);

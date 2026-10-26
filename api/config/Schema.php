@@ -146,6 +146,17 @@ class Schema
                 UNIQUE KEY idx_user_key (user_id, dedup_key)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        // Topics the reel generator already showed - never offered again
+        'reel_topics_seen' => "
+            CREATE TABLE IF NOT EXISTS reel_topics_seen (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                shown_at DATETIME NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_shown (user_id, shown_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
         // Server-wide values the app creates itself (e.g. VAPID keys for push)
         'server_settings' => "
             CREATE TABLE IF NOT EXISTS server_settings (
