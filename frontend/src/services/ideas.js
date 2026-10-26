@@ -26,9 +26,14 @@ export const ideasService = {
         return apiRequest('/ai/reels.php', 'POST', { step: 'topics', exclude });
     },
 
-    /** "Generator rolek", step 2: script for a picked or own topic (nothing saved). */
-    writeScript: async (title, pitch = '') => {
-        return apiRequest('/ai/reels.php', 'POST', { step: 'script', title, pitch });
+    /** "Generator rolek", step 2: script for a picked or own topic (nothing saved); notes keep her direction. */
+    writeScript: async (title, pitch = '', notes = []) => {
+        return apiRequest('/ai/reels.php', 'POST', { step: 'script', title, pitch, notes });
+    },
+
+    /** "Co zmienić?": the script on screen with her notes applied (only that script is sent - cheap). */
+    reviseScript: async (title, content, notes) => {
+        return apiRequest('/ai/reels.php', 'POST', { step: 'revise', title, content, notes });
     },
 
     /** Is AI available on the server (same key as screenshot reading)? */

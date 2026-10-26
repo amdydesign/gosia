@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Check, ChevronRight, Clock, Loader2, PenLine, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, ChevronRight, Clock, Loader2, PenLine, RefreshCw, X } from 'lucide-react';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
 import Sheet from '../ui/Sheet';
@@ -7,6 +7,8 @@ import Button from '../ui/Button';
 import { estimateSpeechSeconds, formatSeconds } from '../../utils/format';
 
 const STORE_KEY = 'gonia.reelGenerator';
+// one tap instead of typing - the most common fixes
+const QUICK_NOTES = ['Krócej', 'Mocniejszy hook', 'Bardziej na luzie', 'Prościej'];
 const EMPTY = { topics: [], seen: [], script: null };
 
 function load() {
@@ -29,6 +31,7 @@ function save(state) {
 /**
  * "Generator rolek" in two steps: AI suggests 3 topics (or you type your own),
  * the picked topic gets a script, then "Dodaj do pomysłów" or "Odrzuć".
+ * "Co zmienić?" fixes the script with short notes; the notes stay as the direction for "Napisz inaczej".
  * Topics and an unanswered script stay until the tab is closed, so closing the sheet loses nothing.
  */
 export default function ReelGenerator({ open, onClose, onAdded, onRemoved }) {
@@ -38,6 +41,8 @@ export default function ReelGenerator({ open, onClose, onAdded, onRemoved }) {
     const [writing, setWriting] = useState(null); // topic being written
     const [error, setError] = useState('');
     const [own, setOwn] = useState('');
+    const [note, setNote] = useState('');
+    const [revising, setRevising] = useState(false);
 
     const update = useCallback((patch) => {
         setState((prev) => {
@@ -67,12 +72,12 @@ export default function ReelGenerator({ open, onClose, onAdded, onRemoved }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
-    const write = async (topic) => {
+    const write = async (topic, notes = []) => {
         setWriting(topic);
         setError('');
         try {
-            const data = await ideasService.writeScript(topic.title, topic.pitch || '');
-            update({ script: { ...data, topic } });
+            const data = await ideasService.writeScript(topic.title, topic.pitch || '', notes);
+            update({ script: { ...data, topic, notes } });
             setOwn('');
         } catch (err) {
             setError(err.message || 'Nie udało się napisać scenariusza');
@@ -108,6 +113,25 @@ export default function ReelGenerator({ open, onClose, onAdded, onRemoved }) {
         }
     };
 
+    const revise = async (text) => {
+        const fix = text.trim();
+        if (!fix || revising || !script) return;
+        const before = script;
+        const notes = [...(before.notes || []), fix];
+        setRevising(true);
+        setError('');
+        try {
+            const data = await ideasService.reviseScript(before.title, before.content, notes);
+            update({ script: { ...before, ...data, notes } });
+            setNote('');
+            toast.success('Poprawione', { action: { label: 'Cofnij', onClick: () => update({ script: before }) } });
+        } catch (err) {
+            setError(err.message || 'Nie udało się poprawić');
+        } finally {
+            setRevising(false);
+        }
+    };
+
     const reject = () => {
         const current = script;
         update({ script: null });
@@ -133,10 +157,10 @@ export default function ReelGenerator({ open, onClose, onAdded, onRemoved }) {
                 footer={
                     script && (
                         <>
-                            <Button variant="ghost" icon={X} onClick={reject} className="flex-1">
+                            <Button variant="ghost" icon={X} onClick={reject} disabled={revising} className="flex-1">
                                 Odrzuć
                             </Button>
-                            <Button variant="primary" icon={Check} onClick={add} className="flex-[2]">
+                            <Button variant="primary" icon={Check} onClick={add} disabled={revising} className="flex-[2]">
                                 Dodaj do pomysłów
                             </Button>
                         </>
@@ -162,12 +186,63 @@ export default function ReelGenerator({ open, onClose, onAdded, onRemoved }) {
                             )}
                         </div>
                         <h3 className="text-lg font-bold leading-snug text-ink">{script.title}</h3>
-                        <div className="rounded-2xl bg-surface-2 border border-line p-4 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line max-h-[50dvh] overflow-y-auto">
-                            {script.content}
+                        <div className="relative">
+                            <div className={`rounded-2xl bg-surface-2 border border-line p-4 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line max-h-[45dvh] overflow-y-auto ${revising ? 'opacity-40' : ''}`}>
+                                {script.content}
+                            </div>
+                            {revising && (
+                                <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-semibold text-ink">
+                                    <Loader2 size={18} className="animate-spin text-secondary" /> Poprawiam…
+                                </div>
+                            )}
                         </div>
+
+                        {error && <p className="text-sm text-red-700">{error}</p>}
+
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                revise(note);
+                            }}
+                            className="space-y-2"
+                        >
+                            {script.notes?.length > 0 && (
+                                <p className="text-xs text-ink-muted">
+                                    Twoje uwagi: <span className="text-ink-soft">{script.notes.join(' · ')}</span>
+                                </p>
+                            )}
+                            <div className="flex flex-wrap gap-1.5">
+                                {QUICK_NOTES.map((q) => (
+                                    <button
+                                        key={q}
+                                        type="button"
+                                        onClick={() => revise(q)}
+                                        disabled={revising}
+                                        className="h-8 px-3 rounded-full border border-line-strong text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-50"
+                                    >
+                                        {q}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    value={note}
+                                    onChange={(e) => setNote(e.target.value)}
+                                    placeholder="Co zmienić? np. dodaj o płaszczu, bez „hej”"
+                                    aria-label="Co zmienić w scenariuszu"
+                                    className="input flex-1 min-w-0"
+                                    maxLength={300}
+                                    disabled={revising}
+                                />
+                                <Button type="submit" variant="secondary" icon={ArrowUp} disabled={!note.trim() || revising} aria-label="Popraw">
+                                    Popraw
+                                </Button>
+                            </div>
+                        </form>
+
                         <button
                             type="button"
-                            onClick={() => write(script.topic)}
+                            onClick={() => write(script.topic, script.notes || [])}
                             className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink"
                         >
                             <RefreshCw size={12} /> Napisz inaczej

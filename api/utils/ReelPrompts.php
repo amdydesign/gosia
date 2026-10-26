@@ -10,6 +10,27 @@ const REELS_TOPICS = 3;
 const REELS_EXAMPLES = 15;
 // Picking 3 topics is light work; the script itself uses AiClient::writeIdeas defaults (medium effort)
 const REELS_TOPICS_OPTIONS = ['effort' => 'low', 'max_tokens' => 4000];
+// A fix of one script ("krócej", "mocniejszy hook") - only that script goes in, so it stays cheap
+const REELS_REVISE_OPTIONS = ['effort' => 'low', 'max_tokens' => 3000];
+const REELS_NOTES = 8;
+
+/** Her notes to a script ("krócej", "bez słowa X"), cleaned: the last REELS_NOTES, each short. */
+function reelNotes($notes)
+{
+    $clean = [];
+    foreach ((array) $notes as $note) {
+        $note = trim((string) $note);
+        if ($note !== '') {
+            $clean[] = mb_substr($note, 0, 300);
+        }
+    }
+    return array_slice($clean, -REELS_NOTES);
+}
+
+function reelNotesText(array $notes)
+{
+    return $notes ? "Moje uwagi (od najstarszej, ostatnia najważniejsza):\n- " . implode("\n- ", $notes) : '';
+}
 
 /**
  * Her scripts as prompt text: published ones with the most views first (what really works),
@@ -86,6 +107,21 @@ Zasady:
 - Długość: 60-150 słów (do ok. minuty mówienia), chyba że jej scenariusze są wyraźnie krótsze.
 - title: krótki tytuł po polsku (do 60 znaków), z wielkiej litery, bez kropki na końcu - na bazie podanego tematu.
 - Nie wymyślaj marek, cen ani współprac, których nie ma w temacie ani w jej scenariuszach.
+PROMPT;
+}
+
+function revisePrompt($today)
+{
+    return <<<PROMPT
+Poprawiasz scenariusz rolki (Instagram Reels / TikTok) stylistki i influencerki modowej. Dzisiaj jest {$today}.
+Powyżej jest aktualny scenariusz i jej uwagi. Wprowadź WSZYSTKIE uwagi (ostatnia jest najważniejsza), a resztę zostaw jak jest.
+
+Zasady:
+- Ten sam głos co w scenariuszu: pierwsza osoba, forma żeńska, naturalnie.
+- content: sam tekst do powiedzenia do kamery, z mocnym pierwszym zdaniem (hook).
+  Zwykłe akapity, bez nagłówków, bez emoji, bez opisów ujęć, bez hashtagów i bez wskazówek w nawiasach.
+- title: zostaw, chyba że uwaga dotyczy tytułu albo zmienia temat (wtedy krótki, do 60 znaków, bez kropki).
+- Nie wymyślaj marek, cen ani współprac, których nie ma w scenariuszu ani w uwagach.
 PROMPT;
 }
 

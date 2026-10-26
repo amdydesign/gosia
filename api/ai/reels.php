@@ -4,8 +4,10 @@
  *
  * POST /api/ai/reels.php  { step: "topics", exclude: ["tytuł już pokazany", ...] }
  *   -> { topics: [{ title, pitch, based_on }] }       3 short ideas to pick from
- * POST /api/ai/reels.php  { step: "script", title: "...", pitch: "..." }
+ * POST /api/ai/reels.php  { step: "script", title: "...", pitch: "...", notes?: [...] }
  *   -> { title, content }                              script for the picked or own topic
+ * POST /api/ai/reels.php  { step: "revise", title, content, notes: ["krócej", ...] }
+ *   -> { title, content }                              the script with her notes applied
  *
  * Nothing is saved here - the app adds an idea only when "Dodaj do pomysłów" is tapped.
  */
@@ -24,13 +26,34 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 try {
     $userId = getCurrentUserId();
     $input = json_decode(file_get_contents('php://input'), true) ?: [];
-    $step = ($input['step'] ?? 'topics') === 'script' ? 'script' : 'topics';
+    $step = in_array($input['step'] ?? '', ['script', 'revise'], true) ? $input['step'] : 'topics';
 
     $db = new Database();
     $conn = $db->getConnection();
     AiSettings::apply($conn, $userId);
     if (!AiClient::provider()) {
         Response::error('Generator rolek wymaga klucza AI (Ustawienia -> Czytanie screenów).', 503);
+    }
+
+    $notes = reelNotes($input['notes'] ?? []);
+
+    // A fix of the script on screen: only that script and her notes - no examples, so it is cheap
+    if ($step === 'revise') {
+        $title = mb_substr(trim((string) ($input['title'] ?? '')), 0, 300);
+        $content = mb_substr(trim((string) ($input['content'] ?? '')), 0, 5000);
+        if ($content === '' || !$notes) {
+            Response::validationError(['notes' => 'Napisz, co zmienić']);
+        }
+        $parts = [['text' => "Temat: {$title}\n\nAktualny scenariusz:\n{$content}"], ['text' => reelNotesText($notes)]];
+        $result = AiClient::writeIdeas(revisePrompt(date('Y-m-d')), $parts, scriptSchema(), REELS_REVISE_OPTIONS);
+        $revised = trim((string) ($result['content'] ?? ''));
+        if ($revised === '') {
+            Response::error('AI nie poprawiło scenariusza. Spróbuj jeszcze raz.', 502);
+        }
+        Response::success([
+            'title' => mb_substr(trim((string) ($result['title'] ?? '')) ?: $title, 0, 200),
+            'content' => $revised,
+        ]);
     }
 
     [$text, $examples] = reelExamples($conn, $userId);
@@ -42,6 +65,10 @@ try {
         }
         $pitch = trim((string) ($input['pitch'] ?? ''));
         $topic = "Temat nowej rolki: " . mb_substr($title, 0, 300) . ($pitch !== '' ? "\nO czym: " . mb_substr($pitch, 0, 500) : '');
+        // "Napisz inaczej" after notes: the new version keeps her direction
+        if ($notes) {
+            $topic .= "\n\n" . reelNotesText($notes);
+        }
 
         // her scripts first and cached: "Napisz jeszcze raz" reuses them at a tenth of the price
         $parts = $text !== '' ? [['text' => $text, 'cache' => true], ['text' => $topic]] : [['text' => $topic]];
