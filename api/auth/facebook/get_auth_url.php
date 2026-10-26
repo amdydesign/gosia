@@ -28,6 +28,6 @@ $params = [
     'state' => bin2hex(random_bytes(16))
 ];
 
-$url = 'https://www.facebook.com/v18.0/dialog/oauth?' . http_build_query($params);
+$url = 'https://www.facebook.com/v26.0/dialog/oauth?' . http_build_query($params);
 
 Response::success(['url' => $url]);

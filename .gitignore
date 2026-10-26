@@ -8,6 +8,9 @@
 /api/uploads/*
 !/api/uploads/.htaccess
 
+# Nightly backups (api/utils/Backup.php) - never in git
+/api/backups/
+
 # IDE
 .idea/
 .vscode/

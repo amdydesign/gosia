@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -22,10 +23,12 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensureCollaborations($conn);
 
     // Get Collab
     $stmt = $conn->prepare("
-        SELECT id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes, created_at
+        SELECT id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes, created_at,
+               paid_at, publish_by, published_at, payment_days, " . COLLAB_DUE_SQL . " AS payment_due
         FROM collaborations 
         WHERE id = :id AND user_id = :user_id
     ");

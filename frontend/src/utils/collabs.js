@@ -1,7 +1,7 @@
 /**
  * Collaboration helpers: status, "jak ostatnio" memory and smart defaults.
  */
-import { daysFromToday } from './format';
+import { addDays, daysFromToday, toDateInput } from './format';
 
 export const LATE_AFTER_DAYS = 30;
 
@@ -25,6 +25,10 @@ export const TYPE_OPTIONS = [
 
 export const WAGE_TYPE = 'umowa-praca';
 
+// "Płatność w ciągu": one tap, the last one with the brand is pre-selected
+export const PAYMENT_DAY_PRESETS = [14, 30, 60];
+export const DEFAULT_PAYMENT_DAYS = 30;
+
 export function isPaid(c) {
     return c?.payment_status === 'paid';
 }
@@ -34,9 +38,24 @@ export function daysWaiting(c) {
     return Math.max(0, -(daysFromToday(c?.date) ?? 0));
 }
 
-/** Unpaid and either marked overdue or waiting longer than LATE_AFTER_DAYS. */
+/** Day the payment is due: published (or the deadline / work date) + payment term. */
+export function paymentDue(c) {
+    if (c?.payment_due) return c.payment_due;
+    const base = c?.published_at || c?.publish_by || c?.date;
+    return base ? toDateInput(addDays(base, Number(c?.payment_days) || DEFAULT_PAYMENT_DAYS)) : null;
+}
+
+/** Unpaid and either marked overdue or past the payment term (30 days unless set). */
 export function isLate(c) {
-    return !isPaid(c) && (c?.payment_status === 'overdue' || daysWaiting(c) > LATE_AFTER_DAYS);
+    if (isPaid(c)) return false;
+    if (c?.payment_status === 'overdue') return true;
+    const due = paymentDue(c);
+    return due ? (daysFromToday(due) ?? 0) < 0 : daysWaiting(c) > LATE_AFTER_DAYS;
+}
+
+/** Content still to publish (deadline set, not marked published). */
+export function toPublish(c) {
+    return !!c?.publish_by && !c?.published_at;
 }
 
 export function grossOf(c) {

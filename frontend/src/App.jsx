@@ -11,6 +11,7 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Statistics from './pages/Statistics';
 import SocialCallback from './pages/SocialCallback';
@@ -37,6 +38,7 @@ function App() {
                                     <Routes>
                                         <Route path="/login" element={<Login />} />
                                         <Route path="/forgot-password" element={<ForgotPassword />} />
+                                        <Route path="/reset-password" element={<ResetPassword />} />
 
                                         <Route
                                             path="/auth/callback/:platform"

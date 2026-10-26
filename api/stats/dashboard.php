@@ -15,6 +15,8 @@ require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/AiSettings.php';
 require_once __DIR__ . '/../utils/DoneLog.php';
 require_once __DIR__ . '/../utils/TodayAgenda.php';
+require_once __DIR__ . '/../purchases/helpers.php';
+require_once __DIR__ . '/../collaborations/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -26,6 +28,7 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     Schema::ensurePurchases($conn);
+    Schema::ensureCollaborations($conn);
     $p = ['user_id' => $userId];
 
     // 1. Yearly financials (paid, official + private)
@@ -33,7 +36,7 @@ try {
         SELECT COALESCE(SUM(amount_gross), 0) AS yearly_gross,
                COALESCE(SUM(amount_net), 0)   AS yearly_net
         FROM collaborations
-        WHERE user_id = :user_id AND payment_status = 'paid' AND YEAR(date) = YEAR(CURDATE())
+        WHERE user_id = :user_id AND payment_status = 'paid' AND YEAR(" . COLLAB_PAID_DAY_SQL . ") = YEAR(CURDATE())
     ");
     $stmt->execute($p);
     $yearlyStats = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -45,7 +48,7 @@ try {
                COUNT(*)                        AS month_count
         FROM collaborations
         WHERE user_id = :user_id AND payment_status = 'paid'
-          AND YEAR(date) = YEAR(CURDATE()) AND MONTH(date) = MONTH(CURDATE())
+          AND YEAR(" . COLLAB_PAID_DAY_SQL . ") = YEAR(CURDATE()) AND MONTH(" . COLLAB_PAID_DAY_SQL . ") = MONTH(CURDATE())
     ");
     $stmt->execute($p);
     $monthStats = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -55,7 +58,7 @@ try {
         SELECT COALESCE(SUM(amount_gross), 0) AS pending_gross,
                COALESCE(SUM(amount_net), 0)   AS pending_net,
                COUNT(*)                        AS pending_count,
-               SUM(CASE WHEN payment_status = 'overdue' OR date < DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS overdue_count
+               SUM(CASE WHEN payment_status = 'overdue' OR " . COLLAB_DUE_SQL . " < CURDATE() THEN 1 ELSE 0 END) AS overdue_count
         FROM collaborations
         WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
     ");
@@ -65,7 +68,7 @@ try {
     // 2b. Unpaid collaborations list (oldest first)
     $stmt = $conn->prepare("
         SELECT id, brand, type, collab_type, fiscal_tracking, amount_gross, amount_net, date, payment_status,
-               DATEDIFF(CURDATE(), date) AS days_waiting
+               DATEDIFF(CURDATE(), date) AS days_waiting, " . COLLAB_DUE_SQL . " AS payment_due
         FROM collaborations
         WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
         ORDER BY date ASC
@@ -91,7 +94,7 @@ try {
         SELECT COUNT(*) AS c, COALESCE(SUM(amount), 0) AS total
         FROM purchases
         WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
-          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) >= 0
+          AND DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) >= 0
     ");
     $stmt->execute($p);
     $activeReturns = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -99,12 +102,12 @@ try {
     // 4. Urgent purchases (<= 3 days, deadline not passed more than 0 days ago)
     $stmt = $conn->prepare("
         SELECT id, store, items, purchase_date, return_days,
-               DATE_ADD(purchase_date, INTERVAL return_days DAY) AS return_deadline,
-               DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) AS days_remaining,
+               " . PURCHASE_DEADLINE_SQL . " AS return_deadline,
+               DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) AS days_remaining,
                purchase_url, amount, status
         FROM purchases
         WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
-          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 3
+          AND DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) BETWEEN 0 AND 3
         ORDER BY days_remaining ASC
     ");
     $stmt->execute($p);
@@ -114,7 +117,7 @@ try {
     $stmt = $conn->prepare("
         SELECT COUNT(*) AS c FROM purchases
         WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
-          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 7
+          AND DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) BETWEEN 0 AND 7
     ");
     $stmt->execute($p);
     $urgentReturnsCount = intval($stmt->fetch()['c']);
@@ -133,12 +136,12 @@ try {
 
     $stmt = $conn->prepare("
         SELECT id, store, items, purchase_date, return_days,
-               DATE_ADD(purchase_date, INTERVAL return_days DAY) AS return_deadline,
-               DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) AS days_remaining,
+               " . PURCHASE_DEADLINE_SQL . " AS return_deadline,
+               DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) AS days_remaining,
                purchase_url, amount, status
         FROM purchases
         WHERE user_id = :user_id AND status = 'kept' AND kept_confirmed = 0
-          AND DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) BETWEEN 0 AND 14
+          AND DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) BETWEEN 0 AND 14
         ORDER BY days_remaining ASC
         LIMIT 6
     ");
@@ -147,9 +150,9 @@ try {
 
     // 7. Official vs private split (paid, current year) + tax threshold progress
     $stmt = $conn->prepare("
-        SELECT amount_gross, amount_net, collab_type, fiscal_tracking
+        SELECT amount_gross, amount_net, collab_type, fiscal_tracking, date
         FROM collaborations
-        WHERE user_id = :user_id AND payment_status = 'paid' AND YEAR(date) = YEAR(CURDATE())
+        WHERE user_id = :user_id AND payment_status = 'paid' AND YEAR(" . COLLAB_PAID_DAY_SQL . ") = YEAR(CURDATE())
     ");
     $stmt->execute($p);
     $officialGross = 0.0;
@@ -163,7 +166,7 @@ try {
             if (!$cType || $cType === 'other') {
                 $cType = 'umowa_50';
             }
-            $breakdown = TaxCalculator::getBreakdown($gross, $cType);
+            $breakdown = TaxCalculator::getBreakdown($gross, $cType, $row['date']);
             $officialGross += $gross;
             $officialIncome += max(0, $gross - floatval($breakdown['kup']) - floatval($breakdown['commission']));
             $officialNet += floatval($row['amount_net']);
@@ -262,9 +265,9 @@ try {
 
     // 10. Net earnings per month, last 12 months (bars on Start)
     $stmt = $conn->prepare("
-        SELECT DATE_FORMAT(date, '%Y-%m') AS ym, COALESCE(SUM(amount_net), 0) AS net
+        SELECT DATE_FORMAT(" . COLLAB_PAID_DAY_SQL . ", '%Y-%m') AS ym, COALESCE(SUM(amount_net), 0) AS net
         FROM collaborations
-        WHERE user_id = :user_id AND payment_status = 'paid' AND date >= :from
+        WHERE user_id = :user_id AND payment_status = 'paid' AND " . COLLAB_PAID_DAY_SQL . " >= :from
         GROUP BY ym
     ");
     $stmt->execute(['user_id' => $userId, 'from' => date('Y-m-01', strtotime('first day of -11 months'))]);
@@ -277,9 +280,86 @@ try {
 
     $agenda = TodayAgenda::build($conn, $userId);
 
+    // Active exclusivities from contracts - the collaboration form warns before a competitor
+    $exclusivities = [];
+    try {
+        require_once __DIR__ . '/../documents/helpers.php';
+        documentsEnsureSchema($conn);
+        $stmt = $conn->prepare("SELECT id, title, brand, counterparty, terms FROM documents WHERE user_id = :user_id AND terms LIKE '%exclusivity_until%'");
+        $stmt->execute($p);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $doc) {
+            $terms = documentsTerms($doc['terms']);
+            if (!empty($terms['exclusivity_until']) && $terms['exclusivity_until'] >= date('Y-m-d')) {
+                $exclusivities[] = [
+                    'document_id' => (int) $doc['id'],
+                    'brand' => trim((string) $doc['brand']) ?: (documentsShortName($doc['counterparty']) ?: $doc['title']),
+                    'until' => $terms['exclusivity_until'],
+                    'scope' => $terms['exclusivity_scope'] ?? '',
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        // no document archive yet
+    }
+
+    // 11. "Przegląd tygodnia" (Mon-Tue until done): last week's money, what is due this week
+    $weekReview = null;
+    $weekKey = 'review:' . date('o-\WW');
+    $dayOfWeek = (int) date('N');
+    Schema::ensure($conn, 'done_log');
+    $stmt = $conn->prepare("SELECT 1 FROM done_log WHERE user_id = :user_id AND ref_key = :k LIMIT 1");
+    $stmt->execute(['user_id' => $userId, 'k' => $weekKey]);
+    $reviewDone = (bool) $stmt->fetchColumn();
+    if ($dayOfWeek <= 2 && !$reviewDone) {
+        $monday = date('Y-m-d', strtotime('monday this week'));
+        $sunday = date('Y-m-d', strtotime('sunday this week'));
+        $stmt = $conn->prepare("
+            SELECT COALESCE(SUM(amount_net), 0) AS net, COUNT(*) AS c FROM collaborations
+            WHERE user_id = :user_id AND payment_status = 'paid'
+              AND " . COLLAB_PAID_DAY_SQL . " BETWEEN DATE_SUB(:monday, INTERVAL 7 DAY) AND DATE_SUB(:monday2, INTERVAL 1 DAY)
+        ");
+        $stmt->execute(['user_id' => $userId, 'monday' => $monday, 'monday2' => $monday]);
+        $lastWeek = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // deadlines this week: publish, payments due, returns, contract dates, tasks
+        $due = [];
+        foreach ($agenda as $item) {
+            if (!empty($item['deadline']) && $item['deadline'] >= date('Y-m-d') && $item['deadline'] <= $sunday && $item['kind'] !== 'idea') {
+                $due[] = ['kind' => $item['kind'], 'title' => $item['title'], 'date' => $item['deadline'], 'url' => $item['url']];
+            }
+        }
+        $stmt = $conn->prepare("
+            SELECT id, brand, " . COLLAB_DUE_SQL . " AS due FROM collaborations
+            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+              AND " . COLLAB_DUE_SQL . " BETWEEN CURDATE() AND :sunday
+        ");
+        $stmt->execute(['user_id' => $userId, 'sunday' => $sunday]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $due[] = ['kind' => 'payment_due', 'title' => $row['brand'] . ' — termin płatności', 'date' => $row['due'], 'url' => '/collaborations/' . $row['id']];
+        }
+        usort($due, function ($a, $b) {
+            return strcmp($a['date'], $b['date']);
+        });
+
+        $late = count(array_filter($agenda, function ($i) {
+            return !empty($i['late']);
+        }));
+        if ((float) $lastWeek['net'] > 0 || $due || $late || (int) $pendingStats['pending_count'] > 0) {
+            $weekReview = [
+                'key' => $weekKey,
+                'paid_last_week' => ['net' => round((float) $lastWeek['net'], 2), 'count' => (int) $lastWeek['c']],
+                'waiting' => ['gross' => floatval($pendingStats['pending_gross']), 'count' => intval($pendingStats['pending_count'])],
+                'this_week' => array_slice($due, 0, 8),
+                'late' => $late,
+            ];
+        }
+    }
+
     Response::success([
         'today' => date('Y-m-d'),
         'agenda' => $agenda,
+        'week_review' => $weekReview,
+        'exclusivities' => $exclusivities,
         'months' => $months,
         'tasks' => $tasks,
         'snoozed' => $snoozed,

@@ -20,6 +20,11 @@ export function updateProfile(displayName) {
     return apiRequest('/auth/profile.php', 'PUT', { display_name: displayName });
 }
 
+/** patch: { display_name?, email? } */
+export function updateProfileFields(patch) {
+    return apiRequest('/auth/profile.php', 'PUT', patch);
+}
+
 export function fetchMe() {
     return apiRequest('/auth/verify.php');
 }

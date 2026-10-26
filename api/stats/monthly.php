@@ -11,6 +11,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../config/Schema.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -23,21 +24,22 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensureCollaborations($conn);
 
     // First day of the oldest month in range
     $firstOfCurrent = date('Y-m-01');
     $rangeStart = date('Y-m-01', strtotime($firstOfCurrent . ' -' . ($months - 1) . ' months'));
 
     $stmt = $conn->prepare("
-        SELECT DATE_FORMAT(date, '%Y-%m') AS month,
+        SELECT DATE_FORMAT(COALESCE(paid_at, date), '%Y-%m') AS month,
                COALESCE(SUM(amount_net), 0)   AS total,
                COALESCE(SUM(amount_gross), 0) AS total_gross,
                COUNT(*) AS count
         FROM collaborations
         WHERE user_id = :user_id
           AND payment_status = 'paid'
-          AND date >= :range_start
-        GROUP BY DATE_FORMAT(date, '%Y-%m')
+          AND COALESCE(paid_at, date) >= :range_start
+        GROUP BY DATE_FORMAT(COALESCE(paid_at, date), '%Y-%m')
         ORDER BY month ASC
     ");
     $stmt->execute(['user_id' => $userId, 'range_start' => $rangeStart]);

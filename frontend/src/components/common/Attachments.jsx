@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Paperclip, Download, Trash2, Loader2, FileText, Image as ImageIcon, Plus, Camera } from 'lucide-react';
-import { apiRequest, getStoredToken } from '../../utils/api';
+import { apiFetch, apiRequest } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
-import { useConfirm } from '../../context/ConfirmContext';
+import { deletedToast } from '../../services/trash';
 import Card from '../ui/Card';
 
 const ALLOWED_EXTENSIONS = '.jpg,.jpeg,.png,.gif,.webp,.heic,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip';
@@ -20,7 +20,6 @@ function formatSize(bytes) {
  */
 export default function Attachments({ entityType, entityId }) {
     const toast = useToast();
-    const confirm = useConfirm();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
@@ -62,11 +61,7 @@ export default function Attachments({ entityType, entityId }) {
                 formData.append('file', file);
                 formData.append('entity_type', entityType);
                 formData.append('entity_id', entityId);
-                const response = await fetch('/api/attachments/upload.php', {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${getStoredToken()}` },
-                    body: formData,
-                });
+                const response = await apiFetch('/attachments/upload.php', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
                     const firstError = data.errors ? Object.values(data.errors).filter(Boolean)[0] : null;
@@ -86,9 +81,7 @@ export default function Attachments({ entityType, entityId }) {
 
     const handleDownload = async (item) => {
         try {
-            const response = await fetch(`/api/attachments/download.php?id=${item.id}`, {
-                headers: { Authorization: `Bearer ${getStoredToken()}` },
-            });
+            const response = await apiFetch(`/attachments/download.php?id=${item.id}`);
             if (!response.ok) throw new Error('Nie udało się pobrać pliku');
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
@@ -105,11 +98,10 @@ export default function Attachments({ entityType, entityId }) {
     };
 
     const handleDelete = async (item) => {
-        if (!(await confirm({ title: 'Usunąć załącznik?', message: item.original_name, confirmLabel: 'Usuń', danger: true }))) return;
         try {
-            await apiRequest(`/attachments/delete.php?id=${item.id}`, 'DELETE');
+            const res = await apiRequest(`/attachments/delete.php?id=${item.id}`, 'DELETE');
             setItems((prev) => prev.filter((i) => i.id !== item.id));
-            toast.success('Załącznik usunięty');
+            deletedToast(toast, 'Załącznik usunięty', res?.trash_id, () => loadAttachments());
         } catch (err) {
             toast.error(err.message || 'Nie udało się usunąć załącznika');
         }

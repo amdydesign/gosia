@@ -34,7 +34,7 @@ try {
     }
 
     // Exchange code for access token
-    $tokenUrl = 'https://graph.facebook.com/v18.0/oauth/access_token';
+    $tokenUrl = 'https://graph.facebook.com/v26.0/oauth/access_token';
     $params = [
         'client_id' => $fb['app_id'],
         'client_secret' => $fb['app_secret'],
@@ -57,7 +57,7 @@ try {
     $accessToken = $tokenData['access_token'];
 
     // Get user info (name and ID)
-    $userUrl = "https://graph.facebook.com/v18.0/me?fields=id,name&access_token=$accessToken";
+    $userUrl = "https://graph.facebook.com/v26.0/me?fields=id,name&access_token=$accessToken";
     $ch = curl_init($userUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -75,7 +75,7 @@ try {
     // Get Facebook Page followers (if user has pages)
     // For personal profiles, we get friends_count (but requires special permissions)
     // Most common use case: Page followers
-    $pagesUrl = "https://graph.facebook.com/v18.0/me/accounts?fields=id,name,followers_count&access_token=$accessToken";
+    $pagesUrl = "https://graph.facebook.com/v26.0/me/accounts?fields=id,name,followers_count&access_token=$accessToken";
     $ch = curl_init($pagesUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

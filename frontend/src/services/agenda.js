@@ -83,3 +83,30 @@ export function isPlanned(idea) {
 export function planIdea(id, on) {
     return apiRequest(`/ideas/update.php?id=${id}`, 'PUT', { planned_for: on ? localToday() : null });
 }
+
+/** "Rozbij na kroki": AI splits the task into small steps (saved on the task). */
+export function breakDownTask(id, smaller = false) {
+    return apiRequest(`/tasks/breakdown.php?id=${id}`, 'POST', { smaller });
+}
+
+export function setTaskSteps(id, steps) {
+    return apiRequest(`/tasks/update.php?id=${id}`, 'PUT', { steps });
+}
+
+/** "OK, wiem" for good-to-know dates (end of exclusivity, licence) and the weekly review. */
+export function dismissAgenda(refKey, title = '') {
+    return apiRequest('/agenda/dismiss.php', 'POST', { ref_key: refKey, title });
+}
+
+export function undismissAgenda(refKey) {
+    return apiRequest(`/agenda/dismiss.php?ref_key=${encodeURIComponent(refKey)}`, 'DELETE');
+}
+
+/** "Opublikowane": the payment term counts from today. */
+export function setPublished(collabId, on) {
+    return apiRequest(`/collaborations/update.php?id=${collabId}`, 'PUT', { published_at: on ? localToday() : null });
+}
+
+export function setSigned(documentId, on) {
+    return apiRequest(`/documents/update.php?id=${documentId}`, 'PUT', { status: on ? 'signed' : 'to_sign' });
+}

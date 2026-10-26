@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed', 405);
@@ -42,14 +43,21 @@ try {
     if (!empty($errors))
         Response::validationError($errors);
 
+    $deadlines = collabDeadlineInput($input);
+    // paid on save: the money came in today unless another day was given
+    $paidAt = $paymentStatus === 'paid' ? (($deadlines['paid_at'] ?? null) ?: date('Y-m-d')) : null;
+
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensureCollaborations($conn);
     $conn->beginTransaction();
 
     // Insert collaboration
     $stmt = $conn->prepare("
-        INSERT INTO collaborations (user_id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes)
-        VALUES (:user_id, :brand, :type, :collab_type, :fiscal_tracking, :amount_net, :amount_gross, :date, :payment_status, :notes)
+        INSERT INTO collaborations (user_id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes,
+                                    paid_at, publish_by, published_at, payment_days)
+        VALUES (:user_id, :brand, :type, :collab_type, :fiscal_tracking, :amount_net, :amount_gross, :date, :payment_status, :notes,
+                :paid_at, :publish_by, :published_at, :payment_days)
     ");
 
     $stmt->execute([
@@ -62,7 +70,11 @@ try {
         'amount_gross' => $amountGross,
         'date' => $date,
         'payment_status' => $paymentStatus,
-        'notes' => $notes
+        'notes' => $notes,
+        'paid_at' => $paidAt,
+        'publish_by' => $deadlines['publish_by'] ?? null,
+        'published_at' => $deadlines['published_at'] ?? null,
+        'payment_days' => $deadlines['payment_days'] ?? null,
     ]);
 
     $collabId = $conn->lastInsertId();

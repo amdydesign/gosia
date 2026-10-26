@@ -1,76 +1,45 @@
 /**
- * Auth Service - Login, logout, token management
+ * Auth Service - login, logout and the cached user (the session itself is an HttpOnly cookie).
  */
 
-import api from './api';
+import { apiRequest, clearSession } from '../utils/api';
+
+const USER_KEY = 'user';
 
 export const authService = {
-    /**
-     * Login with username and password
-     */
-    async login(username, password, rememberMe = false) {
-        const response = await api.post('/auth/login.php', { username, password });
-
-        if (response.success && response.data) {
-            const storage = rememberMe ? localStorage : sessionStorage;
-            storage.setItem('token', response.data.token);
-            storage.setItem('user', JSON.stringify(response.data.user));
-            // Store preference so we know where to look
-            localStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
-            return response.data;
-        }
-
-        throw response;
+    async login(username, password, rememberMe = true) {
+        const data = await apiRequest('/auth/login.php', 'POST', { username, password, remember: rememberMe });
+        this.storeUser(data.user);
+        return data;
     },
 
-    /**
-     * Logout - remove token
-     */
-    logout() {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('rememberMe');
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('user');
+    async logout() {
+        try {
+            await apiRequest('/auth/logout.php', 'POST', {});
+        } catch {
+            // offline - the cookie expires on its own
+        }
+        clearSession();
         window.location.href = '/login';
     },
 
-    /**
-     * Check if user is authenticated
-     */
-    isAuthenticated() {
-        return !!(localStorage.getItem('token') || sessionStorage.getItem('token'));
-    },
-
-    /**
-     * Get current user from localStorage or sessionStorage
-     */
+    /** Last known user - shows the app right away while the cookie is checked in the background. */
     getCurrentUser() {
-        const user = localStorage.getItem('user') || sessionStorage.getItem('user');
-        return user ? JSON.parse(user) : null;
-    },
-
-    /**
-     * Verify token is still valid
-     */
-    async verifyToken() {
         try {
-            const response = await api.get('/auth/verify.php');
-            return response.success;
+            const user = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
+            return user ? JSON.parse(user) : null;
         } catch {
-            return false;
+            return null;
         }
     },
 
-    /**
-     * Get auth token
-     */
-    /**
-     * Get auth token - checks both storages
-     */
-    getToken() {
-        return localStorage.getItem('token') || sessionStorage.getItem('token');
-    }
+    storeUser(user) {
+        try {
+            localStorage.setItem(USER_KEY, JSON.stringify(user));
+        } catch {
+            // storage blocked - the app still works, it just checks the cookie first
+        }
+    },
 };
 
 export default authService;

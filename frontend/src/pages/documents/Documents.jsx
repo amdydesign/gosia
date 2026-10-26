@@ -10,7 +10,8 @@ import CollabSuggestionsSheet from '../../components/documents/CollabSuggestions
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { forgetThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
-import { useConfirm } from '../../context/ConfirmContext';
+import { deletedToast } from '../../services/trash';
+import { inboxFile, markInboxDone } from '../../services/inbox';
 import { useDashboard } from '../../context/DashboardContext';
 import { apiRequest } from '../../utils/api';
 import { formatCurrency, getTaxBreakdown, getTodayDate } from '../../utils/format';
@@ -330,7 +331,6 @@ function EditSheet({ doc, onClose, onSaved, aiAvailable, brands = [] }) {
 
 export default function Documents() {
     const toast = useToast();
-    const confirm = useConfirm();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [docs, setDocs] = useState([]);
@@ -410,7 +410,7 @@ export default function Documents() {
         }
 
         const collabType = prefill.collab_type || 'umowa_50';
-        const breakdown = getTaxBreakdown(amount, collabType);
+        const breakdown = getTaxBreakdown(amount, collabType, prefill.date || getTodayDate());
         try {
             const created = await apiRequest('/collaborations/create.php', 'POST', {
                 brand,
@@ -641,6 +641,22 @@ export default function Documents() {
         );
     };
 
+    // A contract shared from the iPhone (inbox "Ze screena: Umowa ...") goes straight to the archive
+    const inboxId = Number(searchParams.get('inbox')) || 0;
+    useEffect(() => {
+        if (!inboxId) return;
+        navigate('/documents', { replace: true });
+        inboxFile({ id: inboxId, has_file: true })
+            .then((file) => {
+                if (!file) throw new Error('Screena już nie ma');
+                uploadFiles([file]);
+                return markInboxDone(inboxId);
+            })
+            .then(() => refreshDashboard())
+            .catch((err) => toast.error(err.message || 'Nie udało się dodać screena'));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inboxId]);
+
     // Desktop: drop files anywhere on the page
     const dropHandlers = {
         onDragOver: (e) => {
@@ -677,13 +693,12 @@ export default function Documents() {
     };
 
     const handleDelete = async (doc) => {
-        if (!(await confirm({ title: 'Usunąć dokument?', message: `${doc.title} — plik zostanie trwale usunięty z serwera.`, confirmLabel: 'Usuń', danger: true }))) return;
         try {
-            await documentsService.delete(doc.id);
+            const res = await documentsService.delete(doc.id);
             setDocs((prev) => prev.filter((d) => d.id !== doc.id));
             forgetThumbnail(doc.id);
             setSelectedId((id) => (id === doc.id ? null : id));
-            toast.success('Dokument usunięty');
+            deletedToast(toast, 'Dokument usunięty', res?.trash_id, () => refreshAll());
         } catch (err) {
             toast.error(err.message || 'Nie udało się usunąć dokumentu');
         }
@@ -910,6 +925,7 @@ export default function Documents() {
             }}
             onDelete={handleDelete}
             onToggleStatus={toggleStatus}
+            onTermsSaved={refreshAll}
             onFilterCounterparty={(doc) => {
                 setSelectedId(null);
                 setCounterparty(doc.counterparty_key || doc.counterparty);

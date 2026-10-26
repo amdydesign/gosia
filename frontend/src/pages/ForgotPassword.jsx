@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Send, KeyRound } from 'lucide-react';
-import api from '../services/api';
+import { apiRequest } from '../utils/api';
 import Button from '../components/ui/Button';
 import Field from '../components/ui/Field';
 import { AuthShell } from './Login';
@@ -15,13 +15,9 @@ export default function ForgotPassword() {
         e.preventDefault();
         setStatus('loading');
         try {
-            const response = await api.post('/auth/reset_password_request.php', { email });
-            if (response.success) {
-                setStatus('success');
-                setMessage(response.message || 'Sprawdź swoją skrzynkę odbiorczą.');
-            } else {
-                throw new Error(response.message || 'Wystąpił błąd.');
-            }
+            await apiRequest('/auth/reset_password_request.php', 'POST', { email });
+            setStatus('success');
+            setMessage('Jeśli konto ma ten e-mail, wysłałam link do ustawienia nowego hasła (ważny godzinę). Nie widzisz go? Sprawdź spam albo poproś administratora o nowe hasło.');
         } catch (err) {
             setStatus('error');
             setMessage(err.message || 'Wystąpił błąd podczas wysyłania żądania.');
@@ -35,7 +31,7 @@ export default function ForgotPassword() {
                     <KeyRound size={26} />
                 </div>
                 <h1 className="text-2xl font-display font-semibold tracking-tight text-ink">Reset hasła</h1>
-                <p className="text-sm text-ink-muted mt-1">Podaj e-mail lub login, aby odzyskać dostęp.</p>
+                <p className="text-sm text-ink-muted mt-1">Wyślę link do ustawienia nowego hasła.</p>
             </div>
 
             {status === 'success' ? (
@@ -43,7 +39,7 @@ export default function ForgotPassword() {
                     <div className="bg-emerald-50 w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-600 mx-auto mb-4">
                         <Send size={24} />
                     </div>
-                    <h3 className="text-lg font-bold text-ink mb-1">Wysłano!</h3>
+                    <h3 className="text-lg font-bold text-ink mb-1">Sprawdź skrzynkę</h3>
                     <p className="text-sm text-ink-soft mb-6">{message}</p>
                     <Button to="/login" variant="primary" block>Wróć do logowania</Button>
                 </div>
@@ -54,7 +50,7 @@ export default function ForgotPassword() {
                         <input type="text" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Wpisz e-mail lub login" required disabled={status === 'loading'} />
                     </Field>
                     <Button type="submit" variant="primary" size="lg" block loading={status === 'loading'}>
-                        Wyślij link resetujący
+                        Wyślij link
                     </Button>
                 </form>
             )}

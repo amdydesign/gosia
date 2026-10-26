@@ -8,7 +8,7 @@ import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 import PurchaseDetailSheet from '../../components/purchases/PurchaseDetailSheet';
-import { bucket, deadlineText, deadlineTone, groupByStore, withPatch } from '../../utils/purchases';
+import { bucket, buildStoreMemory, deadlineText, deadlineTone, groupByStore, recoveredOf, refundPending, RETURN_COST_PRESETS, withPatch } from '../../utils/purchases';
 import { formatCurrency, formatDateShort } from '../../utils/format';
 import { takeSharedFiles } from '../../utils/shareTarget';
 
@@ -66,7 +66,8 @@ export default function Purchases() {
     const applyPatch = useCallback((pid, patch) => {
         setPurchases((list) => (patch === null ? list.filter((p) => p.id !== pid) : list.map((p) => (p.id === pid ? withPatch(p, patch) : p))));
     }, []);
-    const { settle } = usePurchaseActions({ onChange: applyPatch });
+    const { settle, delivered, refunded } = usePurchaseActions({ onChange: applyPatch });
+    const storeMemory = useMemo(() => buildStoreMemory(purchases), [purchases]);
     const keepSelection = useKeepSelection();
     const openBrands = useOpenBrands();
     const [settling, setSettling] = useState(null);
@@ -81,7 +82,7 @@ export default function Purchases() {
     const activeValue = active.reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const recovered = purchases
         .filter((p) => bucket(p) === 'returned' && (p.returned_at || p.purchase_date || '').startsWith(year))
-        .reduce((s, p) => s + (Number(p.returned_amount) || 0), 0);
+        .reduce((s, p) => s + recoveredOf(p), 0);
 
     const openDetail = (p) => navigate(`/purchases/${p.id}`, { state: { fromList: true } });
     const closeDetail = () => (location.state?.fromList ? navigate(-1) : navigate('/purchases', { replace: true }));
@@ -170,9 +171,11 @@ export default function Purchases() {
                                         onToggleKeep={keepSelection.toggle}
                                         onOpen={openDetail}
                                         busy={settling === group.key}
-                                        onSettle={async (toReturn, toKeep) => {
+                                        costGuess={storeMemory.returnCost(group.store)}
+                                        onDelivered={() => delivered(group.items)}
+                                        onSettle={async (toReturn, toKeep, cost) => {
                                             setSettling(group.key);
-                                            if (await settle(toReturn, toKeep)) keepSelection.forget(group.items);
+                                            if (await settle(toReturn, toKeep, cost)) keepSelection.forget(group.items);
                                             setSettling(null);
                                         }}
                                     />
@@ -206,6 +209,7 @@ export default function Purchases() {
                                         open={Boolean(historyOpen[group.key])}
                                         onToggle={() => setHistoryOpen((o) => ({ ...o, [group.key]: !o[group.key] }))}
                                         onOpen={openDetail}
+                                        onRefunded={refunded}
                                     />
                                 ))}
                             </div>
@@ -263,9 +267,11 @@ function GroupHeader({ open, onToggle, title, count, amount, amountTone = 'text-
 }
 
 /** A finished return (or things kept) of one brand, folded by default. */
-function HistoryCard({ group, returnedView, open, onToggle, onOpen }) {
+function HistoryCard({ group, returnedView, open, onToggle, onOpen, onRefunded }) {
     const total = group.items.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const back = group.items.reduce((s, p) => s + (Number(p.returned_amount) || 0), 0);
+    const back = group.items.reduce((s, p) => s + recoveredOf(p), 0);
+    // sent back, the money not confirmed yet - the shop has 14 days
+    const pending = returnedView ? group.items.filter(refundPending) : [];
     return (
         <div className="card overflow-hidden">
             <GroupHeader
@@ -277,11 +283,27 @@ function HistoryCard({ group, returnedView, open, onToggle, onOpen }) {
                 amountTone={returnedView ? 'text-emerald-700' : 'text-ink'}
                 note={returnedView ? `zwrot ${formatDateShort(group.day)}` : `kupione ${formatDateShort(group.day)}`}
                 badge={
-                    <span className={`shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1 ${returnedView ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-ink-soft'}`}>
-                        {returnedView ? 'Zwrócone' : 'Zostaje'}
+                    <span
+                        className={`shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1 ${
+                            pending.length ? 'bg-amber-100 text-amber-800' : returnedView ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-ink-soft'
+                        }`}
+                    >
+                        {pending.length ? 'Czekam na pieniądze' : returnedView ? 'Zwrócone' : 'Zostaje'}
                     </span>
                 }
             />
+            {pending.length > 0 && (
+                <div className="px-4 pb-3 -mt-1 flex items-center gap-2">
+                    <span className="flex-1 text-xs text-ink-muted">Sklep ma 14 dni na zwrot pieniędzy. Przyszły?</span>
+                    <button
+                        type="button"
+                        onClick={() => onRefunded(pending)}
+                        className="h-9 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 shrink-0"
+                    >
+                        <Check size={14} /> Pieniądze są
+                    </button>
+                </div>
+            )}
             {open && (
                 <div className="divide-y divide-line">
                     {group.items.map((p) => (
@@ -371,7 +393,9 @@ function useOpenBrands() {
  * One return per brand: tap "Zostawiam" on what stays, then one button sends the rest back.
  * The header folds / unfolds the list.
  */
-function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onSettle, busy }) {
+function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onSettle, onDelivered, costGuess, busy }) {
+    const [cost, setCost] = useState(costGuess);
+    const delivered = group.items.some((p) => p.delivered_at);
     const tone = deadlineTone(group.days_remaining);
     const badge = {
         danger: 'bg-red-600 text-white',
@@ -426,10 +450,25 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                         })}
                     </div>
                     <div className="p-3 border-t border-line">
+                        {toReturn.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+                                <span className="text-xs text-ink-muted mr-1">Odesłanie kosztuje:</span>
+                                {RETURN_COST_PRESETS.map((c) => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        onClick={() => setCost(cost === c ? null : c)}
+                                        className={`chip !py-1 !text-xs ${cost === c ? 'chip-active' : ''}`}
+                                    >
+                                        {c === 0 ? 'za darmo' : `${String(c).replace('.', ',')} zł`}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <button
                             type="button"
                             disabled={busy}
-                            onClick={() => onSettle(toReturn, toKeep)}
+                            onClick={() => onSettle(toReturn, toKeep, toReturn.length ? cost ?? null : null)}
                             className={`w-full h-11 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 active:scale-[0.99] transition disabled:opacity-50 ${
                                 toReturn.length ? 'bg-emerald-600 text-white' : 'bg-accent text-on-accent'
                             }`}
@@ -448,6 +487,13 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                             <p className="text-[11px] text-ink-muted text-center mt-1.5">
                                 Zostaje: {toKeep.length} {toKeep.length === 1 ? 'rzecz' : 'rzeczy'} — reszta oznaczy się jako zwrócona
                             </p>
+                        )}
+                        {!delivered ? (
+                            <button type="button" disabled={busy} onClick={onDelivered} className="mt-2 w-full text-xs font-semibold text-ink-muted hover:text-ink">
+                                Paczka przyszła dziś? Termin liczy się od dostawy
+                            </button>
+                        ) : (
+                            <p className="mt-2 text-[11px] text-ink-muted text-center">Termin liczony od dostawy</p>
                         )}
                     </div>
                 </>

@@ -123,6 +123,22 @@ class AiClient
     }
 
     /**
+     * What is on a shared screenshot ("Skróty -> Gonia", a screen dropped into "Zrzuć tutaj").
+     * It may be a contract or a private message, so Claude (no training on inputs) is used
+     * whenever its key is there; Gemini only when it is the sole provider.
+     */
+    public static function classifyImage($prompt, array $images, array $schema)
+    {
+        if (self::key('claude') !== '') {
+            return self::extractWithClaude($prompt, $images, $schema, ['max_tokens' => 4000, 'timeout' => 60]);
+        }
+        if (self::provider() === 'gemini') {
+            return self::extractWithGemini($prompt, $images, $schema);
+        }
+        throw new RuntimeException('Rozpoznawanie screenów wymaga klucza AI (Ustawienia -> Czytanie screenów).');
+    }
+
+    /**
      * Sort a short free-text note ("Zrzuć tutaj") into structured data.
      * Text only, so it may also go to Gemini when that is the chosen provider.
      */
@@ -149,9 +165,11 @@ class AiClient
      */
     public static function writeIdeas($prompt, $examples, array $schema, array $options = [])
     {
+        // $examples: text, or text parts ([['text' => ..., 'cache' => true], ['text' => ...]])
+        $parts = is_array($examples) ? $examples : [['text' => $examples]];
         $provider = self::provider();
         if ($provider === 'claude') {
-            return self::extractWithClaude($prompt, [['text' => $examples]], $schema, $options + [
+            return self::extractWithClaude($prompt, $parts, $schema, $options + [
                 'model' => trim($_ENV['ANTHROPIC_IDEAS_MODEL'] ?? '') ?: self::CLAUDE_IDEAS_MODEL,
                 'max_tokens' => 16000,
                 'effort' => 'medium',
@@ -159,7 +177,7 @@ class AiClient
             ]);
         }
         if ($provider === 'gemini') {
-            return self::extractWithGemini($prompt . "\n\n" . $examples, [], $schema);
+            return self::extractWithGemini($prompt . "\n\n" . implode('', array_column($parts, 'text')), [], $schema);
         }
         throw new RuntimeException('Generator rolek wymaga klucza AI (Ustawienia -> Czytanie screenów).');
     }
@@ -176,7 +194,12 @@ class AiClient
         $content = [];
         foreach ($images as $image) {
             if (isset($image['text'])) {
-                $content[] = ['type' => 'text', 'text' => $image['text']];
+                $block = ['type' => 'text', 'text' => $image['text']];
+                // a long block that repeats between calls (her reel scripts) is cached for 5 minutes
+                if (!empty($image['cache'])) {
+                    $block['cache_control'] = ['type' => 'ephemeral'];
+                }
+                $content[] = $block;
                 continue;
             }
             $content[] = [

@@ -1,12 +1,25 @@
 /**
  * Purchase helpers: buckets, order grouping, store memory.
  */
-import { formatDateShort } from './format';
+import { addDays, daysFromToday, formatDateShort, toDateInput } from './format';
 
 export const RETURN_DAY_PRESETS = [14, 30, 60, 100];
 
+// What sending a parcel back usually costs (paid label / fee taken off the refund)
+export const RETURN_COST_PRESETS = [0, 4.9, 6.9, 9.9];
+
 export function isReturned(p) {
     return p.status === 'returned' || p.status === 'partial';
+}
+
+/** Sent back, money not confirmed yet (the shop has 14 days). */
+export function refundPending(p) {
+    return isReturned(p) && !p.refunded_at && Number(p.returned_amount) > 0;
+}
+
+/** What really came back: the refund minus what sending the parcel cost. */
+export function recoveredOf(p) {
+    return Math.max(0, (Number(p.returned_amount) || 0) - (Number(p.return_cost) || 0));
 }
 
 /** "active" = waiting for a decision, "kept" = stays with you, "returned" = sent back */
@@ -58,9 +71,11 @@ export function deadlineText(days, deadline) {
 export function buildStoreMemory(purchases = []) {
     const sorted = [...purchases].sort((a, b) => (a.purchase_date < b.purchase_date ? 1 : -1));
     const days = new Map();
+    const costs = new Map();
     const stores = [];
     for (const p of sorted) {
         const key = (p.store || '').trim().toLowerCase();
+        if (key && !costs.has(key) && p.return_cost !== null && p.return_cost !== undefined) costs.set(key, Number(p.return_cost));
         if (!key || days.has(key)) continue;
         days.set(key, Number(p.return_days) || 14);
         stores.push(p.store.trim());
@@ -68,6 +83,8 @@ export function buildStoreMemory(purchases = []) {
     return {
         stores,
         returnDays: (store) => days.get((store || '').trim().toLowerCase()) || null,
+        // "jak ostatnio": postage of the last parcel to this shop
+        returnCost: (store) => (costs.has((store || '').trim().toLowerCase()) ? costs.get((store || '').trim().toLowerCase()) : null),
     };
 }
 
@@ -76,6 +93,16 @@ export function withPatch(p, patch) {
     if (!p || !patch) return p;
     const next = { ...p, ...patch };
     if (patch.status === 'returned' || patch.status === 'partial') next.returned_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    if (patch.status === 'kept') next.returned_at = null;
+    if (patch.status === 'kept') {
+        next.returned_at = null;
+        next.refunded_at = null;
+    }
+    if (patch.refunded_at === 'today') next.refunded_at = toDateInput(new Date());
+    // "Paczka przyszła": the window counts from delivery
+    if ('delivered_at' in patch || 'return_days' in patch || 'purchase_date' in patch) {
+        const deadline = toDateInput(addDays(next.delivered_at || next.purchase_date, Number(next.return_days) || 0));
+        next.return_deadline = deadline;
+        next.days_remaining = daysFromToday(deadline);
+    }
     return next;
 }

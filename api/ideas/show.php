@@ -24,7 +24,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
-    Schema::ensureColumn($conn, 'ideas', 'planned_for');
+    Schema::ensureColumns($conn, 'ideas');
 
     $query = "
         SELECT * FROM ideas 

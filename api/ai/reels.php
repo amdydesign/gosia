@@ -41,9 +41,11 @@ try {
             Response::validationError(['title' => 'Wpisz temat']);
         }
         $pitch = trim((string) ($input['pitch'] ?? ''));
-        $text .= "Temat nowej rolki: " . mb_substr($title, 0, 300) . ($pitch !== '' ? "\nO czym: " . mb_substr($pitch, 0, 500) : '');
+        $topic = "Temat nowej rolki: " . mb_substr($title, 0, 300) . ($pitch !== '' ? "\nO czym: " . mb_substr($pitch, 0, 500) : '');
 
-        $result = AiClient::writeIdeas(scriptPrompt(date('Y-m-d'), (bool) $examples), $text, scriptSchema());
+        // her scripts first and cached: "Napisz jeszcze raz" reuses them at a tenth of the price
+        $parts = $text !== '' ? [['text' => $text, 'cache' => true], ['text' => $topic]] : [['text' => $topic]];
+        $result = AiClient::writeIdeas(scriptPrompt(date('Y-m-d'), (bool) $examples), $parts, scriptSchema());
         $content = trim((string) ($result['content'] ?? ''));
         if ($content === '') {
             Response::error('AI nie napisało scenariusza. Spróbuj jeszcze raz.', 502);
@@ -59,9 +61,9 @@ try {
     }
 
     $exclude = array_slice(array_filter(array_map('strval', (array) ($input['exclude'] ?? []))), 0, 50);
-    $text .= reelTakenTopics($conn, $userId, $exclude);
+    $parts = [['text' => $text, 'cache' => true], ['text' => reelTakenTopics($conn, $userId, $exclude)]];
 
-    $result = AiClient::writeIdeas(topicsPrompt(date('Y-m-d')), $text, topicsSchema(), REELS_TOPICS_OPTIONS);
+    $result = AiClient::writeIdeas(topicsPrompt(date('Y-m-d')), $parts, topicsSchema(), REELS_TOPICS_OPTIONS);
 
     $topics = [];
     foreach (($result['topics'] ?? []) as $t) {

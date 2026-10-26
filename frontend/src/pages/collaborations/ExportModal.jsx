@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Download, FileText, Lock, Archive } from 'lucide-react';
-import { getStoredToken } from '../../utils/api';
+import { apiFetch } from '../../utils/api';
 import Sheet from '../../components/ui/Sheet';
 import Button from '../../components/ui/Button';
 import { useToast } from '../../context/ToastContext';
@@ -19,10 +19,7 @@ export default function ExportModal({ isOpen, onClose }) {
     const handleDownload = async () => {
         setLoading(true);
         try {
-            const token = getStoredToken();
-            const response = await fetch(`/api/collaborations/export.php?mode=${mode}&token=${token}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiFetch(`/collaborations/export.php?mode=${mode}`);
             if (!response.ok) throw new Error('Błąd pobierania');
 
             const blob = await response.blob();

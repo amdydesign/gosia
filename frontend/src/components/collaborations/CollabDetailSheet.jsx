@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileText, Lock, Pencil, RotateCcw, Trash2, Loader2 } from 'lucide-react';
+import { CalendarClock, Check, ChevronRight, Copy, FileText, Lock, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Attachments from '../common/Attachments';
 import TaxBreakdown from './TaxBreakdown';
 import { apiRequest } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
-import { useConfirm } from '../../context/ConfirmContext';
+import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
-import { formatCurrency, formatDateLong, getBillingLabel, getCollabTypeLabel, getTaxBreakdown } from '../../utils/format';
-import { daysWaiting, grossOf, isLate, isPaid, netOf, WAGE_TYPE } from '../../utils/collabs';
+import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate } from '../../utils/format';
+import { daysWaiting, grossOf, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 
 const DOC_KINDS = { umowa: 'Umowa', rachunek: 'Rachunek', faktura: 'Faktura', inne: 'Dokument' };
 
@@ -21,7 +21,6 @@ const DOC_KINDS = { umowa: 'Umowa', rachunek: 'Rachunek', faktura: 'Faktura', in
  */
 export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     const toast = useToast();
-    const confirm = useConfirm();
     const { refresh } = useDashboard();
     const { openCollab, versions } = useQuickActions();
     const [collab, setCollab] = useState(null);
@@ -39,13 +38,15 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
         };
     }, [collabId, versions.collaborations]);
 
-    const breakdown = useMemo(() => (collab ? getTaxBreakdown(grossOf(collab), collab.collab_type) : null), [collab]);
+    const breakdown = useMemo(() => (collab ? getTaxBreakdown(grossOf(collab), collab.collab_type, collab.date) : null), [collab]);
 
     const save = async (patch, message) => {
         setBusy(true);
         try {
             await apiRequest(`/collaborations/update.php?id=${collabId}`, 'PUT', patch);
             setCollab((c) => ({ ...c, ...patch }));
+            // dates the server works out (payment due, paid on) come back fresh
+            apiRequest(`/collaborations/show.php?id=${collabId}`).then(setCollab).catch(() => {});
             refresh();
             onChanged?.();
             if (message) toast.success(message);
@@ -64,10 +65,12 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     };
 
     const remove = async () => {
-        if (!(await confirm({ title: 'Usunąć współpracę?', message: `${collab.brand} zostanie usunięta razem z załącznikami.`, confirmLabel: 'Usuń', danger: true }))) return;
         try {
-            await apiRequest(`/collaborations/delete.php?id=${collabId}`, 'DELETE');
-            toast.success('Usunięto');
+            const res = await apiRequest(`/collaborations/delete.php?id=${collabId}`, 'DELETE');
+            deletedToast(toast, `${collab.brand} — usunięta`, res?.trash_id, () => {
+                refresh();
+                onChanged?.();
+            });
             refresh();
             onChanged?.();
             onClose();
@@ -107,6 +110,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     const paid = isPaid(collab);
     const late = isLate(collab);
     const waiting = daysWaiting(collab);
+    const due = paymentDue(collab);
     const isPrivate = Number(collab.fiscal_tracking) === 0;
     const team = collab.team || [];
     const teamTotal = team.reduce((s, m) => s + (Number(m.amount) || 0), 0);
@@ -156,14 +160,43 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                         <button type="button" onClick={() => setShowMath((v) => !v)} className="text-xs font-semibold text-primary-700">
                             {showMath ? 'Ukryj wyliczenie' : 'Jak to policzone?'}
                         </button>
-                        {showMath && <div className="mt-2"><TaxBreakdown breakdown={breakdown} collabType={collab.collab_type} /></div>}
+                        {showMath && <div className="mt-2"><TaxBreakdown breakdown={breakdown} collabType={collab.collab_type} date={collab.date} /></div>}
+                    </div>
+                )}
+
+                {/* Publish deadline */}
+                {toPublish(collab) && (
+                    <div className={`rounded-2xl border px-4 py-3 ${(daysFromToday(collab.publish_by) ?? 0) < 0 ? 'bg-red-50 border-red-100' : 'bg-violet-50 border-violet-100'}`}>
+                        <div className="flex items-center gap-2 text-sm font-bold text-ink">
+                            <CalendarClock size={17} /> Opublikuj do {formatDateLong(collab.publish_by)}
+                        </div>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={Send}
+                            loading={busy}
+                            className="mt-3"
+                            onClick={() => save({ published_at: getTodayDate() }, 'Opublikowane — termin płatności liczy się od dziś')}
+                        >
+                            Opublikowane
+                        </Button>
+                    </div>
+                )}
+                {collab.published_at && (
+                    <div className="flex items-center justify-between gap-3 text-sm text-ink-soft px-1">
+                        <span className="inline-flex items-center gap-2"><Send size={15} /> Opublikowane {formatDateShort(collab.published_at)}</span>
+                        <button type="button" disabled={busy} onClick={() => save({ published_at: null }, 'Cofnięto publikację')} className="text-xs font-semibold text-ink-muted hover:text-ink">
+                            Cofnij
+                        </button>
                     </div>
                 )}
 
                 {/* Payment */}
                 {paid ? (
                     <div className="flex items-center justify-between gap-3 rounded-2xl bg-emerald-50/70 border border-emerald-100 px-4 py-3">
-                        <span className="flex items-center gap-2 text-sm font-bold text-emerald-800"><Check size={18} /> Opłacone</span>
+                        <span className="flex items-center gap-2 text-sm font-bold text-emerald-800">
+                            <Check size={18} /> Opłacone{collab.paid_at ? ` ${formatDateShort(collab.paid_at)}` : ''}
+                        </span>
                         <Button size="sm" variant="ghost" icon={RotateCcw} loading={busy} onClick={() => save({ payment_status: 'pending' }, 'Cofnięto — czeka na przelew')}>
                             Cofnij
                         </Button>
@@ -171,7 +204,14 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                 ) : (
                     <div className={`rounded-2xl border px-4 py-3 ${late ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
                         <div className={`text-sm font-bold ${late ? 'text-red-700' : 'text-amber-800'}`}>
-                            {waiting > 0 ? `Czeka na przelew od ${waiting} dni` : 'Czeka na przelew'}
+                            {late
+                                ? `Termin płatności minął ${formatDateShort(due)}`
+                                : due
+                                    ? `Przelew do ${formatDateShort(due)}${waiting > 0 ? ` · czeka ${waiting} dni` : ''}`
+                                    : 'Czeka na przelew'}
+                        </div>
+                        <div className="text-xs text-ink-muted mt-0.5">
+                            Płatność w {Number(collab.payment_days) || 30} dni od {collab.published_at ? 'publikacji' : collab.publish_by ? 'terminu publikacji' : 'daty współpracy'}
                         </div>
                         <Button variant="success" size="lg" block icon={Check} loading={busy} className="mt-3" onClick={() => save({ payment_status: 'paid' }, `${collab.brand} — opłacone`)}>
                             Przelew doszedł

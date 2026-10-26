@@ -71,6 +71,19 @@ try {
         $fields[] = "notes = :notes";
         $params['notes'] = $data->notes;
     }
+    // "Paczka przyszła" (the return window counts from delivery), "Pieniądze są" (refund on the account),
+    // what sending it back cost - each may be cleared with null
+    foreach (['delivered_at', 'refunded_at'] as $column) {
+        if (property_exists($data, $column)) {
+            $value = $data->$column === 'today' ? date('Y-m-d') : $data->$column;
+            $fields[] = "$column = :$column";
+            $params[$column] = $value && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $value) ? $value : null;
+        }
+    }
+    if (property_exists($data, 'return_cost')) {
+        $fields[] = "return_cost = :return_cost";
+        $params['return_cost'] = $data->return_cost === null || $data->return_cost === '' ? null : max(0, (float) $data->return_cost);
+    }
     // "Zostawiam" - decided to keep before the deadline (stops reminders)
     if (isset($data->kept_confirmed)) {
         $fields[] = "kept_confirmed = :kept_confirmed";
@@ -87,8 +100,12 @@ try {
 
         if ($data->status === 'returned' || $data->status === 'partial') {
             $fields[] = "returned_at = CURRENT_TIMESTAMP";
+            if (!property_exists($data, 'refunded_at')) {
+                $fields[] = "refunded_at = NULL"; // a new return: the money is on its way
+            }
         } elseif ($data->status === 'kept') {
             $fields[] = "returned_at = NULL";
+            $fields[] = "refunded_at = NULL";
         }
     }
 
@@ -112,6 +129,19 @@ try {
             DoneLog::record($conn, $userId, $refKey, 'Zwrot ' . $store);
         } elseif (!empty($p['kept_confirmed'])) {
             DoneLog::record($conn, $userId, $refKey, 'Zostaje: ' . $store);
+        } else {
+            DoneLog::forget($conn, $userId, $refKey);
+        }
+    }
+
+    if (property_exists($data, 'refunded_at')) {
+        require_once __DIR__ . '/../utils/DoneLog.php';
+        $row = $conn->prepare("SELECT store, refunded_at FROM purchases WHERE id = :id");
+        $row->execute(['id' => $params['id']]);
+        $p = $row->fetch(PDO::FETCH_ASSOC) ?: [];
+        $refKey = 'refund:' . mb_strtolower(trim((string) ($p['store'] ?? '')));
+        if (!empty($p['refunded_at'])) {
+            DoneLog::record($conn, $userId, $refKey, 'Pieniądze wróciły: ' . trim((string) $p['store']));
         } else {
             DoneLog::forget($conn, $userId, $refKey);
         }

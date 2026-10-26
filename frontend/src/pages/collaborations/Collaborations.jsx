@@ -11,7 +11,7 @@ import { ListSkeleton } from '../../components/ui/Skeleton';
 import CollabDetailSheet from '../../components/collaborations/CollabDetailSheet';
 import ExportModal from './ExportModal';
 import { daysFromToday, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, groupByMonth } from '../../utils/format';
-import { daysWaiting, grossOf, isLate, isPaid, netOf, WAGE_TYPE } from '../../utils/collabs';
+import { daysWaiting, grossOf, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 
 const MONTHS_STEP = 6;
 
@@ -263,16 +263,21 @@ export default function Collaborations() {
     );
 }
 
-const STATUS_ORDER = { late: 0, waiting: 1, progress: 2 };
+const STATUS_ORDER = { late: 0, publish: 1, waiting: 2, progress: 3 };
 const STATUS_STYLE = {
     late: { label: 'Po terminie', pill: 'bg-red-600 text-white' },
+    publish: { label: 'Do publikacji', pill: 'bg-violet-600 text-white' },
     waiting: { label: 'Czeka na przelew', pill: 'bg-amber-500 text-white' },
     progress: { label: 'W trakcie', pill: 'bg-sky-600 text-white' },
 };
 
-/** late (unpaid too long), waiting (done, no transfer yet) or progress (date still ahead). */
+/**
+ * The stage follows from the dates - nothing to drag: late (past the payment term),
+ * publish (deadline set, not published yet), progress (date still ahead), waiting (transfer due).
+ */
 function unsettledStatus(c) {
     if (isLate(c)) return 'late';
+    if (toPublish(c)) return 'publish';
     return (daysFromToday(c.date) ?? 0) > 0 ? 'progress' : 'waiting';
 }
 
@@ -281,10 +286,17 @@ function UnpaidRow({ collab, busy, onOpen, onPaid }) {
     const style = STATUS_STYLE[status];
     const waiting = daysWaiting(collab);
     const ahead = daysFromToday(collab.date) ?? 0;
+    const due = paymentDue(collab);
+    const dueIn = daysFromToday(due) ?? 0;
+    const publishIn = daysFromToday(collab.publish_by) ?? 0;
     const when =
-        status === 'progress'
-            ? ahead === 1 ? 'jutro' : `za ${ahead} dni`
-            : waiting > 0 ? `czeka ${waiting} dni` : 'od dziś';
+        status === 'publish'
+            ? publishIn < 0 ? 'termin publikacji minął' : publishIn === 0 ? 'opublikuj dziś' : `opublikuj do ${formatDateShort(collab.publish_by)}`
+            : status === 'progress'
+                ? ahead === 1 ? 'jutro' : `za ${ahead} dni`
+                : status === 'late'
+                    ? `termin minął ${-dueIn} dni temu`
+                    : dueIn >= 0 ? `przelew do ${formatDateShort(due)}` : waiting > 0 ? `czeka ${waiting} dni` : 'od dziś';
     return (
         <div className="flex items-center gap-3 pl-4 pr-3 py-3">
             <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">

@@ -8,7 +8,8 @@
  * AiClient::extractDocument).
  *
  * Sets: title, counterparty, doc_date, status (signed | to_sign), notes (summary +
- * parties) and, when the AI reads the text better than the device OCR, content_text.
+ * parties), terms (deadlines, exclusivity, licence - reminders on Start; copied into a
+ * linked collaboration) and, when the AI reads the text better than the device OCR, content_text.
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -115,6 +116,10 @@ try {
         $fields[] = 'doc_kind = :doc_kind';
         $params['doc_kind'] = $aiKind;
     }
+    $terms = documentsCleanTerms($result['terms'] ?? null);
+    $fields[] = 'terms = :terms';
+    $params['terms'] = $terms ? json_encode($terms, JSON_UNESCAPED_UNICODE) : null;
+
     $text = $needsText ? documentsCleanText($result['text'] ?? '') : '';
     // keep the device OCR when the AI returned much less text
     if ($text !== '' && mb_strlen($text) >= mb_strlen((string) $document['content_text']) * 0.6) {
@@ -124,14 +129,24 @@ try {
 
     $conn->prepare("UPDATE documents SET " . implode(', ', $fields) . " WHERE id = :id AND user_id = :user_id")->execute($params);
 
+    // A contract already linked to a collaboration fills its empty deadlines
+    $linked = $conn->prepare("SELECT collaboration_id FROM documents WHERE id = :id AND user_id = :user_id");
+    $linked->execute(['id' => $id, 'user_id' => $userId]);
+    $collabId = (int) $linked->fetchColumn();
+    if ($terms && $collabId) {
+        require_once __DIR__ . '/../collaborations/helpers.php';
+        collabApplyTerms($conn, $userId, $collabId, $terms);
+    }
+
     $stmt = $conn->prepare("
-        SELECT id, title, notes, status, doc_date, counterparty, doc_kind, amount, analyzed_at, (content_text IS NOT NULL AND content_text <> '') AS has_text
+        SELECT id, title, notes, status, doc_date, counterparty, doc_kind, amount, analyzed_at, terms, (content_text IS NOT NULL AND content_text <> '') AS has_text
         FROM documents WHERE id = :id AND user_id = :user_id
     ");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
     $row = $stmt->fetch();
     $row['id'] = (int) $row['id'];
     $row['has_text'] = (bool) $row['has_text'];
+    $row['terms'] = documentsTerms($row['terms']);
 
     Response::success($row, 'Dokument rozpoznany');
 
@@ -164,6 +179,16 @@ Pola:
 - amount_gross: łączna kwota wynagrodzenia BRUTTO w złotych jako liczba (z umowy albo rachunku/faktury: kwota brutto / do zapłaty). 0, gdy brak kwoty. Nie podawaj kwoty netto ani "do wypłaty".
 - counterparty: druga strona - firma lub osoba, z którą właścicielka archiwum zawiera dokument (nie ona sama). Pełna nazwa z formą prawną, np. "Zalando Polska sp. z o.o.". Pusty tekst, gdy nie wiadomo.
 - summary: 2-4 krótkie zdania po polsku: czego dotyczy, wynagrodzenie i terminy płatności, okres obowiązywania lub termin realizacji, najważniejsze obowiązki, kary umowne, poufność i wyłączność (do kiedy). Tylko to, co jest w dokumencie.
+- terms: terminy i ograniczenia z umowy - z nich powstaną przypomnienia, więc tylko to, co wprost wynika z dokumentu:
+  - publish_by: do kiedy trzeba opublikować / oddać materiał (RRRR-MM-DD), pusty tekst gdy brak.
+  - payment_days: w ilu dniach marka ma zapłacić (np. 14, 30), 0 gdy brak.
+  - payment_due: konkretna data płatności, jeśli podana (RRRR-MM-DD), inaczej pusty tekst.
+  - exclusivity_until: do kiedy obowiązuje wyłączność / zakaz współpracy z konkurencją (RRRR-MM-DD). Gdy umowa podaje okres (np. "3 miesiące od publikacji"), wylicz datę od terminu publikacji albo daty umowy. Pusty tekst, gdy brak wyłączności.
+  - exclusivity_scope: czego dotyczy wyłączność (np. "kosmetyki do włosów", "odzież sportowa"), krótko; pusty tekst, gdy brak.
+  - license_until: do kiedy marka może używać jej wizerunku / materiałów (RRRR-MM-DD), wyliczone jak wyżej; pusty tekst, gdy bezterminowo lub brak.
+  - revisions: ile rund poprawek jest w cenie, 0 gdy nie podano.
+  - penalty: kary umowne jednym krótkim zdaniem (np. "500 zł za każdy dzień opóźnienia"), pusty tekst gdy brak.
+  - deliverables: co dokładnie trzeba zrobić, krótko (np. "1 rolka + 3 stories"), pusty tekst gdy nie wiadomo.
 {$textRule}
 TXT;
 }
@@ -181,9 +206,25 @@ function documentsAnalyzeSchema()
             'kind' => ['type' => 'string', 'enum' => DOCUMENTS_KINDS],
             'amount_gross' => ['type' => 'number'],
             'summary' => ['type' => 'string'],
+            'terms' => [
+                'type' => 'object',
+                'properties' => [
+                    'publish_by' => ['type' => 'string'],
+                    'payment_days' => ['type' => 'integer'],
+                    'payment_due' => ['type' => 'string'],
+                    'exclusivity_until' => ['type' => 'string'],
+                    'exclusivity_scope' => ['type' => 'string'],
+                    'license_until' => ['type' => 'string'],
+                    'revisions' => ['type' => 'integer'],
+                    'penalty' => ['type' => 'string'],
+                    'deliverables' => ['type' => 'string'],
+                ],
+                'required' => DOCUMENTS_TERM_KEYS,
+                'additionalProperties' => false,
+            ],
             'text' => ['type' => 'string'],
         ],
-        'required' => ['title', 'doc_date', 'status', 'parties', 'counterparty', 'kind', 'amount_gross', 'summary', 'text'],
+        'required' => ['title', 'doc_date', 'status', 'parties', 'counterparty', 'kind', 'amount_gross', 'summary', 'terms', 'text'],
         'additionalProperties' => false,
     ];
 }

@@ -53,6 +53,7 @@ export function QuickActionsProvider({ children }) {
                     key={collab.key}
                     collabId={collab.id}
                     prefill={collab.prefill}
+                    initialFiles={collab.files}
                     onClose={() => setCollab(null)}
                     onSaved={(id) => {
                         bump('collaborations');
@@ -67,7 +68,10 @@ export function QuickActionsProvider({ children }) {
                     manual={purchase.manual}
                     prefill={purchase.prefill}
                     onClose={() => setPurchase(null)}
-                    onSaved={() => bump('purchases')}
+                    onSaved={() => {
+                        bump('purchases');
+                        purchase.onSaved?.();
+                    }}
                 />
             )}
             {aiSettingsOpen && <AiSettingsSheet onClose={() => setAiSettingsOpen(false)} />}

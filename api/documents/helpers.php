@@ -49,7 +49,12 @@ const DOCUMENTS_LATE_COLUMNS = [
     'text_hash' => "ALTER TABLE documents ADD COLUMN text_hash CHAR(64) NULL",
     // the brand the job is for - the counterparty is often an agency
     'brand' => "ALTER TABLE documents ADD COLUMN brand VARCHAR(100) NULL",
+    // deadlines and limits from the contract (JSON, see documentsCleanTerms): publish by, pay within,
+    // exclusivity, licence for her image, revisions, penalties - they become reminders on Start
+    'terms' => "ALTER TABLE documents ADD COLUMN terms TEXT NULL",
 ];
+
+const DOCUMENTS_TERM_KEYS = ['publish_by', 'payment_days', 'payment_due', 'exclusivity_until', 'exclusivity_scope', 'license_until', 'revisions', 'penalty', 'deliverables'];
 
 const DOCUMENTS_KINDS = ['umowa', 'rachunek', 'faktura', 'inne'];
 const DOCUMENTS_BILLINGS = ['umowa_50', 'umowa_20', 'useme_50', 'useme_20', 'umowa_praca', 'gotowka'];
@@ -609,6 +614,58 @@ function documentsCollabName($brand, $counterparty)
         $name = $brand . ' – ' . $party;
     }
     return mb_substr($name, 0, 100);
+}
+
+/**
+ * Contract terms as stored: dates Y-m-d (or ''), numbers >= 0, short texts.
+ * Returns null when nothing useful is left.
+ */
+function documentsCleanTerms($terms)
+{
+    if (!is_array($terms)) {
+        return null;
+    }
+    $out = [];
+    foreach (['publish_by', 'payment_due', 'exclusivity_until', 'license_until'] as $key) {
+        $date = documentsParseDate($terms[$key] ?? '');
+        if ($date !== null && $date > '2000-01-01' && $date < date('Y-m-d', strtotime('+10 years'))) {
+            $out[$key] = $date;
+        }
+    }
+    foreach (['payment_days' => 365, 'revisions' => 20] as $key => $max) {
+        $n = (int) ($terms[$key] ?? 0);
+        if ($n > 0 && $n <= $max) {
+            $out[$key] = $n;
+        }
+    }
+    foreach (['exclusivity_scope' => 120, 'penalty' => 200, 'deliverables' => 200] as $key => $len) {
+        $value = trim((string) ($terms[$key] ?? ''));
+        if ($value !== '') {
+            $out[$key] = mb_substr($value, 0, $len);
+        }
+    }
+    return $out ?: null;
+}
+
+/** Terms from a stored document row (JSON column), always an array. */
+function documentsTerms($json)
+{
+    $terms = json_decode((string) $json, true);
+    return is_array($terms) ? $terms : [];
+}
+
+/**
+ * Payment term without AI: "płatne w terminie 14 dni", "przelewem w ciągu 30 dni od...".
+ * @return int|null days
+ */
+function documentsPaymentDaysFromText($text)
+{
+    $folded = documentsFold($text);
+    if (preg_match('/(?:platn|zaplat|wynagrodz|przelew|rachun|faktur)[^.]{0,120}?(?:w terminie|w ciagu|w przeciagu|do)\s+(\d{1,3})\s+dni/u', $folded, $m)) {
+        $days = (int) $m[1];
+        return $days >= 1 && $days <= 120 ? $days : null;
+    }
+    return null;
 }
 
 /** Collaboration details guessed from the document text (no external services). */

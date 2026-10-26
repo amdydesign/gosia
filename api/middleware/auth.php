@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/JWTHandler.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Users.php';
+require_once __DIR__ . '/../config/Session.php';
 
 class AuthMiddleware
 {
@@ -33,10 +34,15 @@ class AuthMiddleware
         $result = $this->jwtHandler->validateToken($token);
 
         if (!$result['success']) {
-            Response::unauthorized($result['message']);
+            $this->reject($result['message']);
         }
 
         $payload = $result['data'];
+
+        // The cookie is sent by the browser on its own - writes must come from the app (CSRF)
+        if (JWTHandler::$source === 'cookie' && !Session::isAppRequest()) {
+            Response::error('Odśwież aplikację i spróbuj ponownie', 403);
+        }
 
         // Check token version against DB
         try {
@@ -49,10 +55,10 @@ class AuthMiddleware
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$user) {
-                Response::unauthorized('User not found');
+                $this->reject('User not found');
             }
             if ((int) $user['is_active'] !== 1) {
-                Response::unauthorized('Konto jest zablokowane');
+                $this->reject('Konto jest zablokowane');
             }
 
             // If token has no version (old token) or versions don't match -> Unauthorized
@@ -61,14 +67,30 @@ class AuthMiddleware
             $tokenVersion = $payload['token_version'] ?? 0; // Old tokens won't have this field
 
             if ($tokenVersion != $dbVersion) {
-                Response::unauthorized('Session expired, please login again');
+                $this->reject('Session expired, please login again');
             }
 
         } catch (Exception $e) {
             Response::error('Authentication error', 500);
         }
 
+        if (JWTHandler::$source === 'cookie') {
+            Session::renewIfOld($payload);
+        } elseif (Session::cookieToken() === null) {
+            // An older app version still sends its stored token: move this device to the cookie
+            Session::start($payload['sub'], $payload['username'] ?? '', $payload['token_version'] ?? 1, true);
+        }
+
         return $payload;
+    }
+
+    /** 401 - and drop a cookie that no longer works, so the browser stops sending it. */
+    private function reject($message)
+    {
+        if (JWTHandler::$source === 'cookie') {
+            Session::end();
+        }
+        Response::unauthorized($message);
     }
 
     /**

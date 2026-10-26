@@ -14,7 +14,10 @@ class JWTHandler
 {
     private $secret;
     private $issuer;
-    private $expiry_hours = 24; // Token valid for 24 hours
+    private $expiry_hours = 24; // default lifetime; the login cookie sets its own (config/Session.php)
+
+    /** Where the last token came from: 'header' (older app versions) or 'cookie'. */
+    public static $source = null;
 
     public function __construct()
     {
@@ -29,10 +32,10 @@ class JWTHandler
     /**
      * Generate JWT token for user
      */
-    public function generateToken($userId, $username, $tokenVersion)
+    public function generateToken($userId, $username, $tokenVersion, $ttlSeconds = null, array $extra = [])
     {
         $issuedAt = time();
-        $expiresAt = $issuedAt + ($this->expiry_hours * 3600);
+        $expiresAt = $issuedAt + ($ttlSeconds ?: $this->expiry_hours * 3600);
 
         $payload = [
             'iss' => $this->issuer,          // Issuer
@@ -41,7 +44,7 @@ class JWTHandler
             'sub' => $userId,                // Subject (user ID)
             'username' => $username,         // Custom claim
             'token_version' => $tokenVersion // Token Version for invalidation
-        ];
+        ] + $extra;
 
         return JWT::encode($payload, $this->secret, 'HS256');
     }
@@ -72,7 +75,8 @@ class JWTHandler
     }
 
     /**
-     * Get token from Authorization header
+     * Get token from the Authorization header (older app versions) or the login cookie.
+     * Never from the URL - query strings end up in server logs.
      */
     public static function getBearerToken()
     {
@@ -90,14 +94,16 @@ class JWTHandler
         }
 
         if (!empty($headers) && preg_match('/Bearer\s(\S+)/', $headers, $matches)) {
+            self::$source = 'header';
             return $matches[1];
         }
 
-        // Fallback: Check for token in URL query string (for file downloads or when headers are stripped)
-        if (isset($_GET['token']) && !empty($_GET['token'])) {
-            return $_GET['token'];
+        if (!empty($_COOKIE['gonia_session']) && is_string($_COOKIE['gonia_session'])) {
+            self::$source = 'cookie';
+            return $_COOKIE['gonia_session'];
         }
 
+        self::$source = null;
         return null;
     }
 }

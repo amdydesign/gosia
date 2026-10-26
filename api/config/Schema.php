@@ -154,6 +154,79 @@ class Schema
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        // Failed logins / reset requests - a few tries, then a pause (key = hash of ip + login)
+        'login_attempts' => "
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                scope VARCHAR(20) NOT NULL,
+                key_hash CHAR(64) NOT NULL,
+                attempted_at DATETIME NOT NULL,
+                INDEX idx_scope_key (scope, key_hash, attempted_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // "Nie pamiętasz hasła?" - one-time links sent by e-mail (only the hash is stored)
+        'password_resets' => "
+            CREATE TABLE IF NOT EXISTS password_resets (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                token_hash CHAR(64) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                used_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE KEY idx_token (token_hash)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // Deleted things for 30 days ("Cofnij" / Kosz): the row and its children as JSON
+        'trash' => "
+            CREATE TABLE IF NOT EXISTS trash (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                entity_type VARCHAR(20) NOT NULL,
+                entity_id INT NOT NULL,
+                title VARCHAR(255) NOT NULL DEFAULT '',
+                payload MEDIUMTEXT NOT NULL,
+                files TEXT NULL,
+                deleted_at DATETIME NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_deleted (user_id, deleted_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // Screens shared from the iPhone (Skróty) or dropped into "Zrzuć tutaj", sorted by AI
+        'inbox_items' => "
+            CREATE TABLE IF NOT EXISTS inbox_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                source VARCHAR(20) NOT NULL DEFAULT 'app',
+                stored_name VARCHAR(80) NULL,
+                original_name VARCHAR(255) NULL,
+                mime_type VARCHAR(100) NULL,
+                size INT NOT NULL DEFAULT 0,
+                note TEXT NULL,
+                kind VARCHAR(20) NULL,
+                title VARCHAR(255) NULL,
+                data MEDIUMTEXT NULL,
+                done_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_open (user_id, done_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // Face ID / Touch ID logins (WebAuthn passkeys)
+        'passkeys' => "
+            CREATE TABLE IF NOT EXISTS passkeys (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                credential_id VARCHAR(255) NOT NULL,
+                public_key TEXT NOT NULL,
+                sign_count INT UNSIGNED NOT NULL DEFAULT 0,
+                name VARCHAR(100) NOT NULL DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at DATETIME NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE KEY idx_credential (credential_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
         'social_refresh_log' => "
             CREATE TABLE IF NOT EXISTS social_refresh_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -169,13 +242,35 @@ class Schema
     ];
 
     /**
-     * Columns added after the first release ("table.column" => ALTER statement).
+     * Columns added after the first release ("table.column" => ALTER statement,
+     * or a list: the ALTER first, then statements that fill in existing rows).
      */
     private static $columns = [
         'purchases.kept_confirmed' => "ALTER TABLE purchases ADD COLUMN kept_confirmed TINYINT(1) NOT NULL DEFAULT 0",
         'purchases.returned_at' => "ALTER TABLE purchases ADD COLUMN returned_at TIMESTAMP NULL DEFAULT NULL",
+        // "Paczka przyszła": the return window counts from delivery, not from the order
+        'purchases.delivered_at' => "ALTER TABLE purchases ADD COLUMN delivered_at DATE NULL DEFAULT NULL",
+        // "Pieniądze są": the shop paid the refund back. Returns made before this existed count as settled.
+        'purchases.refunded_at' => [
+            "ALTER TABLE purchases ADD COLUMN refunded_at DATE NULL DEFAULT NULL",
+            "UPDATE purchases SET refunded_at = DATE(COALESCE(returned_at, updated_at)) WHERE status IN ('returned', 'partial')",
+        ],
+        // what sending the parcel back cost (paid label / fee taken off the refund)
+        'purchases.return_cost' => "ALTER TABLE purchases ADD COLUMN return_cost DECIMAL(10, 2) NULL DEFAULT NULL",
         // "Nagram dziś": a reel lands on Start's list only when planned for a day
         'ideas.planned_for' => "ALTER TABLE ideas ADD COLUMN planned_for DATE NULL DEFAULT NULL",
+        // published reel + its results (views etc. read from an insights screenshot)
+        'ideas.published_at' => "ALTER TABLE ideas ADD COLUMN published_at DATE NULL DEFAULT NULL",
+        'ideas.views' => "ALTER TABLE ideas ADD COLUMN views INT NULL DEFAULT NULL",
+        'ideas.stats' => "ALTER TABLE ideas ADD COLUMN stats TEXT NULL",
+        // when the money came in (set by "Opłacone") - income counts in that month / tax year
+        'collaborations.paid_at' => "ALTER TABLE collaborations ADD COLUMN paid_at DATE NULL DEFAULT NULL",
+        // deadlines: publish by, published on, pay within N days (from publishing / the date)
+        'collaborations.publish_by' => "ALTER TABLE collaborations ADD COLUMN publish_by DATE NULL DEFAULT NULL",
+        'collaborations.published_at' => "ALTER TABLE collaborations ADD COLUMN published_at DATE NULL DEFAULT NULL",
+        'collaborations.payment_days' => "ALTER TABLE collaborations ADD COLUMN payment_days SMALLINT NULL DEFAULT NULL",
+        // "Rozbij na kroki": small steps of a task (JSON [{text, done}])
+        'tasks.steps' => "ALTER TABLE tasks ADD COLUMN steps TEXT NULL",
     ];
 
     /**
@@ -189,9 +284,21 @@ class Schema
         }
         $stmt = $conn->query("SHOW COLUMNS FROM `" . str_replace('`', '', $table) . "` LIKE " . $conn->quote($column));
         if ($stmt->rowCount() === 0) {
-            $conn->exec(self::$columns[$key]);
+            foreach ((array) self::$columns[$key] as $sql) {
+                $conn->exec($sql);
+            }
         }
         self::$ensured[$key] = true;
+    }
+
+    /** Every late column of a table (e.g. "collaborations"). */
+    public static function ensureColumns(PDO $conn, $table)
+    {
+        foreach (array_keys(self::$columns) as $key) {
+            if (strpos($key, $table . '.') === 0) {
+                self::ensureColumn($conn, $table, substr($key, strlen($table) + 1));
+            }
+        }
     }
 
     /**
@@ -199,8 +306,13 @@ class Schema
      */
     public static function ensurePurchases(PDO $conn)
     {
-        self::ensureColumn($conn, 'purchases', 'kept_confirmed');
-        self::ensureColumn($conn, 'purchases', 'returned_at');
+        self::ensureColumns($conn, 'purchases');
+    }
+
+    /** Collaboration columns: paid_at and the deadlines. */
+    public static function ensureCollaborations(PDO $conn)
+    {
+        self::ensureColumns($conn, 'collaborations');
     }
 
     /**

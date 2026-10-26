@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { KeyRound } from 'lucide-react';
-import api from '../../services/api';
+import { apiRequest } from '../../utils/api';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
@@ -41,11 +41,10 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
         setLoading(true);
         try {
-            const response = await api.post('/auth/change_password.php', {
+            await apiRequest('/auth/change_password.php', 'POST', {
                 current_password: currentPassword,
                 new_password: newPassword
             });
-            if (!response.success) throw new Error(response.message || 'Błąd zmiany hasła');
             toast.success('Hasło zostało zmienione');
             handleClose();
         } catch (err) {

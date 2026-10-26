@@ -21,6 +21,8 @@ require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
+require_once __DIR__ . '/../purchases/helpers.php';
+require_once __DIR__ . '/../collaborations/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -37,7 +39,8 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     Schema::ensurePurchases($conn);
-    $p = ['user_id' => $userId, 'year' => $year];
+    Schema::ensureCollaborations($conn);
+    $p = ['user_id' => $userId, 'year' => $year, 'year2' => $year];
 
     // Years with data (+ current year)
     $stmt = $conn->prepare("SELECT DISTINCT YEAR(date) AS y FROM collaborations WHERE user_id = :user_id ORDER BY y DESC");
@@ -48,11 +51,15 @@ try {
     }
     rsort($years);
 
-    // All collaborations of the year - small enough to aggregate in PHP
+    // All collaborations of the year - small enough to aggregate in PHP.
+    // Paid ones count in the year the money came in (PIT counts income when received).
     $stmt = $conn->prepare("
-        SELECT brand, type, collab_type, fiscal_tracking, amount_gross, amount_net, date, payment_status
+        SELECT brand, type, collab_type, fiscal_tracking, amount_gross, amount_net, date, payment_status,
+               " . COLLAB_PAID_DAY_SQL . " AS paid_day
         FROM collaborations
-        WHERE user_id = :user_id AND YEAR(date) = :year
+        WHERE user_id = :user_id
+          AND ((payment_status = 'paid' AND YEAR(" . COLLAB_PAID_DAY_SQL . ") = :year)
+               OR (payment_status <> 'paid' AND YEAR(date) = :year2))
     ");
     $stmt->execute($p);
 
@@ -77,7 +84,7 @@ try {
             continue;
         }
 
-        $m = (int) substr($row['date'], 5, 2);
+        $m = (int) substr($row['paid_day'], 5, 2);
         $months[$m]['net'] += $net;
         $months[$m]['gross'] += $gross;
         $months[$m]['count']++;
@@ -89,7 +96,7 @@ try {
             $cash += $net;
         } else {
             $cType = $row['collab_type'] && $row['collab_type'] !== 'other' ? $row['collab_type'] : 'umowa_50';
-            $b = TaxCalculator::getBreakdown($gross, $cType);
+            $b = TaxCalculator::getBreakdown($gross, $cType, $row['date']);
             $income += max(0, $gross - floatval($b['kup']) - floatval($b['commission']));
         }
 
@@ -110,13 +117,13 @@ try {
     // Purchases of the year
     $stmt = $conn->prepare("
         SELECT
-            COALESCE(SUM(CASE WHEN status IN ('returned', 'partial') THEN returned_amount ELSE 0 END), 0) AS returned_value,
+            COALESCE(SUM(CASE WHEN status IN ('returned', 'partial') THEN GREATEST(returned_amount - COALESCE(return_cost, 0), 0) ELSE 0 END), 0) AS returned_value,
             SUM(CASE WHEN status IN ('returned', 'partial') THEN 1 ELSE 0 END) AS returned_count,
-            COALESCE(SUM(CASE WHEN status = 'kept' AND (kept_confirmed = 1 OR DATE_ADD(purchase_date, INTERVAL return_days DAY) < CURDATE()) THEN amount
+            COALESCE(SUM(CASE WHEN status = 'kept' AND (kept_confirmed = 1 OR " . PURCHASE_DEADLINE_SQL . " < CURDATE()) THEN amount
                               WHEN status = 'partial' THEN GREATEST(amount - returned_amount, 0) ELSE 0 END), 0) AS kept_value,
-            SUM(CASE WHEN status = 'kept' AND (kept_confirmed = 1 OR DATE_ADD(purchase_date, INTERVAL return_days DAY) < CURDATE()) THEN 1 ELSE 0 END) AS kept_count,
-            COALESCE(SUM(CASE WHEN status = 'kept' AND kept_confirmed = 0 AND DATE_ADD(purchase_date, INTERVAL return_days DAY) >= CURDATE() THEN amount ELSE 0 END), 0) AS active_value,
-            SUM(CASE WHEN status = 'kept' AND kept_confirmed = 0 AND DATE_ADD(purchase_date, INTERVAL return_days DAY) >= CURDATE() THEN 1 ELSE 0 END) AS active_count
+            SUM(CASE WHEN status = 'kept' AND (kept_confirmed = 1 OR " . PURCHASE_DEADLINE_SQL . " < CURDATE()) THEN 1 ELSE 0 END) AS kept_count,
+            COALESCE(SUM(CASE WHEN status = 'kept' AND kept_confirmed = 0 AND " . PURCHASE_DEADLINE_SQL . " >= CURDATE() THEN amount ELSE 0 END), 0) AS active_value,
+            SUM(CASE WHEN status = 'kept' AND kept_confirmed = 0 AND " . PURCHASE_DEADLINE_SQL . " >= CURDATE() THEN 1 ELSE 0 END) AS active_count
         FROM purchases
         WHERE user_id = :user_id AND YEAR(purchase_date) = :year
     ");

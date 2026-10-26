@@ -4,18 +4,24 @@
  * (api/cron/compare_models.php), so the test checks exactly what the app sends.
  */
 
+require_once __DIR__ . '/../config/Schema.php';
+
 const REELS_TOPICS = 3;
 const REELS_EXAMPLES = 15;
 // Picking 3 topics is light work; the script itself uses AiClient::writeIdeas defaults (medium effort)
 const REELS_TOPICS_OPTIONS = ['effort' => 'low', 'max_tokens' => 4000];
 
-/** Her scripts as prompt text, recorded first (they show what really went out). @return [string $text, array $rows] */
+/**
+ * Her scripts as prompt text: published ones with the most views first (what really works),
+ * then recorded, then drafts. @return [string $text, array $rows]
+ */
 function reelExamples(PDO $conn, $userId)
 {
+    Schema::ensureColumns($conn, 'ideas');
     $stmt = $conn->prepare("
-        SELECT title, content, status FROM ideas
+        SELECT title, content, status, views FROM ideas
         WHERE user_id = :user_id AND content IS NOT NULL AND TRIM(content) <> ''
-        ORDER BY CASE WHEN status = 'recorded' THEN 1 ELSE 2 END, updated_at DESC
+        ORDER BY CASE WHEN views IS NOT NULL THEN 0 WHEN status = 'recorded' THEN 1 ELSE 2 END, views DESC, updated_at DESC
         LIMIT " . REELS_EXAMPLES
     );
     $stmt->execute(['user_id' => $userId]);
@@ -23,9 +29,13 @@ function reelExamples(PDO $conn, $userId)
 
     $text = '';
     if ($examples) {
-        $text = "Moje rolki (scenariusze):\n\n";
+        $withViews = array_filter($examples, function ($e) {
+            return $e['views'] !== null;
+        });
+        $text = "Moje rolki (scenariusze)" . ($withViews ? ' - przy opublikowanych liczba wyświetleń: więcej wyświetleń = to działa, opieraj się na nich najbardziej' : '') . ":\n\n";
         foreach ($examples as $i => $e) {
-            $text .= '### ' . ($i + 1) . '. ' . $e['title'] . ($e['status'] === 'recorded' ? ' (nagrana)' : '') . "\n"
+            $label = $e['views'] !== null ? ' (' . number_format((int) $e['views'], 0, ',', ' ') . ' wyświetleń)' : ($e['status'] === 'recorded' ? ' (nagrana)' : '');
+            $text .= '### ' . ($i + 1) . '. ' . $e['title'] . $label . "\n"
                 . mb_substr(trim($e['content']), 0, 2500) . "\n\n";
         }
     }

@@ -1,60 +1,91 @@
 /**
- * Auth Context - Global authentication state
+ * Auth Context - Global authentication state.
+ * The session is an HttpOnly cookie; here we only keep who is logged in.
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import authService from '../services/auth';
 import { fetchMe } from '../services/users';
 import { detachPushFromAccount } from '../services/push';
+import { APP_HEADERS, apiRequest, clearLegacyToken, clearSession, getLegacyToken } from '../utils/api';
 
-/** Keep the stored copy of the user in the same storage the token lives in. */
-function storeUser(user) {
-    const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
-    storage.setItem('user', JSON.stringify(user));
+/** Is there a working session cookie? (no redirect - used before we know) */
+async function probeSession() {
+    try {
+        const res = await fetch('/api/auth/verify.php', { credentials: 'same-origin', headers: APP_HEADERS });
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json?.data?.user || null;
+    } catch {
+        return null;
+    }
 }
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [token, setToken] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+    const accept = useCallback((next) => {
+        setUser(next);
+        setIsAuthenticated(true);
+        authService.storeUser(next);
+    }, []);
+
     // Check auth on mount
     useEffect(() => {
+        let cancelled = false;
         const checkAuth = async () => {
-            const storedUser = authService.getCurrentUser();
-            const storedToken = authService.getToken();
-
-            if (storedToken && storedUser) {
-                setUser(storedUser);
-                setToken(storedToken);
-                setIsAuthenticated(true);
-                // refresh name and role (sessions from before accounts lack them)
-                fetchMe()
-                    .then((data) => {
-                        if (data?.user) {
-                            setUser(data.user);
-                            storeUser(data.user);
-                        }
-                    })
-                    .catch(() => {});
+            // An older app version kept a token in the browser: one call moves it to the cookie
+            const legacy = getLegacyToken();
+            if (legacy) {
+                try {
+                    const data = await apiRequest('/auth/verify.php', 'GET', null, legacy);
+                    clearLegacyToken();
+                    if (!cancelled && data?.user) accept(data.user);
+                } catch {
+                    clearSession();
+                }
+                if (!cancelled) setLoading(false);
+                return;
             }
-            setLoading(false);
+
+            const cached = authService.getCurrentUser();
+            if (cached) {
+                // show the app right away; a dead cookie sends us to /login on the first call
+                setUser(cached);
+                setIsAuthenticated(true);
+                setLoading(false);
+                fetchMe()
+                    .then((data) => !cancelled && data?.user && accept(data.user))
+                    .catch(() => {});
+                return;
+            }
+
+            const fresh = await probeSession();
+            if (!cancelled) {
+                if (fresh) accept(fresh);
+                setLoading(false);
+            }
         };
 
         checkAuth();
-    }, []);
+        return () => {
+            cancelled = true;
+        };
+    }, [accept]);
 
     // Login
-    const login = async (username, password, rememberMe = false) => {
+    const login = async (username, password, rememberMe = true) => {
         const data = await authService.login(username, password, rememberMe);
-        setUser(data.user);
-        setToken(data.token);
-        setIsAuthenticated(true);
+        accept(data.user);
         return data;
     };
+
+    // Face ID / reset link: the server already set the cookie
+    const loginWithUser = useCallback((next) => accept(next), [accept]);
 
     // Logout - this device stops getting this account's reminders; account-specific
     // leftovers in the browser go too, so the next person starts clean
@@ -67,23 +98,22 @@ export function AuthProvider({ children }) {
         } catch {
             // storage blocked - nothing to clean
         }
-        authService.logout();
         setUser(null);
-        setToken(null);
         setIsAuthenticated(false);
+        await authService.logout();
     };
 
     const updateUser = useCallback((next) => {
         setUser(next);
-        storeUser(next);
+        authService.storeUser(next);
     }, []);
 
     const value = {
         user,
-        token,
         loading,
         isAuthenticated,
         login,
+        loginWithUser,
         logout,
         updateUser
     };

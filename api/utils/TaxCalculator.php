@@ -1,21 +1,48 @@
 <?php
 /**
  * Tax Calculator - Net Amount Calculations
- * Calculates net amounts after KUP, taxes, and Use.me commission
+ * Calculates net amounts after Use.me commission, KUP and taxes.
+ * Same rules as getTaxBreakdown() in frontend/src/utils/format.js - change both together.
  */
 
 class TaxCalculator
 {
+    /**
+     * Use.me "Flex" fee per job: percent of the job value, between min and max.
+     * The price list changed on 2026-10-01 - collaborations keep the rate of their date.
+     */
+    const USEME_RATES = [
+        ['from' => '2026-10-01', 'percent' => 0.098, 'min' => 19, 'max' => 249],
+        ['from' => '0000-00-00', 'percent' => 0.078, 'min' => 29, 'max' => 349],
+    ];
 
+    public static function usemeRate($date = null)
+    {
+        $date = $date ?: date('Y-m-d');
+        foreach (self::USEME_RATES as $rate) {
+            if ($date >= $rate['from']) {
+                return $rate;
+            }
+        }
+        return self::USEME_RATES[count(self::USEME_RATES) - 1];
+    }
+
+    public static function usemeCommission($gross, $date = null)
+    {
+        $rate = self::usemeRate($date);
+        $commission = min($rate['max'], max($rate['min'], $gross * $rate['percent']));
+        return min($commission, $gross);
+    }
 
     /**
      * Get breakdown of all deductions
-     * 
+     *
      * @param float $gross
      * @param string $type
+     * @param string|null $date collaboration date (YYYY-MM-DD) - picks the Use.me price list
      * @return array Breakdown with commission, kup, tax, net
      */
-    public static function getBreakdown($gross, $type)
+    public static function getBreakdown($gross, $type, $date = null)
     {
         $breakdown = [
             'gross' => $gross,
@@ -39,12 +66,14 @@ class TaxCalculator
 
             case 'useme_50':
             case 'useme_20':
-                $breakdown['commission'] = max(29, $gross * 0.078);
+                // Use.me takes its fee first; the contract (and the tax) is on what is left
+                $breakdown['commission'] = self::usemeCommission($gross, $date);
+                $afterCommission = $gross - $breakdown['commission'];
                 $kupPercent = ($type === 'useme_50') ? 0.50 : 0.20;
-                $breakdown['kup'] = $gross * $kupPercent;
-                $income = $gross - $breakdown['kup'];
+                $breakdown['kup'] = $afterCommission * $kupPercent;
+                $income = $afterCommission - $breakdown['kup'];
                 $breakdown['tax'] = $income * 0.12;
-                $breakdown['net'] = $gross - $breakdown['commission'] - $breakdown['tax'];
+                $breakdown['net'] = $afterCommission - $breakdown['tax'];
                 break;
 
             case 'umowa_praca':
@@ -84,9 +113,9 @@ class TaxCalculator
      * Calculate net amount based on collaboration type
      * Wrapper for getBreakdown
      */
-    public static function calculateNet($gross, $type)
+    public static function calculateNet($gross, $type, $date = null)
     {
-        $breakdown = self::getBreakdown($gross, $type);
+        $breakdown = self::getBreakdown($gross, $type, $date);
         return $breakdown['net'];
     }
 }

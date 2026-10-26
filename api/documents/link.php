@@ -54,6 +54,14 @@ try {
     $sql = "UPDATE documents SET collaboration_id = ?, collab_dismissed = 0 WHERE user_id = ? AND id IN ($placeholders)";
     $conn->prepare($sql)->execute(array_merge([$collabId, $userId], $ids));
 
+    // Deadlines from the contract fill the collaboration's empty ones
+    require_once __DIR__ . '/../collaborations/helpers.php';
+    $stmt = $conn->prepare("SELECT terms FROM documents WHERE user_id = ? AND id IN ($placeholders) AND terms IS NOT NULL");
+    $stmt->execute(array_merge([$userId], $ids));
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $json) {
+        collabApplyTerms($conn, $userId, $collabId, documentsTerms($json));
+    }
+
     Response::success(['collaboration_id' => $collabId, 'document_ids' => $ids], 'Połączono ze współpracą');
 
 } catch (Exception $e) {

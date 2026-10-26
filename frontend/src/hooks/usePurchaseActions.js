@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { apiRequest } from '../utils/api';
 import { useToast } from '../context/ToastContext';
 import { useDashboard } from '../context/DashboardContext';
+import { getTodayDate } from '../utils/format';
 
 /**
  * One-tap purchase decisions with undo:
@@ -64,9 +65,10 @@ export function usePurchaseActions({ onChange } = {}) {
     );
 
     const settle = useCallback(
-        async (toReturn, toKeep) => {
+        async (toReturn, toKeep, returnCost = null) => {
             const patches = [
-                ...toReturn.map((p) => [p, { status: 'returned', returned_amount: Number(p.amount) || 0, kept_confirmed: 0 }]),
+                // the parcel's postage goes on its first item
+                ...toReturn.map((p, i) => [p, { status: 'returned', returned_amount: Number(p.amount) || 0, kept_confirmed: 0, ...(i === 0 && returnCost !== null ? { return_cost: returnCost } : {}) }]),
                 ...toKeep.map((p) => [p, { kept_confirmed: 1 }]),
             ];
             const done = [];
@@ -85,7 +87,7 @@ export function usePurchaseActions({ onChange } = {}) {
             const back = toReturn.filter((p) => done.includes(p));
             const sum = back.reduce((s, p) => s + (Number(p.amount) || 0), 0);
             const undo = () =>
-                done.forEach((p) => update(p, back.includes(p) ? { status: 'kept', returned_amount: 0, kept_confirmed: 0 } : { kept_confirmed: 0 }));
+                done.forEach((p) => update(p, back.includes(p) ? { status: 'kept', returned_amount: 0, kept_confirmed: 0, return_cost: null } : { kept_confirmed: 0 }));
             toast.success(
                 back.length
                     ? `Zwrot: ${back.length} ${back.length === 1 ? 'rzecz' : 'rzeczy'} · ${sum.toLocaleString('pl-PL')} zł`
@@ -97,7 +99,33 @@ export function usePurchaseActions({ onChange } = {}) {
         [onChange, refresh, toast, update]
     );
 
-    return { update, returned, keep, settle, busyId };
+    /** "Paczka przyszła dziś" for a whole parcel - the return window starts again from today. */
+    const delivered = useCallback(
+        async (items) => {
+            const today = getTodayDate();
+            for (const p of items) await update(p, { delivered_at: today });
+            toast.success('Termin zwrotu liczę od dziś', {
+                duration: 5000,
+                action: { label: 'Cofnij', onClick: () => items.forEach((p) => update(p, { delivered_at: null })) },
+            });
+        },
+        [toast, update]
+    );
+
+    /** "Pieniądze są": the refund is on the account. */
+    const refunded = useCallback(
+        async (items) => {
+            for (const p of items) await update(p, { refunded_at: 'today' });
+            const sum = items.reduce((s, p) => s + Math.max(0, (Number(p.returned_amount) || 0) - (Number(p.return_cost) || 0)), 0);
+            toast.success(`+${sum.toLocaleString('pl-PL')} zł wróciło`, {
+                duration: 5000,
+                action: { label: 'Cofnij', onClick: () => items.forEach((p) => update(p, { refunded_at: null })) },
+            });
+        },
+        [toast, update]
+    );
+
+    return { update, returned, keep, settle, delivered, refunded, busyId };
 }
 
 function shortName(p) {
