@@ -212,21 +212,6 @@ class Schema
                 INDEX idx_user_open (user_id, done_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
-        // Face ID / Touch ID logins (WebAuthn passkeys)
-        'passkeys' => "
-            CREATE TABLE IF NOT EXISTS passkeys (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                credential_id VARCHAR(255) NOT NULL,
-                public_key TEXT NOT NULL,
-                sign_count INT UNSIGNED NOT NULL DEFAULT 0,
-                name VARCHAR(100) NOT NULL DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_used_at DATETIME NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                UNIQUE KEY idx_credential (credential_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ",
         'social_refresh_log' => "
             CREATE TABLE IF NOT EXISTS social_refresh_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -269,8 +254,6 @@ class Schema
         'collaborations.publish_by' => "ALTER TABLE collaborations ADD COLUMN publish_by DATE NULL DEFAULT NULL",
         'collaborations.published_at' => "ALTER TABLE collaborations ADD COLUMN published_at DATE NULL DEFAULT NULL",
         'collaborations.payment_days' => "ALTER TABLE collaborations ADD COLUMN payment_days SMALLINT NULL DEFAULT NULL",
-        // "Rozbij na kroki": small steps of a task (JSON [{text, done}])
-        'tasks.steps' => "ALTER TABLE tasks ADD COLUMN steps TEXT NULL",
     ];
 
     /**
@@ -328,5 +311,24 @@ class Schema
             $conn->exec(self::$definitions[$table]);
         }
         self::$ensured[$table] = true;
+    }
+
+    /**
+     * Every table and late column at once - used by api/utils/repair_schema.php.
+     * Returns what was checked, for the report.
+     */
+    public static function ensureAll(PDO $conn)
+    {
+        $done = [];
+        foreach (array_keys(self::$definitions) as $table) {
+            self::ensure($conn, $table);
+            $done[] = $table;
+        }
+        foreach (array_keys(self::$columns) as $key) {
+            list($table, $column) = explode('.', $key, 2);
+            self::ensureColumn($conn, $table, $column);
+            $done[] = $key;
+        }
+        return $done;
     }
 }

@@ -1,19 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LogIn, Eye, EyeOff, ScanFace } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import Field from '../components/ui/Field';
 import Logo from '../components/ui/Logo';
-import {
-    declinePasskeyOffer,
-    isCancelled,
-    loginWithPasskey,
-    passkeyOnThisDevice,
-    passkeysSupported,
-    registerPasskey,
-    shouldOfferPasskey,
-} from '../services/passkeys';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -22,17 +13,11 @@ export default function Login() {
     const [rememberMe, setRememberMe] = useState(true);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [faceId, setFaceId] = useState(false); // this device can do Face ID / Touch ID
-    const [offer, setOffer] = useState(false); // after a password login: "Logować się Face ID?"
 
-    const { login, loginWithUser } = useAuth();
+    const { login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const from = location.state?.from?.pathname || '/';
-
-    useEffect(() => {
-        passkeysSupported().then(setFaceId);
-    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -40,10 +25,6 @@ export default function Login() {
         setLoading(true);
         try {
             await login(username.trim(), password, rememberMe);
-            if (faceId && shouldOfferPasskey()) {
-                setOffer(true);
-                return;
-            }
             navigate(from, { replace: true });
         } catch (err) {
             setError(err.message || 'Nieprawidłowy login lub hasło');
@@ -51,61 +32,6 @@ export default function Login() {
             setLoading(false);
         }
     };
-
-    const handleFaceId = async () => {
-        setError('');
-        setLoading(true);
-        try {
-            const user = await loginWithPasskey();
-            loginWithUser(user);
-            navigate(from, { replace: true });
-        } catch (err) {
-            if (!isCancelled(err)) setError(err.message || 'Nie udało się zalogować Face ID. Zaloguj się hasłem.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const enableFaceId = async () => {
-        setLoading(true);
-        try {
-            await registerPasskey();
-        } catch (err) {
-            if (!isCancelled(err)) declinePasskeyOffer();
-        } finally {
-            setLoading(false);
-            navigate(from, { replace: true });
-        }
-    };
-
-    if (offer) {
-        return (
-            <AuthShell>
-                <div className="text-center">
-                    <div className="mx-auto w-14 h-14 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mb-4">
-                        <ScanFace size={28} />
-                    </div>
-                    <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">Logować się Face ID?</h1>
-                    <p className="text-sm text-ink-muted mt-1 mb-6">Bez wpisywania hasła — wystarczy spojrzeć na telefon.</p>
-                    <Button variant="primary" size="lg" block icon={ScanFace} loading={loading} onClick={enableFaceId}>
-                        Włącz Face ID
-                    </Button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            declinePasskeyOffer();
-                            navigate(from, { replace: true });
-                        }}
-                        className="mt-3 w-full h-11 text-sm font-semibold text-ink-muted hover:text-ink"
-                    >
-                        Nie teraz
-                    </button>
-                </div>
-            </AuthShell>
-        );
-    }
-
-    const faceIdFirst = faceId && passkeyOnThisDevice();
 
     return (
         <AuthShell>
@@ -118,17 +44,6 @@ export default function Login() {
             </div>
 
             {error && <div className="mb-4 bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm border border-red-100">{error}</div>}
-
-            {faceIdFirst && (
-                <>
-                    <Button variant="primary" size="lg" block icon={ScanFace} loading={loading} onClick={handleFaceId}>
-                        Zaloguj Face ID
-                    </Button>
-                    <div className="my-5 flex items-center gap-3 text-xs text-ink-muted">
-                        <span className="h-px flex-1 bg-line" /> albo hasłem <span className="h-px flex-1 bg-line" />
-                    </div>
-                </>
-            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <Field label="Login">
@@ -178,7 +93,7 @@ export default function Login() {
                     </Link>
                 </div>
 
-                <Button type="submit" variant={faceIdFirst ? 'secondary' : 'primary'} size="lg" block icon={LogIn} loading={loading && !faceIdFirst}>
+                <Button type="submit" variant="primary" size="lg" block icon={LogIn} loading={loading}>
                     Zaloguj się
                 </Button>
             </form>

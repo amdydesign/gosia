@@ -198,7 +198,7 @@ Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
 - ✅ Włączanie/wyłączanie dzwonkiem w nagłówku aplikacji
 
 ### Techniczne
-- ✅ Bezpieczne logowanie (JWT w ciasteczku HttpOnly, Face ID, limit prób)
+- ✅ Bezpieczne logowanie (JWT w ciasteczku HttpOnly, limit prób)
 - ✅ Mobile-first design
 - ✅ SPA z React Router
 - ✅ Responsywny layout
@@ -207,7 +207,6 @@ Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
 
 ### Logowanie
 - Sesja w ciasteczku **HttpOnly** (JavaScript go nie odczyta), z „Nie wylogowuj mnie” ważna **90 dni i odnawiana przy użyciu**. Stare wersje aplikacji przechodzą na ciasteczko same przy pierwszym otwarciu.
-- **Face ID / Touch ID** (passkeys, `api/config/Passkeys.php`, bez dodatkowych bibliotek): po zalogowaniu hasłem aplikacja proponuje włączenie; zarządzanie w Ustawienia → Logowanie.
 - **Limit prób**: 5 złych haseł na login z jednego adresu → 15 minut przerwy.
 - **„Nie pamiętam hasła”** wysyła prawdziwy link (ważny godzinę, jednorazowy) na e-mail z Ustawienia → Logowanie. Bez e-maila hasło ustawia administrator (Konta).
 - Nagłówek **CSP** w `.htaccess` (tylko własne skrypty) i skrypt motywu przeniesiony do `theme.js`.
@@ -240,7 +239,7 @@ Safari nie pozwala aplikacjom webowym odbierać udostępnień, więc działa to 
 Wyniki opublikowanej rolki ze **screena statystyk** (AI odczytuje wyświetlenia, polubienia, zapisania…) albo wpisane ręcznie; generator rolek opiera się najpierw na scenariuszach z największą liczbą wyświetleń. Prompter nie pozwala ekranowi zgasnąć, „Do Edits” kopiuje sam scenariusz do promptera w Instagram Edits.
 
 ### Start (ADHD)
-**Przegląd tygodnia** w poniedziałek i wtorek (wpłaty z zeszłego tygodnia, co czeka, terminy), **„Za trudne? Rozbij na kroki”** (AI dzieli zadanie na małe kroki, „Teraz” pokazuje jeden krok), kilka zaległych rzeczy zwiniętych w jeden wiersz z **„Wszystko na jutro”**, po „Opłacone” od razu suma miesiąca.
+**Przegląd tygodnia** w poniedziałek i wtorek (wpłaty z zeszłego tygodnia, co czeka, terminy), kilka zaległych rzeczy zwiniętych w jeden wiersz z **„Wszystko na jutro”**, po „Opłacone” od razu suma miesiąca.
 
 ## 🔔 Konfiguracja Powiadomień Push
 

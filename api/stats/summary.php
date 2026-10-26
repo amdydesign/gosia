@@ -127,7 +127,7 @@ try {
         FROM purchases
         WHERE user_id = :user_id AND YEAR(purchase_date) = :year
     ");
-    $stmt->execute($p);
+    $stmt->execute(['user_id' => $userId, 'year' => $year]);
     $pur = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
     $threshold = 120000;

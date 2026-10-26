@@ -6,5 +6,7 @@
     document.documentElement.dataset.theme = t;
     document.querySelector('meta[name="theme-color"]').setAttribute('content', t === 'dark' ? '#0b0b0d' : '#f3f3ef');
     document.documentElement.dataset.hideAmounts = localStorage.getItem('gonia.hideAmountsDefault') === '1' ? 'true' : 'false';
-  } catch (e) {}
+  } catch {
+    // no storage (private mode) - default look
+  }
 })();

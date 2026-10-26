@@ -40,7 +40,7 @@ export function clearSession() {
 }
 
 // Wrong password / expired link answer 401 too - that is not "logged out"
-const LOGIN_CALLS = ['/auth/login.php', '/auth/passkey/', '/auth/reset_password'];
+const LOGIN_CALLS = ['/auth/login.php', '/auth/reset_password'];
 
 function handleUnauthorized(endpoint) {
     if (LOGIN_CALLS.some((p) => endpoint.startsWith(p))) return false;

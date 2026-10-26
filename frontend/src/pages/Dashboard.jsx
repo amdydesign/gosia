@@ -15,7 +15,6 @@ import {
     FileText,
     ImagePlus,
     Lightbulb,
-    ListChecks,
     Loader2,
     Play,
     ShoppingBag,
@@ -36,7 +35,6 @@ import { formatCurrency, formatDateShort, formatWeekdayDate, greetingForHour, us
 import { imagesFromDataTransfer } from '../utils/images';
 import {
     SNOOZE_PRESETS,
-    breakDownTask,
     cancelSnooze,
     classifyNote,
     createIdea,
@@ -51,7 +49,6 @@ import {
     setPurchaseStatus,
     setSigned,
     setTaskDone,
-    setTaskSteps,
     snooze,
     undismissAgenda,
 } from '../services/agenda';
@@ -104,12 +101,6 @@ function useFlag(key) {
         });
     }, [key]);
     return [on, toggle];
-}
-
-/** First step of a task that is not done yet (index), or -1. */
-function currentStep(item) {
-    const steps = item?.steps || [];
-    return steps.findIndex((s) => !s.done);
 }
 
 /**
@@ -202,7 +193,6 @@ export default function Dashboard() {
                     onSkip={() => setSkip((s) => s + 1)}
                     actions={actions}
                     doneCount={done.length}
-                    aiEnabled={!!data?.ai?.enabled}
                 />
                 {!focus && <EarningsCard data={data} display="hidden lg:flex" />}
             </div>
@@ -334,23 +324,12 @@ function useAgendaActions() {
                 case 'payment':
                     run(item, () => markPaid(item.collab));
                     return;
-                case 'task': {
-                    const step = currentStep(item);
-                    if (step >= 0 && step < item.steps.length - 1) {
-                        // one small step at a time - the next one shows up in "Teraz"
-                        const steps = item.steps.map((s, i) => (i === step ? { ...s, done: true } : s));
-                        run(item, async () => {
-                            await setTaskSteps(item.task_id, steps);
-                            undoToast(`Krok ${step + 1} z ${steps.length} zrobiony`, () => setTaskSteps(item.task_id, item.steps));
-                        });
-                        return;
-                    }
+                case 'task':
                     run(item, async () => {
                         await setTaskDone(item.task_id, true);
                         undoToast('Ogarnięte!', () => setTaskDone(item.task_id, false));
                     });
                     return;
-                }
                 case 'return': {
                     const purchases = item.purchases || [];
                     run(item, async () => {
@@ -396,15 +375,6 @@ function useAgendaActions() {
             }
         },
         [markPaid, navigate, openInboxAs, run, undoToast]
-    );
-
-    const breakDown = useCallback(
-        (item, smaller = false) =>
-            run(item, async () => {
-                await breakDownTask(item.task_id, smaller);
-                toast.success(smaller ? 'Mniejsze kroki — zacznij od pierwszego' : 'Rozbite na kroki — zacznij od pierwszego');
-            }),
-        [run, toast]
     );
 
     const snoozeWith = useCallback(
@@ -509,7 +479,6 @@ function useAgendaActions() {
     return {
         busy,
         complete,
-        breakDown,
         snoozeTarget,
         setSnoozeTarget,
         snoozeWith,
@@ -562,7 +531,6 @@ const PRIMARY_LABEL = {
 
 function primaryLabel(item) {
     if (item.kind === 'term' && item.term_type === 'publish') return 'Zrobione';
-    if (item.kind === 'task' && currentStep(item) >= 0 && currentStep(item) < item.steps.length - 1) return 'Krok zrobiony';
     return PRIMARY_LABEL[item.kind] || 'Zrobione';
 }
 
@@ -572,7 +540,7 @@ function PrimaryIcon({ kind, size }) {
     return <Check size={size} strokeWidth={2.4} />;
 }
 
-function FocusCard({ item, canSkip, onSkip, actions, doneCount, aiEnabled }) {
+function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
     if (!item) {
         return (
             <section className="rounded-[28px] bg-accent text-on-accent p-6 lg:p-7 flex flex-col justify-center gap-2 min-h-[220px]">
@@ -589,19 +557,17 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount, aiEnabled }) {
 
     const busy = actions.busy === item.ref_key;
     const hours = item.kind === 'return' ? hoursLeft(item.deadline) : null;
-    const step = item.kind === 'task' ? currentStep(item) : -1;
-    const hasSteps = step >= 0;
 
     return (
         <section aria-labelledby="teraz-title" className="rounded-[28px] bg-accent text-on-accent p-5 lg:p-7 flex flex-col gap-3">
             <span className="text-xs font-semibold uppercase tracking-[0.08em] inline-flex items-center gap-2">
-                <Crosshair size={15} /> {hasSteps ? `Teraz · krok ${step + 1} z ${item.steps.length}` : 'Teraz · jedna rzecz'}
+                <Crosshair size={15} /> Teraz · jedna rzecz
             </span>
             <h2 id="teraz-title" className="font-display text-[24px] lg:text-[30px] font-semibold tracking-tight leading-[1.1]">
-                {hasSteps ? item.steps[step].text : item.title}
+                {item.title}
             </h2>
             <p className="text-[15px]">
-                {hasSteps ? item.title : item.meta}
+                {item.meta}
                 {item.amount > 0 && (
                     <>
                         {' · '}
@@ -610,14 +576,6 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount, aiEnabled }) {
                     </>
                 )}
             </p>
-
-            {hasSteps && (
-                <div className="flex gap-1.5" aria-hidden="true">
-                    {item.steps.map((s, i) => (
-                        <span key={i} className={`h-2 flex-1 rounded-full ${s.done ? 'bg-on-accent' : 'bg-black/15'}`} />
-                    ))}
-                </div>
-            )}
 
             {item.kind === 'return' && (
                 <div className="mt-1">
@@ -654,12 +612,7 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount, aiEnabled }) {
                         Część zostawiam
                     </Link>
                 )}
-                {item.kind === 'task' && aiEnabled && (
-                    <button type="button" onClick={() => actions.breakDown(item, hasSteps)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2 inline-flex items-center gap-1">
-                        <ListChecks size={15} /> {hasSteps ? 'Jeszcze mniejsze kroki' : 'Za trudne? Rozbij na kroki'}
-                    </button>
-                )}
-                {item.kind === 'task' && !aiEnabled && (
+                {item.kind === 'task' && (
                     <button type="button" onClick={() => actions.removeTask(item)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2">
                         Usuń
                     </button>

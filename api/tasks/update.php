@@ -23,7 +23,6 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     Schema::ensure($conn, 'tasks');
-    Schema::ensureColumn($conn, 'tasks', 'steps');
 
     $stmt = $conn->prepare("SELECT id, title FROM tasks WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
@@ -45,18 +44,6 @@ try {
     if (array_key_exists('due_date', $input)) {
         $fields[] = 'due_date = :due_date';
         $params['due_date'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $input['due_date']) ? $input['due_date'] : null;
-    }
-    // "Rozbij na kroki": [{text, done}], null removes the steps
-    if (array_key_exists('steps', $input)) {
-        $steps = [];
-        foreach ((array) $input['steps'] as $step) {
-            $text = trim((string) ($step['text'] ?? ''));
-            if ($text !== '') {
-                $steps[] = ['text' => mb_substr($text, 0, 200), 'done' => !empty($step['done'])];
-            }
-        }
-        $fields[] = 'steps = :steps';
-        $params['steps'] = $steps ? json_encode(array_slice($steps, 0, 12), JSON_UNESCAPED_UNICODE) : null;
     }
     if ($fields) {
         $conn->prepare("UPDATE tasks SET " . implode(', ', $fields) . " WHERE id = :id")->execute($params);

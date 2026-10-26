@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ScanFace, Trash2, HardDrive, Share, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
+import { KeyRound, Trash2, HardDrive, Share, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Logo from '../ui/Logo';
 import Switch from '../ui/Switch';
@@ -255,11 +255,11 @@ export default function SettingsSheet({ open, onClose }) {
                     )}
                     <button type="button" onClick={() => setSecurityOpen(true)} className="row w-full text-left hover:bg-surface-2">
                         <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <ScanFace size={18} />
+                            <KeyRound size={18} />
                         </span>
                         <span className="flex-1 min-w-0">
                             <span className="block text-sm font-semibold text-ink">Logowanie</span>
-                            <span className="block text-xs text-ink-muted">Face ID, e-mail do odzyskania, hasło</span>
+                            <span className="block text-xs text-ink-muted">E-mail do odzyskania, hasło</span>
                         </span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>

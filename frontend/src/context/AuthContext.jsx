@@ -84,7 +84,7 @@ export function AuthProvider({ children }) {
         return data;
     };
 
-    // Face ID / reset link: the server already set the cookie
+    // Reset link: the server already set the cookie
     const loginWithUser = useCallback((next) => accept(next), [accept]);
 
     // Logout - this device stops getting this account's reminders; account-specific

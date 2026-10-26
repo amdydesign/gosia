@@ -324,14 +324,13 @@ class TodayAgenda
         }
     }
 
-    /** Tasks from "Zrzuć tutaj" (with small steps when broken down). */
+    /** Tasks from "Zrzuć tutaj". */
     private static function tasks(PDO $conn, $userId, $today, array &$items)
     {
         try {
             Schema::ensure($conn, 'tasks');
-            Schema::ensureColumn($conn, 'tasks', 'steps');
             $stmt = $conn->prepare("
-                SELECT id, title, due_date, steps, DATEDIFF(due_date, :today) AS days
+                SELECT id, title, due_date, DATEDIFF(due_date, :today) AS days
                 FROM tasks
                 WHERE user_id = :user_id AND done_at IS NULL AND (due_date IS NULL OR due_date <= :soon)
                 ORDER BY due_date IS NULL, due_date ASC, id ASC
@@ -341,14 +340,6 @@ class TodayAgenda
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $days = $row['due_date'] === null ? null : (int) $row['days'];
                 $meta = $days === null ? 'bez terminu' : ($days < 0 ? 'po terminie' : ($days === 0 ? 'na dziś' : ($days === 1 ? 'na jutro' : 'za ' . $days . ' dni')));
-                $steps = json_decode((string) $row['steps'], true);
-                $steps = is_array($steps) ? array_values($steps) : [];
-                if ($steps) {
-                    $doneSteps = count(array_filter($steps, function ($s) {
-                        return !empty($s['done']);
-                    }));
-                    $meta = 'krok ' . min(count($steps), $doneSteps + 1) . ' z ' . count($steps) . ' · ' . $meta;
-                }
                 $items[] = [
                     'kind' => 'task',
                     'ref_key' => 'task:' . $row['id'],
@@ -359,7 +350,6 @@ class TodayAgenda
                     'days' => $days,
                     'late' => $days !== null && $days < 0,
                     'task_id' => (int) $row['id'],
-                    'steps' => $steps,
                     'url' => '/dashboard',
                     'bucket' => $days === null || $days <= 0 ? 'today' : 'week',
                     'urgency' => $days === null ? 30 : ($days < 0 ? 75 : ($days === 0 ? 65 : 25)),

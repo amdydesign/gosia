@@ -53,7 +53,7 @@ try {
         RateLimit::wait($conn, 'login_ip', $ip, LOGIN_MAX_TRIES_IP, LOGIN_PAUSE_MINUTES)
     );
     if ($wait > 0) {
-        Response::error('Za dużo prób. Spróbuj za ' . $wait . ' min albo zaloguj się Face ID.', 429);
+        Response::error('Za dużo prób. Spróbuj za ' . $wait . ' min.', 429);
     }
 
     // Find user by username

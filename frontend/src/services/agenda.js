@@ -84,15 +84,6 @@ export function planIdea(id, on) {
     return apiRequest(`/ideas/update.php?id=${id}`, 'PUT', { planned_for: on ? localToday() : null });
 }
 
-/** "Rozbij na kroki": AI splits the task into small steps (saved on the task). */
-export function breakDownTask(id, smaller = false) {
-    return apiRequest(`/tasks/breakdown.php?id=${id}`, 'POST', { smaller });
-}
-
-export function setTaskSteps(id, steps) {
-    return apiRequest(`/tasks/update.php?id=${id}`, 'PUT', { steps });
-}
-
 /** "OK, wiem" for good-to-know dates (end of exclusivity, licence) and the weekly review. */
 export function dismissAgenda(refKey, title = '') {
     return apiRequest('/agenda/dismiss.php', 'POST', { ref_key: refKey, title });
