@@ -10,7 +10,6 @@ const REELS_TOPICS = 3;
 // AI proposes more than it shows: the ones too close to her ideas, recorded reels
 // or earlier suggestions are thrown out on the server (the model alone still repeats)
 const REELS_TOPIC_CANDIDATES = 6;
-const REELS_SEEN_KEEP = 300;
 const REELS_EXAMPLES = 15;
 // Picking 3 topics is light work; the script itself uses AiClient::writeIdeas defaults (medium effort)
 const REELS_TOPICS_OPTIONS = ['effort' => 'low', 'max_tokens' => 4000];
@@ -69,14 +68,14 @@ function reelExamples(PDO $conn, $userId)
 
 /**
  * Everything that must not come back: her ideas (recorded first), topics shown before
- * (kept on the server, so a new tab or phone doesn't start over) and this tab's list.
+ * (all of them, kept on the server - a new tab or phone doesn't start over) and this tab's list.
  * @return array [['title' => ..., 'recorded' => bool], ...]
  */
 function reelTaken(PDO $conn, $userId, array $exclude = [])
 {
     $stmt = $conn->prepare("
         SELECT title, status FROM ideas WHERE user_id = :user_id
-        ORDER BY status = 'recorded' DESC, created_at DESC LIMIT 1000
+        ORDER BY status = 'recorded' DESC, created_at DESC
     ");
     $stmt->execute(['user_id' => $userId]);
     $taken = [];
@@ -84,7 +83,7 @@ function reelTaken(PDO $conn, $userId, array $exclude = [])
         $taken[] = ['title' => $row['title'], 'recorded' => $row['status'] === 'recorded'];
     }
     Schema::ensure($conn, 'reel_topics_seen');
-    $stmt = $conn->prepare("SELECT title FROM reel_topics_seen WHERE user_id = :user_id ORDER BY shown_at DESC LIMIT " . REELS_SEEN_KEEP);
+    $stmt = $conn->prepare("SELECT title FROM reel_topics_seen WHERE user_id = :user_id ORDER BY shown_at DESC");
     $stmt->execute(['user_id' => $userId]);
     foreach (array_merge($stmt->fetchAll(PDO::FETCH_COLUMN), $exclude) as $title) {
         $taken[] = ['title' => (string) $title, 'recorded' => false];
@@ -102,20 +101,13 @@ function reelTakenTopics(PDO $conn, $userId, array $exclude = [])
     return "Tematy, które już mam albo już widziałam (nie powtarzaj ich ani pod innym tytułem):\n- " . implode("\n- ", $lines);
 }
 
-/** Topics shown now - remembered so they are not offered again. */
+/** Topics shown now - remembered for good, so they are never offered again. */
 function reelRememberTopics(PDO $conn, $userId, array $titles)
 {
     Schema::ensure($conn, 'reel_topics_seen');
     $stmt = $conn->prepare("INSERT INTO reel_topics_seen (user_id, title, shown_at) VALUES (:user_id, :title, :at)");
     foreach ($titles as $title) {
         $stmt->execute(['user_id' => $userId, 'title' => mb_substr($title, 0, 255), 'at' => date('Y-m-d H:i:s')]);
-    }
-    if (mt_rand(1, 20) === 1) {
-        $conn->prepare("
-            DELETE FROM reel_topics_seen WHERE user_id = :user_id AND id NOT IN (
-                SELECT id FROM (SELECT id FROM reel_topics_seen WHERE user_id = :user_id2 ORDER BY shown_at DESC, id DESC LIMIT " . REELS_SEEN_KEEP . ") AS keep
-            )
-        ")->execute(['user_id' => $userId, 'user_id2' => $userId]);
     }
 }
 
