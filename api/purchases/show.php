@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -30,9 +31,9 @@ try {
         SELECT 
             id, store, items, purchase_date, return_days, 
             amount, returned_amount, purchase_url, notes, status, kept_confirmed, 
-            DATE_ADD(purchase_date, INTERVAL return_days DAY) as return_deadline,
-            DATEDIFF(DATE_ADD(purchase_date, INTERVAL return_days DAY), CURDATE()) as days_remaining,
-            created_at, returned_at
+            " . PURCHASE_DEADLINE_SQL . " as return_deadline,
+            DATEDIFF(" . PURCHASE_DEADLINE_SQL . ", CURDATE()) as days_remaining,
+            created_at, returned_at, delivered_at, refunded_at, return_cost
         FROM purchases 
         WHERE id = :id AND user_id = :user_id
     ");

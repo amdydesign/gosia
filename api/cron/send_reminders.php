@@ -10,6 +10,7 @@
  *    when the summary is off),
  *  - overdue payments once a week,
  *  - ideas to record on Mondays and Thursdays.
+ * At night it also empties the bin (older than 30 days) and makes the backup (api/utils/Backup.php).
  * Every message is logged in push_log, so running often never repeats one.
  * Messages carry no amounts - the lock screen can be seen by others.
  *
@@ -26,6 +27,9 @@ require_once __DIR__ . '/../config/Schema.php';
 require_once __DIR__ . '/../config/PushPrefs.php';
 require_once __DIR__ . '/../config/Users.php';
 require_once __DIR__ . '/../utils/TodayAgenda.php';
+require_once __DIR__ . '/../utils/Trash.php';
+require_once __DIR__ . '/../utils/Backup.php';
+require_once __DIR__ . '/../inbox/helpers.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->safeLoad();
@@ -46,6 +50,17 @@ $dry = $isCli ? in_array('--dry', $argv ?? [], true) : !empty($_GET['dry']);
 const RETURNS_TIME = '12:00';
 
 if (!$dry && !WebPush::isConfigured()) {
+    // no push yet - the nightly jobs still run
+    try {
+        $db = new Database();
+        $conn = $db->getConnection();
+        if (date('H:i') < '00:15') {
+            Trash::purge($conn);
+        }
+        Backup::runIfDue($conn, new DateTime());
+    } catch (Exception $e) {
+        // reported by Backup itself
+    }
     $msg = 'VAPID keys not configured - nothing to send';
     echo $isCli ? $msg . "\n" : json_encode(['success' => false, 'message' => $msg]);
     exit;
@@ -203,11 +218,20 @@ try {
     if (!$dry && $now->format('H:i') < '00:15') {
         $conn->exec("DELETE FROM push_log WHERE sent_at < DATE_SUB(NOW(), INTERVAL 60 DAY)");
         $conn->exec("DELETE FROM reminders WHERE sent_at IS NOT NULL AND sent_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        // Kosz: older than 30 days goes for good (and handled inbox screens)
+        Trash::purge($conn);
+        inboxPurge($conn);
     }
 
-    $summary = ['success' => true, 'dry' => $dry, 'time' => $now->format('Y-m-d H:i'), 'users' => count($userIds), 'messages' => $report];
+    // Nightly backup (03:00-05:59, once a day; files on Sundays)
+    $backup = $dry ? null : Backup::runIfDue($conn, $now);
+
+    $summary = ['success' => true, 'dry' => $dry, 'time' => $now->format('Y-m-d H:i'), 'users' => count($userIds), 'messages' => $report, 'backup' => $backup];
     if ($isCli) {
         echo ($dry ? '[dry] ' : '') . 'Done ' . $summary['time'] . '. Users: ' . count($userIds) . ', messages: ' . count($report) . "\n";
+        if ($backup) {
+            echo ' - backup: ' . ($backup['ok'] ? 'OK ' . implode(', ', $backup['files']) : 'BŁĄD ' . $backup['error']) . "\n";
+        }
         foreach ($report as $r) {
             echo " - u{$r['user']} {$r['title']}: {$r['body']} (delivered {$r['delivered']})\n";
         }
@@ -231,6 +255,9 @@ function whenText(array $item)
     }
     if ($item['kind'] === 'task' && $item['late']) {
         return ' (po terminie)';
+    }
+    if ($item['kind'] === 'publish') {
+        return $item['days'] < 0 ? ' (termin minął)' : ($item['days'] === 0 ? ' (dziś)' : ($item['days'] === 1 ? ' (jutro)' : ''));
     }
     return '';
 }

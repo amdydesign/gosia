@@ -1,33 +1,18 @@
 /**
- * API Service - Base configuration and request handling
+ * API Service - axios client for the older services (same cookie login as utils/api.js).
  */
 
 import axios from 'axios';
+import { APP_HEADERS, clearSession } from '../utils/api';
 
-// Base URL - empty for same-origin (will use proxy in dev, same domain in prod)
-const API_BASE_URL = '/api';
-
-// Create axios instance
 const api = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: '/api',
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
+        ...APP_HEADERS,
     },
 });
-
-// Request interceptor - add auth token
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
 
 // Response interceptor - handle errors
 api.interceptors.response.use(
@@ -35,12 +20,9 @@ api.interceptors.response.use(
     (error) => {
         if (error.response) {
             // Server responded with error
-            if (error.response.status === 401) {
-                // Unauthorized - clear token from both storages and redirect to login
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                sessionStorage.removeItem('token');
-                sessionStorage.removeItem('user');
+            const url = error.config?.url || '';
+            if (error.response.status === 401 && !url.startsWith('/auth/')) {
+                clearSession();
                 window.location.href = '/login';
             }
             throw error.response.data;

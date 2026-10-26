@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
     Response::error('Method not allowed', 405);
@@ -24,10 +25,13 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
+    Schema::ensureCollaborations($conn);
+
     // Verify ownership
-    $stmt = $conn->prepare("SELECT id FROM collaborations WHERE id = :id AND user_id = :user_id");
+    $stmt = $conn->prepare("SELECT id, payment_status, paid_at FROM collaborations WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
-    if ($stmt->rowCount() == 0)
+    $current = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$current)
         Response::error('Not found', 404);
 
     $conn->beginTransaction();
@@ -73,6 +77,20 @@ try {
         $params['fiscal_tracking'] = $input['fiscal_tracking'] ? 1 : 0;
     }
 
+    $deadlines = collabDeadlineInput($input);
+    // "Opłacone" stamps the day the money came in; back to unpaid clears it
+    if (isset($input['payment_status'])) {
+        if ($input['payment_status'] !== 'paid') {
+            $deadlines['paid_at'] = null;
+        } elseif (empty($deadlines['paid_at'])) {
+            $deadlines['paid_at'] = $current['payment_status'] === 'paid' && $current['paid_at'] ? $current['paid_at'] : date('Y-m-d');
+        }
+    }
+    foreach ($deadlines as $column => $value) {
+        $fields[] = "$column = :$column";
+        $params[$column] = $value;
+    }
+
     if (!empty($fields)) {
         $sql = "UPDATE collaborations SET " . implode(', ', $fields) . " WHERE id = :id";
         $stmt = $conn->prepare($sql);
@@ -113,6 +131,16 @@ try {
             DoneLog::record($conn, $userId, 'collab:' . $id, 'Płatność ' . ($row->fetchColumn() ?: ''));
         } else {
             DoneLog::forget($conn, $userId, 'collab:' . $id);
+        }
+    }
+    if (array_key_exists('published_at', $deadlines)) {
+        require_once __DIR__ . '/../utils/DoneLog.php';
+        if ($deadlines['published_at']) {
+            $row = $conn->prepare("SELECT brand FROM collaborations WHERE id = :id");
+            $row->execute(['id' => $id]);
+            DoneLog::record($conn, $userId, 'publish:' . $id, 'Opublikowane dla ' . ($row->fetchColumn() ?: ''));
+        } else {
+            DoneLog::forget($conn, $userId, 'publish:' . $id);
         }
     }
 

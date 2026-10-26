@@ -198,10 +198,49 @@ Po zalogowaniu zmień hasło w aplikacji (Ustawienia → Zmień hasło).
 - ✅ Włączanie/wyłączanie dzwonkiem w nagłówku aplikacji
 
 ### Techniczne
-- ✅ Bezpieczne logowanie (JWT)
+- ✅ Bezpieczne logowanie (JWT w ciasteczku HttpOnly, Face ID, limit prób)
 - ✅ Mobile-first design
 - ✅ SPA z React Router
 - ✅ Responsywny layout
+
+## 🆕 Wersja z października 2026
+
+### Logowanie
+- Sesja w ciasteczku **HttpOnly** (JavaScript go nie odczyta), z „Nie wylogowuj mnie” ważna **90 dni i odnawiana przy użyciu**. Stare wersje aplikacji przechodzą na ciasteczko same przy pierwszym otwarciu.
+- **Face ID / Touch ID** (passkeys, `api/config/Passkeys.php`, bez dodatkowych bibliotek): po zalogowaniu hasłem aplikacja proponuje włączenie; zarządzanie w Ustawienia → Logowanie.
+- **Limit prób**: 5 złych haseł na login z jednego adresu → 15 minut przerwy.
+- **„Nie pamiętam hasła”** wysyła prawdziwy link (ważny godzinę, jednorazowy) na e-mail z Ustawienia → Logowanie. Bez e-maila hasło ustawia administrator (Konta).
+- Nagłówek **CSP** w `.htaccess` (tylko własne skrypty) i skrypt motywu przeniesiony do `theme.js`.
+
+### Kosz zamiast „Czy na pewno?”
+Usunięcie współpracy, zakupu, pomysłu, dokumentu lub załącznika daje toast „Cofnij”. Rzeczy czekają 30 dni w **Ustawienia → Kosz** (`api/utils/Trash.php`), potem cron usuwa je na dobre.
+
+### Kopie zapasowe
+- Co noc (03:00, w ramach crona przypomnień — nic nie trzeba ustawiać) zrzut bazy do `api/backups/` (14 ostatnich), w niedziele także pliki z `api/uploads/` (2 ostatnie). Katalog jest zablokowany przed dostępem z sieci.
+- **Poza serwerem** (zalecane): uzupełnij `BACKUP_S3_*` w `api/.env` (np. Backblaze B2 — darmowe 10 GB) i `BACKUP_PASSWORD` (szyfrowanie AES-256; zapisz je też poza serwerem).
+- Status, „Zrób kopię teraz” i pobieranie: Ustawienia → Kopie zapasowe (admin). Gdy kopia się nie uda, admin dostaje push.
+- Ręcznie: `php api/cron/backup.php --files`, odtwarzanie: `php api/utils/restore_backup.php <plik>`.
+
+### Współprace — terminy
+- **Termin publikacji** (opcjonalny) i **płatność w 14 / 30 / 60 dni** („jak ostatnio” z tą marką). Termin przelewu liczy się od publikacji, a bez niej od daty współpracy; „po terminie” ustawia się samo.
+- Etap wynika z dat (do publikacji → czeka na przelew → po terminie), nic nie trzeba przeciągać. „Opublikowane” jednym kliknięciem na Starcie.
+- **Data wpłaty** zapisuje się sama przy „Opłacone” — „na rękę w miesiącu”, wykresy i próg podatkowy liczą się według dnia, w którym przyszły pieniądze.
+- **Use.me**: prowizja według daty współpracy (od 1.10.2026: 9,8%, min. 19 zł, maks. 249 zł; wcześniej 7,8%, 29–349 zł) — `TaxCalculator::USEME_RATES` i `USEME_RATES` w `format.js`.
+
+### Umowy — terminy z treści
+Analiza AI umowy wyciąga też: termin publikacji, płatność, **wyłączność** (do kiedy, czego dotyczy), **licencję na wizerunek**, liczbę poprawek, kary i zakres prac. Bez AI termin płatności („w terminie 14 dni”) czytany jest z tekstu. Warunki widać i poprawia się w karcie dokumentu; trafiają do połączonej współpracy, na Start (koniec wyłączności / licencji, publikacja) i jako ostrzeżenie w formularzu współpracy. Dokumenty „Do podpisu” są na liście „Na dziś”.
+
+### iPhone: Udostępnij → Gonia
+Safari nie pozwala aplikacjom webowym odbierać udostępnień, więc działa to przez aplikację **Skróty** (instrukcja i osobisty klucz: Ustawienia → Udostępnianie z iPhone’a; endpoint `api/inbox/upload.php`). Screen trafia do AI: zadanie i pomysł zapisują się od razu, zakup / współpraca / umowa czekają na Starcie jako „Ze screena” i otwierają formularz ze screenem. Screena można też wkleić lub dodać w polu „Zrzuć tutaj”.
+
+### Zwroty
+„Paczka przyszła dziś” (termin liczy się od dostawy), etap **„Czekam na pieniądze”** po odesłaniu — 14 dni później Start przypomina „Sprawdź konto” — i **koszt odesłania** („jak ostatnio” ze sklepem), odejmowany od „Odzyskane”.
+
+### Rolki
+Wyniki opublikowanej rolki ze **screena statystyk** (AI odczytuje wyświetlenia, polubienia, zapisania…) albo wpisane ręcznie; generator rolek opiera się najpierw na scenariuszach z największą liczbą wyświetleń. Prompter nie pozwala ekranowi zgasnąć, „Do Edits” kopiuje sam scenariusz do promptera w Instagram Edits.
+
+### Start (ADHD)
+**Przegląd tygodnia** w poniedziałek i wtorek (wpłaty z zeszłego tygodnia, co czeka, terminy), **„Za trudne? Rozbij na kroki”** (AI dzieli zadanie na małe kroki, „Teraz” pokazuje jeden krok), kilka zaległych rzeczy zwiniętych w jeden wiersz z **„Wszystko na jutro”**, po „Opłacone” od razu suma miesiąca.
 
 ## 🔔 Konfiguracja Powiadomień Push
 

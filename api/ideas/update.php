@@ -53,6 +53,28 @@ try {
         $fields[] = "planned_for = :planned_for";
         $params['planned_for'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $data->planned_for) ? $data->planned_for : null;
     }
+    // Published reel and its results (views + likes, comments... read from an insights screen)
+    if ($data && property_exists($data, 'published_at')) {
+        Schema::ensureColumns($conn, 'ideas');
+        $fields[] = "published_at = :published_at";
+        $params['published_at'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $data->published_at) ? $data->published_at : null;
+    }
+    if ($data && property_exists($data, 'views')) {
+        Schema::ensureColumns($conn, 'ideas');
+        $fields[] = "views = :views";
+        $params['views'] = $data->views === null || $data->views === '' ? null : max(0, (int) $data->views);
+    }
+    if ($data && property_exists($data, 'stats')) {
+        Schema::ensureColumns($conn, 'ideas');
+        $stats = [];
+        foreach (['likes', 'comments', 'shares', 'saves', 'reach', 'watch_time_s'] as $key) {
+            if (isset($data->stats->$key) && is_numeric($data->stats->$key) && $data->stats->$key >= 0) {
+                $stats[$key] = (int) $data->stats->$key;
+            }
+        }
+        $fields[] = "stats = :stats";
+        $params['stats'] = $stats ? json_encode($stats) : null;
+    }
     if (isset($data->status)) {
         $validStatuses = ['draft', 'recorded'];
         if (in_array($data->status, $validStatuses)) {

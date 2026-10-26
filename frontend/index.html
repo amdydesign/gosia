@@ -16,18 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <script>
-    // Theme before first paint (same keys as PreferencesContext)
-    (function () {
-      try {
-        var t = localStorage.getItem('gonia.theme') || 'auto';
-        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        document.documentElement.dataset.theme = t;
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', t === 'dark' ? '#0b0b0d' : '#f3f3ef');
-        document.documentElement.dataset.hideAmounts = localStorage.getItem('gonia.hideAmountsDefault') === '1' ? 'true' : 'false';
-      } catch (e) {}
-    })();
-  </script>
+  <script src="/theme.js"></script>
 </head>
 
 <body>

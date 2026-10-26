@@ -17,6 +17,7 @@ import ReelGenerator from '../../components/ideas/ReelGenerator';
 const FILTERS = [
     { value: 'draft', label: 'Do nagrania' },
     { value: 'recorded', label: 'Nagrane' },
+    { value: 'published', label: 'Wyniki' },
     { value: 'all', label: 'Wszystkie' },
 ];
 
@@ -57,6 +58,7 @@ export default function IdeaList() {
         () => ({
             draft: ideas.filter((i) => i.status === 'draft').length,
             recorded: ideas.filter((i) => i.status === 'recorded').length,
+            published: ideas.filter((i) => i.published_at).length,
             all: ideas.length,
         }),
         [ideas]
@@ -64,11 +66,13 @@ export default function IdeaList() {
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return ideas.filter((i) => {
-            if (filter !== 'all' && i.status !== filter) return false;
+        const list = ideas.filter((i) => {
+            if (filter === 'published' ? !i.published_at : filter !== 'all' && i.status !== filter) return false;
             if (q && !`${i.title} ${i.content || ''}`.toLowerCase().includes(q)) return false;
             return true;
         });
+        // "Wyniki": what worked best first
+        return filter === 'published' ? [...list].sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0)) : list;
     }, [ideas, filter, query]);
 
     const toggleStatus = async (idea) => {
@@ -163,7 +167,12 @@ export default function IdeaList() {
                                     <p className="text-sm text-ink-muted line-clamp-3 mt-1.5 flex-1">
                                         {idea.content || <span className="italic">Brak scenariusza…</span>}
                                     </p>
-                                    <div className="text-[11px] text-ink-muted mt-3">{formatDateShort(idea.created_at?.slice(0, 10))}</div>
+                                    <div className="text-[11px] text-ink-muted mt-3">
+                                        {idea.views !== null && idea.views !== undefined ? (
+                                            <span className="font-semibold text-ink">{Number(idea.views).toLocaleString('pl-PL')} wyświetleń · </span>
+                                        ) : null}
+                                        {formatDateShort((idea.published_at || idea.created_at)?.slice(0, 10))}
+                                    </div>
                                 </Link>
                                 <div className="flex items-center gap-2 px-3 pb-3">
                                     {!recorded && (

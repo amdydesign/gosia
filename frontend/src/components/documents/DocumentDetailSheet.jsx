@@ -6,6 +6,7 @@ import documentsService from '../../services/documents';
 import { documentThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency } from '../../utils/format';
+import ContractTerms from './ContractTerms';
 
 const PREVIEW_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
@@ -38,7 +39,7 @@ function Row({ icon, label, children }) {
 /**
  * Document card: first-page thumbnail, summary and all actions in one place.
  */
-export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onFilterBrand, onCreateCollab, onUnlinkCollab }) {
+export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onFilterBrand, onCreateCollab, onUnlinkCollab, onTermsSaved }) {
     const toast = useToast();
     const navigate = useNavigate();
     const [thumb, setThumb] = useState({ loading: true, data: null });
@@ -193,6 +194,8 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                         </>
                     )}
                 </div>
+
+                <ContractTerms key={doc.id} doc={doc} onSaved={onTermsSaved} />
 
                 {doc.notes && (
                     <div className="rounded-2xl bg-canvas border border-line p-3">

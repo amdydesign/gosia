@@ -2,7 +2,7 @@
 
 const CACHE_NAME = 'gonia-v1';
 const SHARE_CACHE = 'gosia-share';
-const PRECACHE = ['/', '/index.html', '/manifest.json'];
+const PRECACHE = ['/', '/index.html', '/manifest.json', '/theme.js'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(

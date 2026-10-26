@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { apiRequest } from '../utils/api';
 import { useToast } from '../context/ToastContext';
 import { useDashboard } from '../context/DashboardContext';
+import { formatCurrency } from '../utils/format';
 
 /**
  * One-tap "mark as paid" with undo. Returns { markPaid, setStatus, busyId }.
@@ -34,7 +35,11 @@ export function useMarkPaid() {
             const ok = await setStatus(collab.id, 'paid');
             if (!ok) return false;
             onChange?.(collab.id, 'paid');
-            toast.success(`${collab.brand} — oznaczono jako opłacone`, {
+            // a small reward right away: how much came in this month so far
+            const fresh = await refresh();
+            const monthNet = fresh?.financials?.month?.net;
+            const month = new Intl.DateTimeFormat('pl-PL', { month: 'long' }).format(new Date());
+            toast.success(monthNet > 0 ? `${collab.brand} — opłacone · w ${month} już ${formatCurrency(monthNet)} na rękę` : `${collab.brand} — opłacone`, {
                 duration: 5000,
                 action: {
                     label: 'Cofnij',
@@ -46,7 +51,7 @@ export function useMarkPaid() {
             });
             return true;
         },
-        [setStatus, toast]
+        [refresh, setStatus, toast]
     );
 
     return { markPaid, setStatus, busyId };

@@ -22,7 +22,7 @@ fs.rmSync(path.join(repoRoot, 'assets'), { recursive: true, force: true });
 fs.cpSync(path.join(buildDir, 'assets'), path.join(repoRoot, 'assets'), { recursive: true });
 
 // PWA + entry files
-for (const file of ['index.html', 'sw.js', 'manifest.json', 'vite.svg']) {
+for (const file of ['index.html', 'sw.js', 'manifest.json', 'vite.svg', 'theme.js']) {
     const src = path.join(buildDir, file);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(repoRoot, file));
 }

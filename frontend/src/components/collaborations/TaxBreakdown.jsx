@@ -1,10 +1,10 @@
 import { Wallet } from 'lucide-react';
-import { BILLING_TYPES, formatCurrency } from '../../utils/format';
+import { BILLING_TYPES, formatCurrency, usemeRateLabel } from '../../utils/format';
 
 /**
  * Read-only "na rękę" breakdown for a gross amount + billing type.
  */
-export default function TaxBreakdown({ breakdown, collabType, compact = false }) {
+export default function TaxBreakdown({ breakdown, collabType, date, compact = false }) {
     const config = BILLING_TYPES[collabType] || {};
     const isCash = !!config.private;
     const isUseme = !!config.useme;
@@ -26,7 +26,7 @@ export default function TaxBreakdown({ breakdown, collabType, compact = false })
                     <Line label="Kwota brutto" value={formatCurrency(breakdown.gross)} strong />
                     {isUseme && (
                         <>
-                            <Line label="Prowizja Use.me (7,8%, min. 29 zł)" value={`−${formatCurrency(d.commission)}`} />
+                            <Line label={`Prowizja Use.me (${usemeRateLabel(date)})`} value={`−${formatCurrency(d.commission)}`} />
                             <Line label="Po prowizji" value={formatCurrency(d.afterCommission)} strong />
                         </>
                     )}

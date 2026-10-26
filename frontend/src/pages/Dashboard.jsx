@@ -1,6 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Briefcase, CalendarCheck, CalendarX, Camera, Check, Clock, Crosshair, FileText, Lightbulb, Loader2, Play, Sparkles, Trash2, X } from 'lucide-react';
+import {
+    AlertCircle,
+    ArrowRight,
+    Briefcase,
+    CalendarCheck,
+    CalendarDays,
+    CalendarX,
+    Camera,
+    Check,
+    ChevronDown,
+    Clock,
+    Crosshair,
+    FileText,
+    ImagePlus,
+    Lightbulb,
+    ListChecks,
+    Loader2,
+    Play,
+    ShoppingBag,
+    Sparkles,
+    Trash2,
+    X,
+} from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import { useQuickActions } from '../context/QuickActionsContext';
 import { useToast } from '../context/ToastContext';
@@ -10,9 +32,11 @@ import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { formatCurrency, formatWeekdayDate, greetingForHour, userName } from '../utils/format';
+import { formatCurrency, formatDateShort, formatWeekdayDate, greetingForHour, userName } from '../utils/format';
+import { imagesFromDataTransfer } from '../utils/images';
 import {
     SNOOZE_PRESETS,
+    breakDownTask,
     cancelSnooze,
     classifyNote,
     createIdea,
@@ -20,17 +44,25 @@ import {
     deadlineLabel,
     deleteIdea,
     deleteTask,
+    dismissAgenda,
     hoursLeft,
     planIdea,
+    setPublished,
     setPurchaseStatus,
+    setSigned,
     setTaskDone,
+    setTaskSteps,
     snooze,
+    undismissAgenda,
 } from '../services/agenda';
+import { inboxFile, markInboxDone, reopenInbox, uploadToInbox } from '../services/inbox';
 import { setAppBadge } from '../services/push';
 
 const FOCUS_KEY = 'gonia.focus';
 const WEEK_OPEN_KEY = 'gonia.weekOpen';
 const SNOOZED_OPEN_KEY = 'gonia.snoozedOpen';
+const LATE_OPEN_KEY = 'gonia.lateOpen';
+const REVIEW_OPEN_KEY = 'gonia.reviewOpen';
 
 /** "przypomnę o 19:00" today, "jutro o 9:00" / "pt o 9:00" later. */
 function snoozeLabel(until) {
@@ -60,6 +92,24 @@ function writeFlag(key, on) {
     } catch {
         // ignore
     }
+}
+
+/** Remembered open / closed state (ADHD: back to the screen exactly as it was left). */
+function useFlag(key) {
+    const [on, setOn] = useState(() => readFlag(key));
+    const toggle = useCallback(() => {
+        setOn((o) => {
+            writeFlag(key, !o);
+            return !o;
+        });
+    }, [key]);
+    return [on, toggle];
+}
+
+/** First step of a task that is not done yet (index), or -1. */
+function currentStep(item) {
+    const steps = item?.steps || [];
+    return steps.findIndex((s) => !s.done);
 }
 
 /**
@@ -143,6 +193,8 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {!focus && data?.week_review && <WeekReview review={data.week_review} />}
+
             <div className={`grid grid-cols-1 gap-4 ${focus ? '' : 'lg:grid-cols-[1.6fr_1fr]'}`}>
                 <FocusCard
                     item={current}
@@ -150,6 +202,7 @@ export default function Dashboard() {
                     onSkip={() => setSkip((s) => s + 1)}
                     actions={actions}
                     doneCount={done.length}
+                    aiEnabled={!!data?.ai?.enabled}
                 />
                 {!focus && <EarningsCard data={data} display="hidden lg:flex" />}
             </div>
@@ -161,7 +214,7 @@ export default function Dashboard() {
             ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
                     <LaterList items={later} laterToday={laterToday} snoozed={snoozed} done={done} weekItems={weekItems} actions={actions} />
-                    <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} onPlan={actions.planIdeaToday} />
+                    <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} onPlan={actions.planIdeaToday} onInbox={actions.handleInboxResult} />
                     <MoneyCard data={data} />
                     {/* phone: earnings at the end, after what needs doing */}
                     <EarningsCard data={data} display="flex lg:hidden" />
@@ -173,8 +226,10 @@ export default function Dashboard() {
                 onPick={actions.snoozeWith}
                 onRemove={actions.removeTask}
                 onUnplan={actions.unplanIdea}
+                onDropInbox={actions.dropInbox}
                 onClose={() => actions.setSnoozeTarget(null)}
             />
+            <InboxChoiceSheet item={actions.inboxChoice} onPick={actions.openInboxAs} onDrop={actions.dropInbox} onClose={() => actions.setInboxChoice(null)} />
         </div>
     );
 }
@@ -186,8 +241,10 @@ function useAgendaActions() {
     const toast = useToast();
     const { refresh } = useDashboard();
     const { markPaid } = useMarkPaid();
+    const { openCollab, openPurchase } = useQuickActions();
     const [busy, setBusy] = useState(null);
     const [snoozeTarget, setSnoozeTarget] = useState(null);
+    const [inboxChoice, setInboxChoice] = useState(null);
 
     const run = useCallback(
         async (item, fn) => {
@@ -204,46 +261,150 @@ function useAgendaActions() {
         [refresh, toast]
     );
 
-    const complete = useCallback(
-        (item) => {
-            if (item.kind === 'idea') {
-                navigate(item.url);
-                return;
-            }
-            if (item.kind === 'payment') {
-                run(item, () => markPaid(item.collab));
-                return;
-            }
-            if (item.kind === 'task') {
-                run(item, async () => {
-                    await setTaskDone(item.task_id, true);
-                    toast.success('Ogarnięte!', {
-                        duration: 5000,
-                        action: { label: 'Cofnij', onClick: () => setTaskDone(item.task_id, false).then(() => refresh()) },
-                    });
-                });
-                return;
-            }
-            if (item.kind === 'return') {
-                const purchases = item.purchases || [];
-                run(item, async () => {
-                    for (const p of purchases) {
-                        await setPurchaseStatus(p.id, { status: 'returned', returned_amount: p.amount, kept_confirmed: 0 });
-                    }
-                    toast.success(`Zwrot ${item.store} odhaczony`, {
-                        duration: 5000,
-                        action: {
-                            label: 'Cofnij',
-                            onClick: async () => {
-                                for (const p of purchases) await setPurchaseStatus(p.id, { status: 'kept', returned_amount: 0 });
-                                refresh();
-                            },
-                        },
-                    });
-                });
+    const undoToast = useCallback(
+        (text, undo) =>
+            toast.success(text, {
+                duration: 5000,
+                action: { label: 'Cofnij', onClick: () => Promise.resolve(undo()).then(() => refresh()) },
+            }),
+        [refresh, toast]
+    );
+
+    /** Open a screen from the inbox in the right form ("Ze screena: ..."); done when it is saved. */
+    const openInboxAs = useCallback(
+        async (inbox, kind = inbox.kind, file) => {
+            setInboxChoice(null);
+            const done = () => markInboxDone(inbox.id).then(() => refresh());
+            try {
+                const screen = file || (await inboxFile(inbox));
+                const data = inbox.data || {};
+                if (kind === 'purchase') {
+                    openPurchase(screen ? { files: [screen], onSaved: done } : { manual: true, prefill: data, onSaved: done });
+                } else if (kind === 'collaboration') {
+                    openCollab({ prefill: { brand: data.brand, amount_gross: data.amount_gross, notes: data.notes }, files: screen ? [screen] : undefined, onSaved: done });
+                } else if (kind === 'document') {
+                    navigate(`/documents?inbox=${inbox.id}`);
+                } else {
+                    setInboxChoice(inbox);
+                }
+            } catch (err) {
+                toast.error(err.message || 'Nie udało się otworzyć screena');
             }
         },
-        [markPaid, navigate, refresh, run, toast]
+        [navigate, openCollab, openPurchase, refresh, toast]
+    );
+
+    const dropInbox = useCallback(
+        (item) => {
+            setSnoozeTarget(null);
+            setInboxChoice(null);
+            const inbox = item.inbox || item;
+            markInboxDone(inbox.id)
+                .then(() => refresh())
+                .then(() => undoToast('Screen usunięty z listy', () => reopenInbox(inbox.id)))
+                .catch((err) => toast.error(err.message || 'Nie udało się'));
+        },
+        [refresh, toast, undoToast]
+    );
+
+    /** A screen dropped into "Zrzuć tutaj": saved (task / idea) or straight into its form. */
+    const handleInboxResult = useCallback(
+        (res, file) => {
+            if (res.done && res.created?.task_id) {
+                undoToast(`Zapisane jako zadanie: ${res.data?.title || res.title}`, () => deleteTask(res.created.task_id));
+            } else if (res.done && res.created?.idea_id) {
+                undoToast('Zapisane jako pomysł na rolkę', () => deleteIdea(res.created.idea_id));
+            } else {
+                openInboxAs({ ...res, has_file: true }, res.kind, file);
+            }
+            refresh();
+        },
+        [openInboxAs, refresh, undoToast]
+    );
+
+    const complete = useCallback(
+        (item) => {
+            switch (item.kind) {
+                case 'idea':
+                    navigate(item.url);
+                    return;
+                case 'inbox':
+                    openInboxAs(item.inbox);
+                    return;
+                case 'payment':
+                    run(item, () => markPaid(item.collab));
+                    return;
+                case 'task': {
+                    const step = currentStep(item);
+                    if (step >= 0 && step < item.steps.length - 1) {
+                        // one small step at a time - the next one shows up in "Teraz"
+                        const steps = item.steps.map((s, i) => (i === step ? { ...s, done: true } : s));
+                        run(item, async () => {
+                            await setTaskSteps(item.task_id, steps);
+                            undoToast(`Krok ${step + 1} z ${steps.length} zrobiony`, () => setTaskSteps(item.task_id, item.steps));
+                        });
+                        return;
+                    }
+                    run(item, async () => {
+                        await setTaskDone(item.task_id, true);
+                        undoToast('Ogarnięte!', () => setTaskDone(item.task_id, false));
+                    });
+                    return;
+                }
+                case 'return': {
+                    const purchases = item.purchases || [];
+                    run(item, async () => {
+                        for (const [i, p] of purchases.entries()) {
+                            // the parcel's postage "jak ostatnio" with this shop goes on the first item
+                            const cost = i === 0 && item.return_cost != null ? { return_cost: item.return_cost } : {};
+                            await setPurchaseStatus(p.id, { status: 'returned', returned_amount: p.amount, kept_confirmed: 0, ...cost });
+                        }
+                        undoToast(`Zwrot ${item.store} odhaczony — przypomnę, gdy pieniądze powinny wrócić`, async () => {
+                            for (const p of purchases) await setPurchaseStatus(p.id, { status: 'kept', returned_amount: 0, return_cost: null });
+                        });
+                    });
+                    return;
+                }
+                case 'refund':
+                    run(item, async () => {
+                        for (const id of item.purchase_ids || []) await setPurchaseStatus(id, { refunded_at: 'today' });
+                        undoToast(`+${formatCurrency(item.amount)} wróciło z ${item.store}`, async () => {
+                            for (const id of item.purchase_ids || []) await setPurchaseStatus(id, { refunded_at: null });
+                        });
+                    });
+                    return;
+                case 'publish':
+                    run(item, async () => {
+                        await setPublished(item.collab_id, true);
+                        undoToast('Opublikowane — termin płatności liczy się od dziś', () => setPublished(item.collab_id, false));
+                    });
+                    return;
+                case 'sign':
+                    run(item, async () => {
+                        await setSigned(item.document_id, true);
+                        undoToast('Podpisane', () => setSigned(item.document_id, false));
+                    });
+                    return;
+                case 'term':
+                    run(item, async () => {
+                        await dismissAgenda(item.ref_key, item.title);
+                        undoToast('OK — zniknie z listy', () => undismissAgenda(item.ref_key));
+                    });
+                    return;
+                default:
+                    navigate(item.url);
+            }
+        },
+        [markPaid, navigate, openInboxAs, run, undoToast]
+    );
+
+    const breakDown = useCallback(
+        (item, smaller = false) =>
+            run(item, async () => {
+                await breakDownTask(item.task_id, smaller);
+                toast.success(smaller ? 'Mniejsze kroki — zacznij od pierwszego' : 'Rozbite na kroki — zacznij od pierwszego');
+            }),
+        [run, toast]
     );
 
     const snoozeWith = useCallback(
@@ -262,6 +423,25 @@ function useAgendaActions() {
             });
         },
         [refresh, run, snoozeTarget, toast]
+    );
+
+    /** "Wszystko na jutro": the late pile goes away in one tap, no shame. */
+    const snoozeAll = useCallback(
+        async (list) => {
+            setBusy('late');
+            try {
+                for (const item of list) await snooze(item, 'tomorrow');
+                await refresh();
+                undoToast(`Przeniesione na jutro: ${list.length}`, async () => {
+                    for (const item of list) await cancelSnooze(item.ref_key);
+                });
+            } catch (err) {
+                toast.error(err.message || 'Nie udało się przenieść');
+            } finally {
+                setBusy(null);
+            }
+        },
+        [refresh, toast, undoToast]
     );
 
     // Tasks typed into "Zrzuć tutaj" can be removed (a joke, a typo); "Cofnij" brings them back
@@ -326,7 +506,24 @@ function useAgendaActions() {
         [run, toast]
     );
 
-    return { busy, complete, snoozeTarget, setSnoozeTarget, snoozeWith, unsnooze, removeTask, unplanIdea, planIdeaToday };
+    return {
+        busy,
+        complete,
+        breakDown,
+        snoozeTarget,
+        setSnoozeTarget,
+        snoozeWith,
+        snoozeAll,
+        unsnooze,
+        removeTask,
+        unplanIdea,
+        planIdeaToday,
+        inboxChoice,
+        setInboxChoice,
+        openInboxAs,
+        dropInbox,
+        handleInboxResult,
+    };
 }
 
 /* ------------------------------------------------------------------ pieces */
@@ -353,12 +550,29 @@ function Progress({ done, total }) {
 
 const PRIMARY_LABEL = {
     return: 'Zrobione, odesłane',
+    refund: 'Pieniądze są',
     payment: 'Opłacone',
+    publish: 'Opublikowane',
+    sign: 'Podpisane',
+    term: 'OK, wiem',
+    inbox: 'Otwórz',
     task: 'Zrobione',
     idea: 'Nagraj teraz',
 };
 
-function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
+function primaryLabel(item) {
+    if (item.kind === 'term' && item.term_type === 'publish') return 'Zrobione';
+    if (item.kind === 'task' && currentStep(item) >= 0 && currentStep(item) < item.steps.length - 1) return 'Krok zrobiony';
+    return PRIMARY_LABEL[item.kind] || 'Zrobione';
+}
+
+function PrimaryIcon({ kind, size }) {
+    if (kind === 'idea') return <Play size={size} strokeWidth={2.4} />;
+    if (kind === 'inbox') return <ArrowRight size={size} strokeWidth={2.4} />;
+    return <Check size={size} strokeWidth={2.4} />;
+}
+
+function FocusCard({ item, canSkip, onSkip, actions, doneCount, aiEnabled }) {
     if (!item) {
         return (
             <section className="rounded-[28px] bg-accent text-on-accent p-6 lg:p-7 flex flex-col justify-center gap-2 min-h-[220px]">
@@ -375,18 +589,19 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
 
     const busy = actions.busy === item.ref_key;
     const hours = item.kind === 'return' ? hoursLeft(item.deadline) : null;
-    const PrimaryIcon = item.kind === 'idea' ? Play : Check;
+    const step = item.kind === 'task' ? currentStep(item) : -1;
+    const hasSteps = step >= 0;
 
     return (
         <section aria-labelledby="teraz-title" className="rounded-[28px] bg-accent text-on-accent p-5 lg:p-7 flex flex-col gap-3">
             <span className="text-xs font-semibold uppercase tracking-[0.08em] inline-flex items-center gap-2">
-                <Crosshair size={15} /> Teraz · jedna rzecz
+                <Crosshair size={15} /> {hasSteps ? `Teraz · krok ${step + 1} z ${item.steps.length}` : 'Teraz · jedna rzecz'}
             </span>
             <h2 id="teraz-title" className="font-display text-[24px] lg:text-[30px] font-semibold tracking-tight leading-[1.1]">
-                {item.title}
+                {hasSteps ? item.steps[step].text : item.title}
             </h2>
             <p className="text-[15px]">
-                {item.meta}
+                {hasSteps ? item.title : item.meta}
                 {item.amount > 0 && (
                     <>
                         {' · '}
@@ -395,6 +610,14 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                     </>
                 )}
             </p>
+
+            {hasSteps && (
+                <div className="flex gap-1.5" aria-hidden="true">
+                    {item.steps.map((s, i) => (
+                        <span key={i} className={`h-2 flex-1 rounded-full ${s.done ? 'bg-on-accent' : 'bg-black/15'}`} />
+                    ))}
+                </div>
+            )}
 
             {item.kind === 'return' && (
                 <div className="mt-1">
@@ -415,8 +638,8 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                     disabled={busy}
                     className="h-12 px-5 rounded-full bg-on-accent text-accent font-semibold inline-flex items-center gap-2 active:scale-[0.98] disabled:opacity-60"
                 >
-                    {busy ? <Loader2 size={18} className="animate-spin" /> : <PrimaryIcon size={18} strokeWidth={2.4} />}
-                    {PRIMARY_LABEL[item.kind]}
+                    {busy ? <Loader2 size={18} className="animate-spin" /> : <PrimaryIcon kind={item.kind} size={18} />}
+                    {primaryLabel(item)}
                 </button>
                 <button
                     type="button"
@@ -431,7 +654,12 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                         Część zostawiam
                     </Link>
                 )}
-                {item.kind === 'task' && (
+                {item.kind === 'task' && aiEnabled && (
+                    <button type="button" onClick={() => actions.breakDown(item, hasSteps)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2 inline-flex items-center gap-1">
+                        <ListChecks size={15} /> {hasSteps ? 'Jeszcze mniejsze kroki' : 'Za trudne? Rozbij na kroki'}
+                    </button>
+                )}
+                {item.kind === 'task' && !aiEnabled && (
                     <button type="button" onClick={() => actions.removeTask(item)} disabled={busy} className="text-sm font-medium underline underline-offset-2 px-2">
                         Usuń
                     </button>
@@ -441,6 +669,11 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                         Nie dziś
                     </button>
                 )}
+                {['publish', 'sign', 'payment', 'refund', 'term'].includes(item.kind) && (
+                    <Link to={item.url} className="text-sm font-medium underline underline-offset-2 px-2">
+                        Szczegóły
+                    </Link>
+                )}
                 {canSkip && (
                     <button type="button" onClick={onSkip} className="text-sm font-medium underline underline-offset-2 px-2 ml-auto">
                         Pokaż następną
@@ -449,6 +682,92 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
             </div>
         </section>
     );
+}
+
+/**
+ * "Przegląd tygodnia" (Monday-Tuesday until done): money last week, what is due this week.
+ * 5 minutes, then "Gotowe" - it does not nag the rest of the week.
+ */
+function WeekReview({ review }) {
+    const toast = useToast();
+    const { refresh } = useDashboard();
+    const [open, toggleOpen] = useFlag(REVIEW_OPEN_KEY);
+    const [saving, setSaving] = useState(false);
+
+    const finish = async () => {
+        setSaving(true);
+        try {
+            await dismissAgenda(review.key, 'Przegląd tygodnia');
+            await refresh();
+            toast.success('Przegląd zrobiony — dobry start tygodnia', {
+                duration: 5000,
+                action: { label: 'Cofnij', onClick: () => undismissAgenda(review.key).then(() => refresh()) },
+            });
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się zapisać');
+            setSaving(false);
+        }
+    };
+
+    return (
+        <section className="card p-4 lg:p-5">
+            <div className="flex items-center gap-3">
+                <CalendarDays size={18} className="text-primary-600 shrink-0" />
+                <h3 className="flex-1 text-base font-semibold text-ink">
+                    Przegląd tygodnia <span className="font-normal text-ink-muted">· 5 minut</span>
+                </h3>
+                <button
+                    type="button"
+                    onClick={finish}
+                    disabled={saving}
+                    className="h-10 px-4 rounded-full bg-ink text-canvas text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                    {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Gotowe
+                </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-3">
+                <ReviewStat label="Wpłynęło w zeszłym tyg." value={formatCurrency(review.paid_last_week.net)} sub={review.paid_last_week.count ? `${review.paid_last_week.count} wpłat` : 'nic'} tone="text-emerald-700" />
+                <ReviewStat label="Czeka na przelew" value={formatCurrency(review.waiting.gross)} sub={`${review.waiting.count} współprac`} tone="text-ink" />
+                <ReviewStat label="Terminy w tym tyg." value={String(review.this_week.length)} sub={review.late ? `zaległe: ${review.late}` : 'bez zaległości'} tone={review.late ? 'text-secondary' : 'text-ink'} />
+            </div>
+            {review.this_week.length > 0 && (
+                <>
+                    <button type="button" onClick={toggleOpen} aria-expanded={open} className="mt-3 w-full flex items-center justify-between text-sm text-ink-muted">
+                        <span>{open ? 'Zwiń terminy' : 'Pokaż terminy tego tygodnia'}</span>
+                        <ChevronDown size={16} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                    </button>
+                    {open && (
+                        <ul className="mt-2 divide-y divide-line">
+                            {review.this_week.map((d, i) => (
+                                <li key={i}>
+                                    <Link to={d.url} className="flex items-center gap-3 py-2 text-sm">
+                                        <span className="w-16 shrink-0 text-xs font-semibold text-ink-muted">{weekdayShort(d.date)}</span>
+                                        <span className="flex-1 min-w-0 truncate text-ink">{d.title}</span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </>
+            )}
+        </section>
+    );
+}
+
+function ReviewStat({ label, value, sub, tone }) {
+    return (
+        <div className="rounded-2xl bg-canvas border border-line p-3 min-w-0">
+            <div className="text-[11px] leading-tight text-ink-muted">{label}</div>
+            <div className={`amount font-display text-lg font-semibold tracking-tight mt-1 truncate ${tone}`}>{value}</div>
+            <div className="text-[11px] text-ink-muted truncate">{sub}</div>
+        </div>
+    );
+}
+
+function weekdayShort(ymd) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return `${new Intl.DateTimeFormat('pl-PL', { weekday: 'short' }).format(date).replace('.', '')} ${formatDateShort(ymd)}`;
 }
 
 function EarningsCard({ data, display }) {
@@ -484,22 +803,47 @@ function EarningsCard({ data, display }) {
 }
 
 function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
-    const [weekOpen, setWeekOpen] = useState(() => readFlag(WEEK_OPEN_KEY));
-    const [snoozedOpen, setSnoozedOpen] = useState(() => readFlag(SNOOZED_OPEN_KEY));
-    const shown = items.slice(0, 3);
-    const hidden = items.length - shown.length;
-
-    const toggleWeek = () => {
-        setWeekOpen((o) => {
-            writeFlag(WEEK_OPEN_KEY, !o);
-            return !o;
-        });
-    };
+    const [weekOpen, toggleWeek] = useFlag(WEEK_OPEN_KEY);
+    const [snoozedOpen, toggleSnoozed] = useFlag(SNOOZED_OPEN_KEY);
+    const [lateOpen, toggleLate] = useFlag(LATE_OPEN_KEY);
+    // Several late things: one calm row instead of a wall of red
+    const late = items.filter((i) => i.late);
+    const groupLate = late.length >= 2;
+    const rest = groupLate ? items.filter((i) => !i.late) : items;
+    const shown = rest.slice(0, 3);
+    const hidden = rest.length - shown.length;
 
     return (
         <section className="card p-2 pt-4 flex flex-col">
             <h3 className="px-3 mb-1 text-base font-semibold text-ink">Potem dziś</h3>
-            {shown.length === 0 && laterToday.length === 0 && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
+            {shown.length === 0 && !groupLate && laterToday.length === 0 && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
+
+            {groupLate && (
+                <div className="mx-1 mb-1 rounded-2xl bg-amber-50 border border-amber-200">
+                    <div className="flex items-center gap-2 px-3 py-2.5">
+                        <button type="button" onClick={toggleLate} aria-expanded={lateOpen} className="flex-1 min-w-0 text-left text-sm">
+                            <span className="font-semibold text-ink">Zaległe: {late.length}</span>
+                            <span className="text-ink-muted"> · {lateOpen ? 'zwiń' : 'pokaż'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => actions.snoozeAll(late)}
+                            disabled={actions.busy === 'late'}
+                            className="h-9 px-3 rounded-full border border-amber-300 bg-surface text-xs font-semibold text-ink shrink-0 inline-flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            {actions.busy === 'late' ? <Loader2 size={13} className="animate-spin" /> : <Clock size={13} />} Wszystko na jutro
+                        </button>
+                    </div>
+                    {lateOpen && (
+                        <div className="pb-1">
+                            {late.map((item) => (
+                                <AgendaRow key={item.ref_key} item={item} actions={actions} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {shown.map((item) => (
                 <AgendaRow key={item.ref_key} item={item} actions={actions} />
             ))}
@@ -530,17 +874,7 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
 
             {snoozed.length > 0 && (
                 <div className="mt-2 pt-2 mx-3 border-t border-line">
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setSnoozedOpen((o) => {
-                                writeFlag(SNOOZED_OPEN_KEY, !o);
-                                return !o;
-                            })
-                        }
-                        aria-expanded={snoozedOpen}
-                        className="w-full flex justify-between items-center py-2.5 text-sm text-ink-muted"
-                    >
+                    <button type="button" onClick={toggleSnoozed} aria-expanded={snoozedOpen} className="w-full flex justify-between items-center py-2.5 text-sm text-ink-muted">
                         <span className="inline-flex items-center gap-1.5">
                             <Clock size={14} /> Odłożone na później: {snoozed.length}
                         </span>
@@ -578,21 +912,30 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
 function AgendaRow({ item, actions }) {
     const busy = actions.busy === item.ref_key;
     const metaTone = item.late ? 'text-secondary font-medium' : 'text-ink-muted';
+    const isLink = !['inbox'].includes(item.kind);
+    const Body = isLink ? Link : 'button';
+    const bodyProps = isLink ? { to: item.url } : { type: 'button', onClick: () => actions.complete(item) };
     return (
         <div className="flex items-center gap-3 px-3 py-1.5">
             <button
                 type="button"
                 onClick={() => actions.complete(item)}
                 disabled={busy}
-                aria-label={PRIMARY_LABEL[item.kind]}
-                title={PRIMARY_LABEL[item.kind]}
+                aria-label={primaryLabel(item)}
+                title={primaryLabel(item)}
                 className="w-11 h-11 -ml-1.5 rounded-full flex items-center justify-center shrink-0 group"
             >
                 <span className="w-7 h-7 rounded-full border-2 border-line-strong flex items-center justify-center group-hover:border-chart">
-                    {busy ? <Loader2 size={13} className="animate-spin" /> : item.kind === 'idea' ? <Play size={11} className="text-ink-muted" /> : null}
+                    {busy ? (
+                        <Loader2 size={13} className="animate-spin" />
+                    ) : item.kind === 'idea' ? (
+                        <Play size={11} className="text-ink-muted" />
+                    ) : item.kind === 'inbox' ? (
+                        <ArrowRight size={12} className="text-ink-muted" />
+                    ) : null}
                 </span>
             </button>
-            <Link to={item.url} className="flex-1 min-w-0">
+            <Body {...bodyProps} className="flex-1 min-w-0 text-left">
                 <span className="block text-[15px] font-medium text-ink truncate">{item.title}</span>
                 <span className={`block text-xs ${item.snoozed_until ? 'text-ink-muted' : metaTone}`}>
                     {item.snoozed_until ? (
@@ -611,7 +954,7 @@ function AgendaRow({ item, actions }) {
                         </>
                     )}
                 </span>
-            </Link>
+            </Body>
             <button
                 type="button"
                 onClick={() => (item.snoozed_until ? actions.unsnooze(item) : actions.setSnoozeTarget(item))}
@@ -667,13 +1010,14 @@ function MoneyCard({ data }) {
     );
 }
 
-function CaptureCard({ ai, ideas, onPlan }) {
+function CaptureCard({ ai, ideas, onPlan, onInbox }) {
     const toast = useToast();
     const { refresh } = useDashboard();
     const navigate = useNavigate();
     const { openCollab, openPurchase } = useQuickActions();
     const [text, setText] = useState('');
     const [saving, setSaving] = useState(false);
+    const imageRef = useRef(null);
     // A suggestion only - reels count as "na dziś" after "Nagram dziś"
     const nextIdea = ideas.find((i) => Number(i.words) > 0 && !i.planned_for);
 
@@ -683,6 +1027,29 @@ function CaptureCard({ ai, ideas, onPlan }) {
             duration: 5000,
             action: { label: 'Cofnij', onClick: () => deleteTask(res.id).then(() => refresh()) },
         });
+    };
+
+    // A screen (paste, pick, camera): AI says what it is and opens the right form
+    const sendImage = async (file) => {
+        if (!file || saving) return;
+        setSaving(true);
+        try {
+            const res = await uploadToInbox(file, text.trim());
+            setText('');
+            onInbox(res, file);
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się odczytać screena');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const onPaste = (e) => {
+        const images = imagesFromDataTransfer(e.clipboardData);
+        if (images.length) {
+            e.preventDefault();
+            sendImage(images[0]);
+        }
     };
 
     const submit = async (e) => {
@@ -728,17 +1095,43 @@ function CaptureCard({ ai, ideas, onPlan }) {
             <h3 className="text-base font-semibold text-ink">Głowa pełna? Zrzuć tutaj</h3>
             <form onSubmit={submit} className="flex flex-col gap-1.5">
                 <label htmlFor="capture" className="text-xs text-ink-muted">
-                    {ai?.enabled ? 'AI rozpozna: zadanie, pomysł, zakup albo płatną współpracę' : 'Zapiszę jako zadanie na dziś'}
+                    {ai?.enabled ? 'Wpisz albo wklej screena — AI rozpozna: zadanie, pomysł, zakup, współpracę' : 'Zapiszę jako zadanie na dziś'}
                 </label>
                 <div className="flex gap-2">
                     <input
                         id="capture"
                         value={text}
                         onChange={(e) => setText(e.target.value)}
+                        onPaste={ai?.enabled ? onPaste : undefined}
                         placeholder="np. rolka o płaszczach, Vichy chce 2 stories…"
                         className="input !rounded-2xl !h-12 flex-1 min-w-0"
                         enterKeyHint="done"
                     />
+                    {ai?.enabled && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => imageRef.current?.click()}
+                                disabled={saving}
+                                aria-label="Dodaj screena"
+                                title="Dodaj screena"
+                                className="w-12 h-12 rounded-2xl border border-line-strong text-ink flex items-center justify-center shrink-0 hover:bg-surface-2 disabled:opacity-40"
+                            >
+                                <ImagePlus size={19} />
+                            </button>
+                            <input
+                                ref={imageRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    e.target.value = '';
+                                    sendImage(file);
+                                }}
+                            />
+                        </>
+                    )}
                     <button
                         type="submit"
                         disabled={saving || !text.trim()}
@@ -791,7 +1184,7 @@ function CaptureCard({ ai, ideas, onPlan }) {
     );
 }
 
-function SnoozeSheet({ target, onPick, onRemove, onUnplan, onClose }) {
+function SnoozeSheet({ target, onPick, onRemove, onUnplan, onDropInbox, onClose }) {
     return (
         <Sheet open={!!target} onClose={onClose} title="Przypomnij później" description={target?.title} size="sm">
             <div className="grid gap-2 pb-1">
@@ -824,6 +1217,47 @@ function SnoozeSheet({ target, onPick, onRemove, onUnplan, onClose }) {
                         <Trash2 size={18} /> Usuń zadanie
                     </button>
                 )}
+                {target?.kind === 'inbox' && (
+                    <button
+                        type="button"
+                        onClick={() => onDropInbox(target)}
+                        className="mt-2 h-12 px-4 rounded-2xl text-left font-semibold text-red-700 hover:bg-red-50 inline-flex items-center gap-3"
+                    >
+                        <Trash2 size={18} /> Usuń screena z listy
+                    </button>
+                )}
+            </div>
+        </Sheet>
+    );
+}
+
+/** A screen AI could not sort (or no AI): one tap says what it is. */
+function InboxChoiceSheet({ item, onPick, onDrop, onClose }) {
+    const options = [
+        { kind: 'purchase', label: 'Zakup do zwrotu', icon: ShoppingBag },
+        { kind: 'collaboration', label: 'Płatna współpraca', icon: Briefcase },
+        { kind: 'document', label: 'Umowa / dokument', icon: FileText },
+    ];
+    return (
+        <Sheet open={!!item} onClose={onClose} title="Co jest na screenie?" size="sm">
+            <div className="grid gap-2 pb-1">
+                {options.map((o) => (
+                    <button
+                        key={o.kind}
+                        type="button"
+                        onClick={() => onPick(item, o.kind)}
+                        className="h-14 px-4 rounded-2xl border border-line-strong text-left font-semibold text-ink hover:bg-surface-2 inline-flex items-center gap-3"
+                    >
+                        <o.icon size={18} className="text-primary-600" /> {o.label}
+                    </button>
+                ))}
+                <button
+                    type="button"
+                    onClick={() => onDrop(item)}
+                    className="mt-2 h-12 px-4 rounded-2xl text-left font-semibold text-red-700 hover:bg-red-50 inline-flex items-center gap-3"
+                >
+                    <Trash2 size={18} /> Nic ważnego — usuń
+                </button>
             </div>
         </Sheet>
     );

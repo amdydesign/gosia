@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Briefcase, Camera, Check, ChevronDown, Loader2, Plus, Trash2, Wallet } from 'lucide-react';
+import { AlertTriangle, Briefcase, CalendarClock, Camera, Check, ChevronDown, Loader2, Plus, Trash2, Wallet, X } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import ChoiceChips from '../ui/ChoiceChips';
@@ -7,16 +7,17 @@ import { apiRequest } from '../../utils/api';
 import { readScreens } from '../../services/ai';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
-import { formatCurrency, getTaxBreakdown, getTodayDate, parseAmount, yesterdayDate, formatDateShort } from '../../utils/format';
-import { BILLING_OPTIONS, TYPE_OPTIONS, WAGE_TYPE, buildBrandMemory, grossOf, wageLabel } from '../../utils/collabs';
+import { addDays, formatCurrency, getTaxBreakdown, getTodayDate, parseAmount, yesterdayDate, formatDateShort } from '../../utils/format';
+import { BILLING_OPTIONS, PAYMENT_DAY_PRESETS, TYPE_OPTIONS, WAGE_TYPE, buildBrandMemory, grossOf, wageLabel } from '../../utils/collabs';
 
 const today = getTodayDate();
 
 /**
  * Quick add / edit collaboration. Minimum input: brand + amount - everything
- * else is pre-filled from the last collaboration with that brand.
+ * else is pre-filled from the last collaboration with that brand (payment term too).
+ * initialFiles: a screen handed over from the inbox - read right away.
  */
-export default function CollabFormSheet({ collabId, prefill, onClose, onSaved }) {
+export default function CollabFormSheet({ collabId, prefill, initialFiles, onClose, onSaved }) {
     const isEdit = !!collabId;
     const toast = useToast();
     const { data: dashboard, refresh } = useDashboard();
@@ -31,6 +32,9 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
         paid: false,
         notes: '',
         team: [],
+        payment_days: null, // null = 30 days (default)
+        publish_by: '',
+        paid_at: '',
         ...normalizePrefill(prefill),
     }));
     const [originalStatus, setOriginalStatus] = useState('pending');
@@ -85,6 +89,9 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                     paid: c.payment_status === 'paid',
                     notes: c.notes || '',
                     team: (c.team || []).map((m) => ({ name: m.name, amount: m.amount ? String(Number(m.amount)) : '', is_paid: isTrue(m.is_paid) })),
+                    payment_days: c.payment_days ? Number(c.payment_days) : null,
+                    publish_by: c.publish_by || '',
+                    paid_at: c.paid_at || '',
                 });
                 if (c.notes || c.team?.length) setMoreOpen(true);
             })
@@ -116,6 +123,7 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
             const next = { ...f, brand };
             if (f.type === WAGE_TYPE) next.type = memory?.defaults.type || 'reel';
             if (last) {
+                if (!touched.current.has('payment_days') && last.payment_days) next.payment_days = Number(last.payment_days);
                 if (fromChip || !touched.current.has('collab_type')) next.collab_type = last.collab_type || next.collab_type;
                 if (fromChip || !touched.current.has('type')) next.type = last.type && last.type !== WAGE_TYPE ? last.type : next.type;
                 if (!f.amount && grossOf(last)) next.amount = String(grossOf(last));
@@ -140,10 +148,13 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
         }));
     };
 
-    const handleScreen = async (e) => {
+    const handleScreen = (e) => {
         const files = Array.from(e.target.files || []);
         e.target.value = '';
-        if (!files.length) return;
+        if (files.length) readFiles(files);
+    };
+
+    const readFiles = async (files) => {
         setReading(true);
         setError('');
         try {
@@ -157,7 +168,10 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                 type: r.type && r.type !== 'inne' ? r.type : f.type,
                 date: r.date || f.date,
                 notes: r.notes || f.notes,
+                publish_by: r.publish_by || f.publish_by,
+                payment_days: r.payment_days || f.payment_days,
             }));
+            if (r.payment_days) touched.current.add('payment_days');
             if (r.notes) setMoreOpen(true);
             toast.success('Uzupełnione ze screena — sprawdź i zapisz');
         } catch (err) {
@@ -167,8 +181,18 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
         }
     };
 
+    // A screen from the inbox ("Ze screena: ...") is read as soon as the form opens
+    const startedWith = useRef(false);
+    useEffect(() => {
+        if (!startedWith.current && initialFiles?.length && aiEnabled) {
+            startedWith.current = true;
+            readFiles(initialFiles);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialFiles, aiEnabled]);
+
     const amount = parseAmount(form.amount);
-    const breakdown = useMemo(() => getTaxBreakdown(amount, form.collab_type), [amount, form.collab_type]);
+    const breakdown = useMemo(() => getTaxBreakdown(amount, form.collab_type, form.date), [amount, form.collab_type, form.date]);
     const teamTotal = form.team.reduce((s, m) => s + parseAmount(m.amount), 0);
 
     const submit = async (e) => {
@@ -190,6 +214,9 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
             payment_status: form.paid ? 'paid' : originalStatus === 'overdue' ? 'overdue' : 'pending',
             notes: form.notes.trim(),
             team: form.team.filter((m) => m.name.trim()).map((m) => ({ name: m.name.trim(), amount: parseAmount(m.amount), is_paid: !!m.is_paid })),
+            payment_days: form.payment_days || null,
+            publish_by: form.publish_by || null,
+            ...(form.paid && form.paid_at ? { paid_at: form.paid_at } : {}),
         };
         try {
             let savedId = collabId;
@@ -342,6 +369,18 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                         </div>
                     </div>
 
+                    {!isWage && (
+                        <Deadlines
+                            form={form}
+                            onPublishBy={(v) => setForm((f) => ({ ...f, publish_by: v }))}
+                            onPaymentDays={(v) => set('payment_days', v)}
+                            onPaidAt={(v) => setForm((f) => ({ ...f, paid_at: v }))}
+                            isEdit={isEdit}
+                        />
+                    )}
+
+                    <ExclusivityNote brand={form.brand} exclusivities={dashboard?.exclusivities} />
+
                     {/* Paid */}
                     <button
                         type="button"
@@ -376,7 +415,7 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                                         className="input min-h-[80px]"
                                         value={form.notes}
                                         onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                                        placeholder="Ustalenia, termin publikacji, nr faktury…"
+                                        placeholder="Ustalenia, nr faktury…"
                                     />
                                 </div>
                             </div>
@@ -385,6 +424,123 @@ export default function CollabFormSheet({ collabId, prefill, onClose, onSaved })
                 </form>
             )}
         </Sheet>
+    );
+}
+
+/** Payment term (14 / 30 / 60 days, "jak ostatnio"), optional publish deadline, paid on (edit). */
+function Deadlines({ form, onPublishBy, onPaymentDays, onPaidAt, isEdit }) {
+    const [publishOpen, setPublishOpen] = useState(!!form.publish_by);
+    const days = form.payment_days || 30;
+    const base = form.publish_by || form.date;
+    const due = base ? addDays(base, days) : null;
+    const custom = form.payment_days && !PAYMENT_DAY_PRESETS.includes(Number(form.payment_days));
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <div className="section-label mb-2">Termin publikacji</div>
+                {form.publish_by || publishOpen ? (
+                    <div className="flex items-center gap-2">
+                        <label className="choice choice-active relative cursor-pointer inline-flex items-center gap-1.5">
+                            <CalendarClock size={15} />
+                            {form.publish_by ? `do ${formatDateShort(form.publish_by)}` : 'Wybierz datę'}
+                            <input
+                                type="date"
+                                value={form.publish_by}
+                                onChange={(e) => onPublishBy(e.target.value)}
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                aria-label="Termin publikacji"
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onPublishBy('');
+                                setPublishOpen(false);
+                            }}
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-ink-muted hover:bg-ink/5"
+                            aria-label="Bez terminu publikacji"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                ) : (
+                    <button type="button" onClick={() => setPublishOpen(true)} className="choice inline-flex items-center gap-1.5">
+                        <Plus size={14} /> Dodaj termin
+                    </button>
+                )}
+                {form.publish_by && <p className="hint">Przypomnę na Starcie 2 dni wcześniej.</p>}
+            </div>
+
+            {!form.paid ? (
+                <div>
+                    <div className="section-label mb-2">Płatność w ciągu</div>
+                    <div className="flex flex-wrap gap-2">
+                        {PAYMENT_DAY_PRESETS.map((d) => (
+                            <button key={d} type="button" onClick={() => onPaymentDays(d)} className={`choice ${days === d && !custom ? 'choice-active' : ''}`}>
+                                {d} dni
+                            </button>
+                        ))}
+                        <label className={`choice inline-flex items-center gap-1 ${custom ? 'choice-active' : ''}`}>
+                            <input
+                                className="w-10 bg-transparent text-center outline-none"
+                                inputMode="numeric"
+                                placeholder="inne"
+                                value={custom ? form.payment_days : ''}
+                                onChange={(e) => {
+                                    const n = parseInt(e.target.value.replace(/\D/g, ''), 10);
+                                    onPaymentDays(n > 0 && n <= 365 ? n : null);
+                                }}
+                                aria-label="Inna liczba dni"
+                            />
+                            dni
+                        </label>
+                    </div>
+                    {due && (
+                        <p className="hint">
+                            Przelew do <strong>{formatDateShort(due)}</strong>
+                            {form.publish_by ? ' (liczę od publikacji)' : ''} — potem przypomnę, że się spóźnia.
+                        </p>
+                    )}
+                </div>
+            ) : (
+                isEdit && (
+                    <div>
+                        <div className="section-label mb-2">Wpłynęło</div>
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => onPaidAt(getTodayDate())} className={`choice ${form.paid_at === getTodayDate() ? 'choice-active' : ''}`}>Dziś</button>
+                            <button type="button" onClick={() => onPaidAt(yesterdayDate())} className={`choice ${form.paid_at === yesterdayDate() ? 'choice-active' : ''}`}>Wczoraj</button>
+                            <label className={`choice relative cursor-pointer ${form.paid_at && form.paid_at !== getTodayDate() && form.paid_at !== yesterdayDate() ? 'choice-active' : ''}`}>
+                                {form.paid_at && form.paid_at !== getTodayDate() && form.paid_at !== yesterdayDate() ? formatDateShort(form.paid_at) : 'Inna data'}
+                                <input type="date" value={form.paid_at} max={getTodayDate()} onChange={(e) => e.target.value && onPaidAt(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Data wpłaty" />
+                            </label>
+                        </div>
+                        <p className="hint">Liczy się do miesiąca i roku podatkowego, w którym pieniądze przyszły.</p>
+                    </div>
+                )
+            )}
+        </div>
+    );
+}
+
+/** Active exclusivity from a contract - a gentle check before taking a competitor. */
+function ExclusivityNote({ brand, exclusivities }) {
+    const name = (brand || '').trim().toLowerCase();
+    const others = (exclusivities || []).filter((e) => !name || !e.brand.toLowerCase().includes(name.split(' ')[0]));
+    if (!name || others.length === 0) return null;
+    return (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex gap-3 text-sm">
+            <AlertTriangle size={18} className="text-amber-700 shrink-0 mt-0.5" />
+            <div className="text-ink-soft">
+                {others.map((e) => (
+                    <p key={e.document_id}>
+                        Masz wyłączność z <strong className="text-ink">{e.brand}</strong>
+                        {e.scope ? ` (${e.scope})` : ''} do <strong className="text-ink">{formatDateShort(e.until)}</strong>.
+                    </p>
+                ))}
+                <p className="text-xs text-ink-muted mt-0.5">Sprawdź, czy ta współpraca jej nie łamie.</p>
+            </div>
+        </div>
     );
 }
 
@@ -440,6 +596,8 @@ function normalizePrefill(prefill) {
         paid: prefill.collab_type === 'gotowka',
         notes: prefill.notes || '',
         ...(prefill.date ? { date: prefill.date } : {}),
+        ...(prefill.publish_by ? { publish_by: prefill.publish_by } : {}),
+        ...(prefill.payment_days ? { payment_days: Number(prefill.payment_days) } : {}),
         team: (prefill.team || []).map((m) => ({ name: m.name, amount: m.amount ? String(Number(m.amount)) : '', is_paid: false })),
     };
 }

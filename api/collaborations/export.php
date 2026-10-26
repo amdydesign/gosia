@@ -10,6 +10,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../utils/TaxCalculator.php';
+require_once __DIR__ . '/helpers.php';
 
 // Only allow GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -25,14 +26,16 @@ try {
     // Get database connection
     $db = new Database();
     $conn = $db->getConnection();
+    Schema::ensureCollaborations($conn);
 
     // Prepare query based on mode
     // We select specific columns to be safe, including the new ones
     $query = "
         SELECT 
+ 
             date, brand, collab_type, type, 
             amount_gross, amount_net, 
-            payment_status, fiscal_tracking 
+            payment_status, fiscal_tracking, paid_at 
         FROM collaborations 
         WHERE user_id = :user_id
     ";
@@ -93,7 +96,7 @@ try {
 
         // Section 1: Official
         fputcsv($output, ['=== OFICJALNE (do PIT) ===']);
-        fputcsv($output, ['Data', 'Marka', 'Typ', 'Brutto', 'Na rękę', 'Status']);
+        fputcsv($output, ['Data', 'Marka', 'Typ', 'Brutto', 'Na rękę', 'Status', 'Wpłynęło']);
 
         $officialTotal = 0;
         foreach ($officialRows as $row) {
@@ -103,7 +106,7 @@ try {
             if (!$cType || $cType === 'other')
                 $cType = 'umowa_50';
 
-            $net = TaxCalculator::calculateNet($gross, $cType);
+            $net = TaxCalculator::calculateNet($gross, $cType, $row['date']);
             $officialTotal += $net;
 
             fputcsv($output, [
@@ -112,7 +115,8 @@ try {
                 $typeLabels[$cType] ?? $cType,
                 number_format($gross, 2, ',', ' ') . ' zł',
                 number_format($net, 2, ',', ' ') . ' zł',
-                $row['payment_status']
+                $row['payment_status'],
+                $row['paid_at'] ?? ''
             ]);
         }
         fputcsv($output, ['', '', '', 'SUMA:', number_format($officialTotal, 2, ',', ' ') . ' zł', '']);
@@ -120,7 +124,7 @@ try {
 
         // Section 2: Private
         fputcsv($output, ['=== PRYWATNE (poza rozliczeniami) ===']);
-        fputcsv($output, ['Data', 'Marka', 'Typ', 'Kwota', 'Na rękę', 'Status']);
+        fputcsv($output, ['Data', 'Marka', 'Typ', 'Kwota', 'Na rękę', 'Status', 'Wpłynęło']);
 
         $privateTotal = 0;
         foreach ($privateRows as $row) {
@@ -135,7 +139,8 @@ try {
                 'Gotówka prywatna',
                 number_format($gross, 2, ',', ' ') . ' zł',
                 number_format($net, 2, ',', ' ') . ' zł',
-                $row['payment_status']
+                $row['payment_status'],
+                $row['paid_at'] ?? ''
             ]);
         }
         fputcsv($output, ['', '', '', 'SUMA:', number_format($privateTotal, 2, ',', ' ') . ' zł', '']);
@@ -144,7 +149,7 @@ try {
 
     } else {
         // Standard modes (Official or Private)
-        $headers = ['Data', 'Marka', 'Typ', 'Brutto', 'Na rękę', 'Status'];
+        $headers = ['Data', 'Marka', 'Typ', 'Brutto', 'Na rękę', 'Status', 'Wpłynęło'];
         fputcsv($output, $headers);
 
         $totalSum = 0;
@@ -164,7 +169,7 @@ try {
             if ($mode === 'private')
                 $label = 'Gotówka prywatna';
 
-            $net = TaxCalculator::calculateNet($gross, $cType);
+            $net = TaxCalculator::calculateNet($gross, $cType, $row['date']);
             $totalSum += $net;
 
             fputcsv($output, [
@@ -173,7 +178,8 @@ try {
                 $label,
                 number_format($gross, 2, ',', ' ') . ' zł',
                 number_format($net, 2, ',', ' ') . ' zł',
-                $row['payment_status']
+                $row['payment_status'],
+                $row['paid_at'] ?? ''
             ]);
         }
         fputcsv($output, ['', '', '', 'SUMA:', number_format($totalSum, 2, ',', ' ') . ' zł', '']);

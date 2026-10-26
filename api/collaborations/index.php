@@ -11,6 +11,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 // Only allow GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -26,7 +27,8 @@ try {
     $conn = $db->getConnection();
 
     // Build query with optional filter
-    $sql = "SELECT * FROM collaborations WHERE user_id = :user_id";
+    Schema::ensureCollaborations($conn);
+    $sql = "SELECT *, " . COLLAB_DUE_SQL . " AS payment_due FROM collaborations WHERE user_id = :user_id";
     $params = ['user_id' => $userId];
 
     // Filter by payment status

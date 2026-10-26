@@ -10,7 +10,7 @@ const REFRESH_MS = 5 * 60 * 1000;
  * Pages call `refresh()` after mutations so counters stay in sync.
  */
 export function DashboardProvider({ children }) {
-    const { token, isAuthenticated } = useAuth();
+    const { isAuthenticated } = useAuth();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -22,7 +22,7 @@ export function DashboardProvider({ children }) {
         if (!silent) setLoading(true);
         inFlight.current = (async () => {
             try {
-                const result = await apiRequest('/stats/dashboard.php', 'GET', null, token);
+                const result = await apiRequest('/stats/dashboard.php');
                 setData(result);
                 setError('');
                 return result;
@@ -35,7 +35,7 @@ export function DashboardProvider({ children }) {
             }
         })();
         return inFlight.current;
-    }, [isAuthenticated, token]);
+    }, [isAuthenticated]);
 
     // Background social refresh: once per day per device, only when the server reports stale platforms
     const socialAttempted = useRef(false);
@@ -56,12 +56,12 @@ export function DashboardProvider({ children }) {
         } catch {
             // ignore
         }
-        apiRequest('/stats/social/auto_refresh.php', 'POST', {}, token)
+        apiRequest('/stats/social/auto_refresh.php', 'POST', {})
             .then((result) => {
                 if (result?.updated?.length) refresh();
             })
             .catch(() => {});
-    }, [data, token, refresh]);
+    }, [data, refresh]);
 
     useEffect(() => {
         if (!isAuthenticated) {

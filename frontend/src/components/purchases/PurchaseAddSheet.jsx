@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Check, ClipboardPaste, ImagePlus, Pencil, Plus, Sparkles } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
-import { apiRequest, getStoredToken } from '../../utils/api';
+import { apiFetch, apiRequest } from '../../utils/api';
 import { readScreens } from '../../services/ai';
 import { imagesFromClipboard, imagesFromDataTransfer } from '../../utils/images';
 import { RETURN_DAY_PRESETS, buildStoreMemory } from '../../utils/purchases';
@@ -394,11 +394,7 @@ async function uploadScreens(files, ids, toast) {
             form.append('entity_type', 'purchase');
             form.append('entity_id', id);
             try {
-                const res = await fetch('/api/attachments/upload.php', {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${getStoredToken()}` },
-                    body: form,
-                });
+                const res = await apiFetch('/attachments/upload.php', { method: 'POST', body: form });
                 if (!res.ok) failed += 1;
             } catch {
                 failed += 1;

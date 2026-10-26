@@ -30,7 +30,7 @@ try {
     $conn = $db->getConnection();
     documentsEnsureSchema($conn);
 
-    $stmt = $conn->prepare("SELECT id, content_text, doc_date, counterparty, doc_kind, amount, billing FROM documents WHERE id = :id AND user_id = :user_id");
+    $stmt = $conn->prepare("SELECT id, content_text, doc_date, counterparty, doc_kind, amount, billing, terms FROM documents WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
     $document = $stmt->fetch();
     if (!$document) {
@@ -49,10 +49,15 @@ try {
     $kind = $collab['doc_kind'] ?: $document['doc_kind'];
     $amount = $collab['amount'] ?? $document['amount'];
     $billing = $collab['billing'] ?: $document['billing'];
+    // payment term read from the text, unless the contract terms already have one (e.g. from AI)
+    $terms = documentsTerms($document['terms'] ?? null);
+    if (empty($terms['payment_days']) && ($days = documentsPaymentDaysFromText($text))) {
+        $terms['payment_days'] = $days;
+    }
 
     $conn->prepare("
         UPDATE documents SET content_text = :content_text, doc_date = :doc_date, counterparty = :counterparty,
-               doc_kind = :doc_kind, amount = :amount, billing = :billing
+               doc_kind = :doc_kind, amount = :amount, billing = :billing, terms = :terms
         WHERE id = :id AND user_id = :user_id
     ")->execute([
         'content_text' => $text === '' ? null : $text,
@@ -61,6 +66,7 @@ try {
         'doc_kind' => $kind,
         'amount' => $amount,
         'billing' => $billing,
+        'terms' => $terms ? json_encode($terms, JSON_UNESCAPED_UNICODE) : null,
         'id' => $id,
         'user_id' => $userId,
     ]);

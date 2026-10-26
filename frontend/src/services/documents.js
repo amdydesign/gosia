@@ -1,10 +1,7 @@
-import { apiRequest, getStoredToken } from '../utils/api';
+import { apiFetch, apiRequest } from '../utils/api';
 
 async function fetchFile(id, inline = false) {
-    const response = await fetch(`/api/documents/download.php?id=${id}${inline ? '&inline=1' : ''}`, {
-        headers: { Authorization: `Bearer ${getStoredToken()}` },
-        cache: 'no-store',
-    });
+    const response = await apiFetch(`/documents/download.php?id=${id}${inline ? '&inline=1' : ''}`, { cache: 'no-store' });
     if (!response.ok) throw new Error('Nie udało się pobrać pliku');
     return response.blob();
 }
@@ -21,16 +18,7 @@ export const documentsService = {
         formData.append('doc_date', docDate || '');
         if (contentText) formData.append('content_text', contentText);
 
-        let response;
-        try {
-            response = await fetch('/api/documents/upload.php', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${getStoredToken()}` },
-                body: formData,
-            });
-        } catch {
-            throw new Error('Brak połączenia z serwerem');
-        }
+        const response = await apiFetch('/documents/upload.php', { method: 'POST', body: formData });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.success) {
             const firstError = data.errors ? Object.values(data.errors).filter(Boolean)[0] : null;

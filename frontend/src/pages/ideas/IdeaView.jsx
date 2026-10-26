@@ -4,7 +4,7 @@ import { Edit2, Play, CheckCircle2, Trash2, Lightbulb, Clock, Type, Undo2, Copy,
 import { isPlanned, localToday, planIdea } from '../../services/agenda';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
-import { useConfirm } from '../../context/ConfirmContext';
+import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -12,6 +12,7 @@ import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import { PageSkeleton } from '../../components/ui/Skeleton';
 import Prompter from './Prompter';
+import ReelResults from '../../components/ideas/ReelResults';
 import { countWords, estimateSpeechSeconds, formatSeconds, formatDateLong } from '../../utils/format';
 
 export default function IdeaView() {
@@ -19,8 +20,7 @@ export default function IdeaView() {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const toast = useToast();
-    const confirm = useConfirm();
-    const { refresh } = useDashboard();
+    const { data: dashboard, refresh } = useDashboard();
 
     const [idea, setIdea] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -80,10 +80,12 @@ export default function IdeaView() {
     };
 
     const handleDelete = async () => {
-        if (!(await confirm({ title: 'Usunąć pomysł?', message: idea.title, confirmLabel: 'Usuń', danger: true }))) return;
         try {
-            await ideasService.delete(null, id);
-            toast.success('Pomysł usunięty');
+            const res = await ideasService.delete(null, id);
+            deletedToast(toast, 'Pomysł usunięty', res?.trash_id, (restored) => {
+                refresh();
+                navigate(`/ideas/${restored?.id || id}`);
+            });
             refresh();
             navigate('/ideas', { replace: true });
         } catch (err) {
@@ -91,10 +93,11 @@ export default function IdeaView() {
         }
     };
 
+    // Only the script - ready for the teleprompter in Instagram Edits (on the camera) or a caption
     const copyText = async () => {
         try {
-            await navigator.clipboard.writeText(`${idea.title}\n\n${idea.content || ''}`);
-            toast.success('Skopiowano do schowka');
+            await navigator.clipboard.writeText(idea.content || idea.title);
+            toast.success('Skopiowane — w Edits: Prompter → wklej', { duration: 5000 });
         } catch {
             toast.error('Nie udało się skopiować');
         }
@@ -113,7 +116,7 @@ export default function IdeaView() {
     return (
         <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
             <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={recorded ? 'success' : 'plum'} icon={recorded ? CheckCircle2 : Lightbulb}>{recorded ? 'Nagrane' : 'Do nagrania'}</Badge>
+                <Badge tone={recorded ? 'success' : 'plum'} icon={recorded ? CheckCircle2 : Lightbulb}>{recorded ? (idea.published_at ? 'Opublikowane' : 'Nagrane') : 'Do nagrania'}</Badge>
                 {seconds > 0 && <Badge tone="neutral" icon={Clock}>~{formatSeconds(seconds)}</Badge>}
                 <Badge tone="neutral" icon={Type}>{countWords(idea.content)} słów</Badge>
                 {!recorded && (
@@ -152,9 +155,11 @@ export default function IdeaView() {
                 </div>
             </div>
 
+            {recorded && <ReelResults idea={idea} aiEnabled={!!dashboard?.ai?.enabled} onChange={setIdea} />}
+
             <div className="grid grid-cols-3 gap-2">
                 <Button to={`/ideas/${id}/edit`} variant="secondary" icon={Edit2}>Edytuj</Button>
-                <Button variant="secondary" icon={Copy} onClick={copyText}>Kopiuj</Button>
+                <Button variant="secondary" icon={Copy} onClick={copyText} disabled={!idea.content}>Do Edits</Button>
                 <Button variant="danger" icon={Trash2} onClick={handleDelete}>Usuń</Button>
             </div>
         </div>

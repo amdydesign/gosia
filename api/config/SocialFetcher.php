@@ -480,7 +480,7 @@ class SocialFetcher
             return null;
         }
         [$code, $body] = $this->http(
-            'https://graph.facebook.com/v18.0/me/accounts?fields=followers_count,fan_count&access_token=' . rawurlencode($connection['access_token']),
+            'https://graph.facebook.com/v26.0/me/accounts?fields=followers_count,fan_count&access_token=' . rawurlencode($connection['access_token']),
             ['Accept: application/json']
         );
         if ($code !== 200) {

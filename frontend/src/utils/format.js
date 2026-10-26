@@ -173,13 +173,33 @@ export function getBillingLabel(collabType, { short = false } = {}) {
 }
 
 // Calculate net amount ("na rękę")
-export function calculateNetAmount(gross, type) {
+export function calculateNetAmount(gross, type, date) {
     if (!gross) return 0;
-    return getTaxBreakdown(gross, type).net;
+    return getTaxBreakdown(gross, type, date).net;
 }
 
-// Full tax breakdown - the numbers Gosia sees in the form
-export function getTaxBreakdown(grossInput, type) {
+/**
+ * Use.me "Flex" fee per job - the price list changed on 2026-10-01, a collaboration
+ * keeps the rate of its date. Same table as api/utils/TaxCalculator.php.
+ */
+export const USEME_RATES = [
+    { from: '2026-10-01', percent: 0.098, min: 19, max: 249 },
+    { from: '0000-00-00', percent: 0.078, min: 29, max: 349 },
+];
+
+export function usemeRate(date) {
+    const day = date || getTodayDate();
+    return USEME_RATES.find((r) => day >= r.from) || USEME_RATES[USEME_RATES.length - 1];
+}
+
+/** "9,8%, min. 19 zł, maks. 249 zł" */
+export function usemeRateLabel(date) {
+    const r = usemeRate(date);
+    return `${String(Math.round(r.percent * 1000) / 10).replace('.', ',')}%, min. ${r.min} zł, maks. ${r.max} zł`;
+}
+
+// Full tax breakdown - the numbers Gosia sees in the form (date picks the Use.me price list)
+export function getTaxBreakdown(grossInput, type, date) {
     const gross = parseFloat(grossInput || 0);
     if (!gross) return { gross: 0, net: 0, type, details: {} };
 
@@ -222,8 +242,8 @@ export function getTaxBreakdown(grossInput, type) {
     let currentAmount = gross;
 
     if (config.useme) {
-        let commission = currentAmount * 0.078;
-        if (commission < 29) commission = 29;
+        const rate = usemeRate(date);
+        let commission = Math.min(rate.max, Math.max(rate.min, currentAmount * rate.percent));
         if (commission > currentAmount) commission = currentAmount;
         result.details.commission = commission;
         currentAmount -= commission;

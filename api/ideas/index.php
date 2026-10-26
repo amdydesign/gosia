@@ -20,10 +20,10 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
-    Schema::ensureColumn($conn, 'ideas', 'planned_for');
+    Schema::ensureColumns($conn, 'ideas');
 
     $query = "
-        SELECT id, title, content, status, planned_for, created_at, updated_at
+        SELECT id, title, content, status, planned_for, published_at, views, stats, created_at, updated_at
         FROM ideas 
         WHERE user_id = :user_id
     ";

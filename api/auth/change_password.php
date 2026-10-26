@@ -21,8 +21,8 @@ if (empty($currentPassword) || empty($newPassword)) {
 }
 
 // Validation logic (min length, etc)
-if (strlen($newPassword) < 6) {
-    Response::validationError(['new_password' => 'Nowe hasło musi mieć co najmniej 6 znaków.']);
+if ($error = Users::passwordError($newPassword)) {
+    Response::validationError(['new_password' => $error]);
 }
 
 try {
@@ -40,7 +40,8 @@ try {
 
     // 2. Verify current password
     if (!password_verify($currentPassword, $currentUser['password_hash'])) {
-        Response::error('Obecne hasło jest nieprawidłowe.', 401);
+        // not 401 - that would log the app out
+        Response::error('Obecne hasło jest nieprawidłowe.', 400);
     }
 
     // 3. Hash new password
@@ -52,6 +53,12 @@ try {
         'hash' => $newHash,
         'id' => $user['sub']
     ]);
+
+    // Other devices are logged out (token_version); this one gets a fresh cookie and stays in
+    $version = $conn->prepare("SELECT username, token_version FROM users WHERE id = :id");
+    $version->execute(['id' => $user['sub']]);
+    $fresh = $version->fetch(PDO::FETCH_ASSOC);
+    Session::start($user['sub'], $fresh['username'], $fresh['token_version'], !empty($user['rem']) || JWTHandler::$source === 'header');
 
     Response::success(null, 'Hasło zostało pomyślnie zmienione.');
 

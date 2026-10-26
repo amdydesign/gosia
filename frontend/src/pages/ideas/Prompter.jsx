@@ -4,7 +4,7 @@ import { X, Play, Pause, Minus, Plus, FlipHorizontal2, RotateCcw, Gauge } from '
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 /**
- * Fullscreen teleprompter with auto-scroll, speed, font size and mirror mode.
+ * Fullscreen teleprompter with auto-scroll, speed, font size and mirror mode; keeps the screen on.
  * Tap anywhere on the text to play/pause.
  */
 export default function Prompter({ title, content, onClose }) {
@@ -22,6 +22,29 @@ export default function Prompter({ title, content, onClose }) {
         localStorage.setItem('prompter.font', String(fontSize));
         localStorage.setItem('prompter.speed', String(speed));
     }, [fontSize, speed]);
+
+    // The screen must not dim or lock while reading (Screen Wake Lock; iOS 18.4+ in the home-screen app).
+    // The lock is dropped when the app goes to the background, so it is taken again on return.
+    useEffect(() => {
+        if (!('wakeLock' in navigator)) return undefined;
+        let lock = null;
+        let alive = true;
+        const take = async () => {
+            try {
+                if (alive && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen');
+            } catch {
+                // battery saver / not allowed - the prompter still works
+            }
+        };
+        const onVisible = () => document.visibilityState === 'visible' && take();
+        take();
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            alive = false;
+            document.removeEventListener('visibilitychange', onVisible);
+            lock?.release().catch(() => {});
+        };
+    }, []);
 
     // Auto-scroll loop: ~40px/s at speed 1, scaled by font size
     useEffect(() => {

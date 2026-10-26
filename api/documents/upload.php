@@ -81,6 +81,8 @@ try {
     }
     $counterparty = documentsNormalizeCounterparty($counterparty);
     $collab = documentsCollabFields($text);
+    $paymentDays = documentsPaymentDaysFromText($text);
+    $terms = $paymentDays ? json_encode(['payment_days' => $paymentDays]) : null;
 
     $db = new Database();
     $conn = $db->getConnection();
@@ -111,8 +113,8 @@ try {
     @chmod($uploadDir . '/' . $storedName, 0640);
 
     $stmt = $conn->prepare("
-        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, original_name, stored_name, mime_type, size, content_text, file_hash, text_hash)
-        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :doc_kind, :amount, :billing, :original_name, :stored_name, :mime_type, :size, :content_text, :file_hash, :text_hash)
+        INSERT INTO documents (user_id, title, notes, status, doc_date, counterparty, doc_kind, amount, billing, original_name, stored_name, mime_type, size, content_text, file_hash, text_hash, terms)
+        VALUES (:user_id, :title, :notes, :status, :doc_date, :counterparty, :doc_kind, :amount, :billing, :original_name, :stored_name, :mime_type, :size, :content_text, :file_hash, :text_hash, :terms)
     ");
     $stmt->execute([
         'user_id' => $userId,
@@ -131,6 +133,7 @@ try {
         'content_text' => $text === '' ? null : $text,
         'file_hash' => $fileHash,
         'text_hash' => $textHash,
+        'terms' => $terms,
     ]);
 
     Response::success([

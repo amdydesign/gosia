@@ -6,7 +6,8 @@
  * body: { mode: "purchase" | "collaboration", images: [{ media_type: "image/jpeg", data: "<base64>" }] }
  *
  * purchase      -> { store, purchase_date, order_number, return_days, items: [{ name, amount }], total }
- * collaboration -> { brand, amount_gross, collab_type, type, date, notes }
+ * collaboration -> { brand, amount_gross, collab_type, type, date, notes, publish_by, payment_days }
+ * insights      -> { views, likes, comments, shares, saves, reach, published_date }  (reel statistics screen)
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -38,7 +39,7 @@ try {
 
     $input = json_decode(file_get_contents('php://input'), true) ?: [];
     $mode = $input['mode'] ?? 'purchase';
-    if (!in_array($mode, ['purchase', 'collaboration'], true)) {
+    if (!in_array($mode, ['purchase', 'collaboration', 'insights'], true)) {
         Response::error('Nieznany tryb', 400);
     }
 
@@ -64,6 +65,11 @@ try {
     if ($mode === 'purchase') {
         $result = AiClient::extract(purchasePrompt($today), $images, purchaseSchema());
         Response::success(normalizePurchase($result));
+    }
+
+    if ($mode === 'insights') {
+        $result = AiClient::extract(insightsPrompt($today), $images, insightsSchema());
+        Response::success(normalizeInsights($result));
     }
 
     $result = AiClient::extract(collaborationPrompt($today), $images, collaborationSchema());
@@ -186,6 +192,8 @@ Wypełnij pola:
 - type: rodzaj pracy, jeden z: {$types}. post-instagram = post, story = relacje, reel = rolka, sesja = sesja zdjęciowa.
 - date: data realizacji lub publikacji (RRRR-MM-DD), a jeśli jej nie ma - data wiadomości. Pusty tekst, gdy brak daty.
 - notes: 1-2 krótkie zdania po polsku: co trzeba zrobić i terminy.
+- publish_by: do kiedy trzeba opublikować / oddać materiał (RRRR-MM-DD), pusty tekst gdy nie podano.
+- payment_days: w ilu dniach marka zapłaci (np. 14, 30), 0 gdy nie podano.
 TXT;
 }
 
@@ -200,8 +208,10 @@ function collaborationSchema()
             'type' => ['type' => 'string', 'enum' => COLLAB_TYPES],
             'date' => ['type' => 'string'],
             'notes' => ['type' => 'string'],
+            'publish_by' => ['type' => 'string'],
+            'payment_days' => ['type' => 'integer'],
         ],
-        'required' => ['brand', 'amount_gross', 'collab_type', 'type', 'date', 'notes'],
+        'required' => ['brand', 'amount_gross', 'collab_type', 'type', 'date', 'notes', 'publish_by', 'payment_days'],
         'additionalProperties' => false,
     ];
 }
@@ -222,5 +232,46 @@ function normalizeCollaboration(array $r)
         'type' => $type,
         'date' => $date,
         'notes' => mb_substr(trim((string) ($r['notes'] ?? '')), 0, 1000),
+        'publish_by' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($r['publish_by'] ?? '')) ? $r['publish_by'] : '',
+        'payment_days' => ((int) ($r['payment_days'] ?? 0)) > 0 && ((int) $r['payment_days']) <= 365 ? (int) $r['payment_days'] : null,
     ];
+}
+
+function insightsPrompt($today)
+{
+    return <<<TXT
+Na obrazach są statystyki jednej rolki / posta z Instagrama, TikToka albo YouTube (ekran "Statystyki", "Insights", "Analityka").
+Dzisiaj jest {$today}.
+
+Przepisz liczby jako liczby całkowite (np. "12,4 tys." = 12400, "1,2 mln" = 1200000). 0, gdy danej liczby nie widać.
+- views: wyświetlenia (odtworzenia).
+- likes: polubienia.
+- comments: komentarze.
+- shares: udostępnienia.
+- saves: zapisania.
+- reach: zasięg (konta, do których dotarła).
+- published_date: data publikacji (RRRR-MM-DD), pusty tekst gdy nie widać.
+TXT;
+}
+
+function insightsSchema()
+{
+    $int = ['type' => 'integer'];
+    return [
+        'type' => 'object',
+        'properties' => ['views' => $int, 'likes' => $int, 'comments' => $int, 'shares' => $int, 'saves' => $int, 'reach' => $int, 'published_date' => ['type' => 'string']],
+        'required' => ['views', 'likes', 'comments', 'shares', 'saves', 'reach', 'published_date'],
+        'additionalProperties' => false,
+    ];
+}
+
+function normalizeInsights(array $r)
+{
+    $out = [];
+    foreach (['views', 'likes', 'comments', 'shares', 'saves', 'reach'] as $key) {
+        $out[$key] = max(0, (int) ($r[$key] ?? 0));
+    }
+    $date = (string) ($r['published_date'] ?? '');
+    $out['published_date'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && $date <= date('Y-m-d') ? $date : '';
+    return $out;
 }

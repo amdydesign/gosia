@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
+import { ScanFace, Trash2, HardDrive, Share, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Logo from '../ui/Logo';
 import Switch from '../ui/Switch';
@@ -11,6 +11,10 @@ import ChangePasswordModal from '../auth/ChangePasswordModal';
 import ExportModal from '../../pages/collaborations/ExportModal';
 import NotificationsSheet from '../settings/NotificationsSheet';
 import UsersSheet from '../settings/UsersSheet';
+import SecuritySheet from '../settings/SecuritySheet';
+import TrashSheet from '../settings/TrashSheet';
+import BackupSheet from '../settings/BackupSheet';
+import ShareSheet from '../settings/ShareSheet';
 import { useAuth } from '../../context/AuthContext';
 import { usePush } from '../../hooks/usePush';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -41,6 +45,10 @@ export default function SettingsSheet({ open, onClose }) {
     const [exportOpen, setExportOpen] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [usersOpen, setUsersOpen] = useState(false);
+    const [securityOpen, setSecurityOpen] = useState(false);
+    const [trashOpen, setTrashOpen] = useState(false);
+    const [backupOpen, setBackupOpen] = useState(false);
+    const [shareOpen, setShareOpen] = useState(false);
     const [editingName, setEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
     const name = userName(user);
@@ -76,7 +84,7 @@ export default function SettingsSheet({ open, onClose }) {
 
     return (
         <>
-            <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen && !usersOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
+            <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen && !usersOpen && !securityOpen && !trashOpen && !backupOpen && !shareOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-12 h-12 shrink-0 rounded-full bg-surface-2 border border-line text-ink flex items-center justify-center font-semibold text-lg">
                         {name.charAt(0).toUpperCase()}
@@ -194,11 +202,31 @@ export default function SettingsSheet({ open, onClose }) {
                         </span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
+                    <button type="button" onClick={() => setShareOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
+                            <Share size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Udostępnianie z iPhone’a</span>
+                            <span className="block text-xs text-ink-muted">Screen → Udostępnij → Gonia</span>
+                        </span>
+                        <ChevronRight size={18} className="text-ink-muted" />
+                    </button>
                     <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-surface-2">
                         <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
                             <Download size={18} />
                         </span>
                         <span className="flex-1 text-sm font-semibold text-ink">Eksport współprac (CSV)</span>
+                        <ChevronRight size={18} className="text-ink-muted" />
+                    </button>
+                    <button type="button" onClick={() => setTrashOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
+                            <Trash2 size={18} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Kosz</span>
+                            <span className="block text-xs text-ink-muted">Usunięte w ostatnich 30 dniach</span>
+                        </span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
                     {user?.is_admin && (
@@ -213,11 +241,26 @@ export default function SettingsSheet({ open, onClose }) {
                             <ChevronRight size={18} className="text-ink-muted" />
                         </button>
                     )}
-                    <button type="button" onClick={() => setPasswordOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                    {user?.is_admin && (
+                        <button type="button" onClick={() => setBackupOpen(true)} className="row w-full text-left hover:bg-surface-2">
+                            <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
+                                <HardDrive size={18} />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block text-sm font-semibold text-ink">Kopie zapasowe</span>
+                                <span className="block text-xs text-ink-muted">Co noc, sama się robi</span>
+                            </span>
+                            <ChevronRight size={18} className="text-ink-muted" />
+                        </button>
+                    )}
+                    <button type="button" onClick={() => setSecurityOpen(true)} className="row w-full text-left hover:bg-surface-2">
                         <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <KeyRound size={18} />
+                            <ScanFace size={18} />
                         </span>
-                        <span className="flex-1 text-sm font-semibold text-ink">Zmień hasło</span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink">Logowanie</span>
+                            <span className="block text-xs text-ink-muted">Face ID, e-mail do odzyskania, hasło</span>
+                        </span>
                         <ChevronRight size={18} className="text-ink-muted" />
                     </button>
                     <button type="button" onClick={handleLogout} className="row w-full text-left hover:bg-red-50">
@@ -237,6 +280,17 @@ export default function SettingsSheet({ open, onClose }) {
             <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
             <NotificationsSheet open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
             <UsersSheet open={usersOpen} onClose={() => setUsersOpen(false)} />
+            <TrashSheet open={trashOpen} onClose={() => setTrashOpen(false)} />
+            <BackupSheet open={backupOpen} onClose={() => setBackupOpen(false)} />
+            <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} />
+            <SecuritySheet
+                open={securityOpen}
+                onClose={() => setSecurityOpen(false)}
+                onChangePassword={() => {
+                    setSecurityOpen(false);
+                    setPasswordOpen(true);
+                }}
+            />
         </>
     );
 }

@@ -6,9 +6,10 @@ import Attachments from '../common/Attachments';
 import { apiRequest } from '../../utils/api';
 import { usePurchaseActions } from '../../hooks/usePurchaseActions';
 import { useToast } from '../../context/ToastContext';
-import { useConfirm } from '../../context/ConfirmContext';
+import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
-import { bucket, deadlineText, deadlineTone, RETURN_DAY_PRESETS, withPatch } from '../../utils/purchases';
+import { useQuickActions } from '../../context/QuickActionsContext';
+import { bucket, deadlineText, deadlineTone, recoveredOf, refundPending, RETURN_DAY_PRESETS, withPatch } from '../../utils/purchases';
 import { formatCurrency, formatDateLong, parseAmount } from '../../utils/format';
 
 /**
@@ -16,7 +17,7 @@ import { formatCurrency, formatDateLong, parseAmount } from '../../utils/format'
  */
 export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onChanged }) {
     const toast = useToast();
-    const confirm = useConfirm();
+    const { bump } = useQuickActions();
     const { refresh } = useDashboard();
     const [purchase, setPurchase] = useState(initial || null);
     const [error, setError] = useState('');
@@ -25,7 +26,7 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
     const [edit, setEdit] = useState(null);
     const [saving, setSaving] = useState(false);
 
-    const { update, returned, keep, busyId } = usePurchaseActions({
+    const { update, returned, keep, delivered, refunded, busyId } = usePurchaseActions({
         onChange: (id, patch) => {
             setPurchase((p) => withPatch(p, patch));
             onChanged?.(id, patch);
@@ -104,10 +105,12 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
     };
 
     const remove = async () => {
-        if (!(await confirm({ title: 'Usunąć zakup?', message: `${purchase.store} · ${purchase.items}`, confirmLabel: 'Usuń', danger: true }))) return;
         try {
-            await apiRequest(`/purchases/delete.php?id=${purchase.id}`, 'DELETE');
-            toast.success('Usunięto');
+            const res = await apiRequest(`/purchases/delete.php?id=${purchase.id}`, 'DELETE');
+            deletedToast(toast, `${purchase.store} — usunięte`, res?.trash_id, () => {
+                refresh();
+                bump('purchases');
+            });
             refresh();
             onChanged?.(purchase.id, null);
             onClose();
@@ -163,6 +166,13 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
                             <div className={`text-sm font-bold ${tone === 'danger' ? 'text-red-700' : tone === 'warning' ? 'text-amber-800' : 'text-ink'}`}>
                                 Zwrot: {deadlineText(days, purchase.return_deadline)}
                             </div>
+                            {purchase.delivered_at ? (
+                                <div className="text-xs text-ink-muted mt-0.5">liczone od dostawy {formatDateLong(purchase.delivered_at)}</div>
+                            ) : (
+                                <button type="button" disabled={busy} onClick={() => delivered([purchase])} className="mt-1 text-xs font-semibold text-ink-muted hover:text-ink">
+                                    Paczka przyszła dziś? Termin liczy się od dostawy
+                                </button>
+                            )}
                             {mode === 'partial' ? (
                                 <div className="mt-3 flex gap-2">
                                     <div className="relative flex-1">
@@ -202,14 +212,27 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
                     )}
 
                     {state === 'returned' && (
-                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 flex items-center justify-between gap-3">
-                            <div>
-                                <div className="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
-                                    <Check size={16} /> {purchase.status === 'partial' ? 'Częściowo zwrócone' : 'Zwrócone'} · {formatCurrency(purchase.returned_amount)}
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <div className="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
+                                        <Check size={16} /> {purchase.status === 'partial' ? 'Częściowo zwrócone' : 'Zwrócone'} · {formatCurrency(recoveredOf(purchase))}
+                                    </div>
+                                    <div className="text-xs text-emerald-700/80 mt-0.5">
+                                        {purchase.returned_at ? `odesłane ${formatDateLong(purchase.returned_at.slice(0, 10))}` : ''}
+                                        {Number(purchase.return_cost) > 0 ? ` · odesłanie ${formatCurrency(purchase.return_cost)}` : ''}
+                                    </div>
                                 </div>
-                                {purchase.returned_at && <div className="text-xs text-emerald-700/80 mt-0.5">{formatDateLong(purchase.returned_at.slice(0, 10))}</div>}
+                                <Button size="sm" variant="ghost" icon={Undo2} loading={busy} onClick={() => update(purchase, { status: 'kept', returned_amount: 0, return_cost: null })}>Cofnij</Button>
                             </div>
-                            <Button size="sm" variant="ghost" icon={Undo2} loading={busy} onClick={() => update(purchase, { status: 'kept', returned_amount: 0 })}>Cofnij</Button>
+                            {refundPending(purchase) ? (
+                                <div className="mt-3 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+                                    <span className="flex-1 text-xs text-amber-900">Czekam na pieniądze — sklep ma 14 dni.</span>
+                                    <Button size="sm" variant="success" icon={Check} loading={busy} onClick={() => refunded([purchase])}>Pieniądze są</Button>
+                                </div>
+                            ) : (
+                                purchase.refunded_at && <div className="mt-2 text-xs text-emerald-700">Pieniądze wróciły {formatDateLong(purchase.refunded_at)}</div>
+                            )}
                         </div>
                     )}
 

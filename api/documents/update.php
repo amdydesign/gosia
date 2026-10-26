@@ -1,7 +1,7 @@
 <?php
 /**
  * Rename a document / edit its notes / change signing status
- * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date?, counterparty?, amount?, doc_kind?, billing? }
+ * PUT /api/documents/update.php?id=123   body: { title?, notes?, status?, doc_date?, counterparty?, amount?, doc_kind?, billing?, terms? }
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -76,6 +76,14 @@ try {
         $params['doc_date'] = documentsParseDate($data['doc_date']);
     }
 
+    // contract terms edited by hand (dates, payment term, exclusivity...)
+    $terms = null;
+    if (array_key_exists('terms', $data)) {
+        $terms = documentsCleanTerms($data['terms']);
+        $fields[] = 'terms = :terms';
+        $params['terms'] = $terms ? json_encode($terms, JSON_UNESCAPED_UNICODE) : null;
+    }
+
     if (!$fields) {
         Response::error('No fields to update', 400);
     }
@@ -108,6 +116,15 @@ try {
                 'cid' => $collab['id'],
                 'user_id' => $userId,
             ]);
+        }
+    }
+
+    if ($terms) {
+        $stmt = $conn->prepare("SELECT collaboration_id FROM documents WHERE id = :id AND user_id = :user_id");
+        $stmt->execute(['id' => $id, 'user_id' => $userId]);
+        if ($collabId = (int) $stmt->fetchColumn()) {
+            require_once __DIR__ . '/../collaborations/helpers.php';
+            collabApplyTerms($conn, $userId, $collabId, $terms);
         }
     }
 
