@@ -223,6 +223,31 @@ class Schema
                 INDEX idx_user_open (user_id, done_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        // "Udostępnij": a reel / file with a public link for a brand or a manager (share.* subdomain)
+        'shares' => "
+            CREATE TABLE IF NOT EXISTS shares (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                token VARCHAR(20) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                note TEXT NULL,
+                original_name VARCHAR(255) NOT NULL,
+                stored_name VARCHAR(80) NOT NULL,
+                poster_name VARCHAR(80) NULL,
+                mime_type VARCHAR(100) NOT NULL,
+                size BIGINT NOT NULL DEFAULT 0,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                allow_download TINYINT(1) NOT NULL DEFAULT 1,
+                expires_at DATETIME NULL,
+                views INT NOT NULL DEFAULT 0,
+                downloads INT NOT NULL DEFAULT 0,
+                last_viewed_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE KEY idx_token (token),
+                INDEX idx_user_created (user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
         'social_refresh_log' => "
             CREATE TABLE IF NOT EXISTS social_refresh_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, Camera, Lightbulb, FolderLock, ChevronRight } from 'lucide-react';
+import { Briefcase, Camera, Lightbulb, FolderLock, ChevronRight, Send } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import { useQuickActions } from '../../context/QuickActionsContext';
 
@@ -11,6 +11,7 @@ export default function QuickAddSheet({ open, onClose }) {
         { key: 'collab', icon: Briefcase, title: 'Współpraca', text: 'Marka i kwota — reszta jak ostatnio', tone: 'bg-primary-50 text-primary-600', run: () => openCollab() },
         { key: 'purchase', icon: Camera, title: 'Zakup ze screena', text: 'Wrzuć screena, przypomnę o zwrocie', tone: 'bg-secondary-light text-secondary-dark', run: () => openPurchase() },
         { key: 'document', icon: FolderLock, title: 'Dokument', text: 'Umowa — skan aparatem albo plik', tone: 'bg-sky-50 text-sky-600', run: () => { onClose(); navigate('/documents?add=1'); } },
+        { key: 'share', icon: Send, title: 'Rolka dla marki', text: 'Wrzuć plik, wyślij link', tone: 'bg-primary-50 text-primary-600', run: () => { onClose(); navigate('/share?add=1'); } },
         { key: 'idea', icon: Lightbulb, title: 'Pomysł na rolkę', text: 'Scenariusz do promptera', tone: 'bg-amber-50 text-amber-600', run: () => { onClose(); navigate('/ideas/new'); } },
     ];
 

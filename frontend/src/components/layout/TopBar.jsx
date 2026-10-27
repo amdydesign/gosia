@@ -1,18 +1,19 @@
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, Plus } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ChevronDown, Eye, EyeOff, Menu, Plus } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 import { usePreferences } from '../../context/PreferencesContext';
 import Logo from '../ui/Logo';
 import { userName } from '../../utils/format';
 import { useAuth } from '../../context/AuthContext';
-import { NAV_ITEMS } from './navItems';
+import { NAV_ITEMS, activeMoreItem } from './navItems';
 
 /**
- * Desktop: logo, pill navigation, "Dodaj" and the profile avatar in one row.
+ * Desktop: logo, pill navigation (+ "Więcej" menu), "Dodaj" and the profile avatar in one row.
  * Phone: logo (Start) or page title, amount privacy toggle and avatar; navigation lives in MobileNav.
  */
-export default function TopBar({ meta, onOpenProfile, onAdd }) {
+export default function TopBar({ meta, onOpenProfile, onAdd, onOpenMenu }) {
     const navigate = useNavigate();
+    const more = activeMoreItem(useLocation().pathname);
     const { badges } = useDashboard();
     const { amountsHidden, toggleAmounts } = usePreferences();
     const { user } = useAuth();
@@ -74,6 +75,21 @@ export default function TopBar({ meta, onOpenProfile, onAdd }) {
                             </NavLink>
                         );
                     })}
+                    <button
+                        type="button"
+                        onClick={onOpenMenu}
+                        aria-haspopup="dialog"
+                        className={`h-9 px-4 rounded-full inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                            more ? 'nav-active' : 'text-ink-muted hover:text-ink'
+                        }`}
+                    >
+                        {more ? more.label : (
+                            <>
+                                <Menu size={16} /> Więcej
+                            </>
+                        )}
+                        <ChevronDown size={15} />
+                    </button>
                 </nav>
                 <div className="flex-1" />
                 {privacyButton}

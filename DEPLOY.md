@@ -61,3 +61,24 @@ Strefa czasowa: domyślnie `Europe/Warsaw` (zmiana: `APP_TIMEZONE` w `api/.env`)
 
 **iPhone:** powiadomienia działają tylko w aplikacji dodanej do ekranu głównego
 (Safari → Udostępnij → „Do ekranu początkowego”), potem w Goni: awatar → Powiadomienia → włącz.
+
+## Udostępnij — linki do rolek (subdomena share.)
+
+W aplikacji: **Menu → Udostępnij** (albo „+” → „Rolka dla marki”). Plik idzie na serwer w kawałkach po 8 MB,
+więc limit uploadu PHP na hostingu nie ma znaczenia — domyślnie do **5 GB na plik**
+(zmiana: `SHARE_MAX_SIZE_MB=10240` w `api/.env`). Pliki leżą w `api/uploads/share` (bez dostępu z zewnątrz,
+nie trafiają do kopii zapasowej), publiczną stronę z odtwarzaczem serwuje `share/index.php`.
+
+Link działa od razu pod `https://panel.malgorzatamordarska.pl/share/<kod>`. Żeby był krótszy i ładniejszy:
+
+1. **Panel dHosting → Domeny / Subdomeny → Dodaj subdomenę** `share.malgorzatamordarska.pl`.
+2. Katalog subdomeny ustaw na folder **`share`** w katalogu panelu (np. `public_html/share` — ten sam, w którym jest `api/`).
+3. Włącz dla niej **SSL (Let's Encrypt)**.
+4. W `api/.env` dopisz:
+   ```
+   SHARE_URL=https://share.malgorzatamordarska.pl
+   ```
+   Od tej chwili aplikacja daje linki `https://share.malgorzatamordarska.pl/<kod>`. Stare linki (panel…/share/…) dalej działają.
+
+Opcjonalnie: `SHARE_BRAND=Małgorzata Mordarska` — nazwa na górze strony z filmem.
+Usunięty plik przez 30 dni leży w Koszu („Cofnij” przywraca ten sam link), potem znika z dysku.

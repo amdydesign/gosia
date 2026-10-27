@@ -58,6 +58,7 @@ self.addEventListener('fetch', (event) => {
 
     if (url.origin !== self.location.origin) return;
     if (url.pathname.startsWith('/api/')) return; // never cache API responses
+    if (url.pathname.startsWith('/share/')) return; // public share pages (PHP) - not the app
 
     // SPA navigations: network first, offline fallback to cached shell
     if (request.mode === 'navigate') {
