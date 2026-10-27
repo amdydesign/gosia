@@ -10,7 +10,7 @@
 require_once __DIR__ . '/../config/Schema.php';
 
 // dHosting plan size for the "Zajęte miejsce" bar; STORAGE_QUOTA_GB in api/.env changes it
-const SHARE_DEFAULT_QUOTA_GB = 25;
+const SHARE_DEFAULT_QUOTA_GB = 20;
 
 // Default cap per file; SHARE_MAX_SIZE_MB in api/.env changes it
 const SHARE_DEFAULT_MAX_MB = 5120; // 5 GB
@@ -177,7 +177,7 @@ function shareFolderSize($dir, $recursive = true)
 /**
  * Space taken by everything the app keeps on the server (bytes), by kind.
  * $sharesActive: size of shares still on the list - the rest of share/ is the bin and unfinished uploads.
- * Measured against the hosting plan (25 GB; STORAGE_QUOTA_GB in api/.env, 0 = no bar).
+ * Measured against the hosting plan (20 GB; STORAGE_QUOTA_GB in api/.env, 0 = no bar).
  */
 function shareStorage($sharesActive)
 {
