@@ -154,6 +154,49 @@ function shareForPanel(array $row)
     ];
 }
 
+function shareFolderSize($dir, $recursive = true)
+{
+    if (!is_dir($dir)) {
+        return 0;
+    }
+    $total = 0;
+    $items = $recursive
+        ? new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS))
+        : new FilesystemIterator($dir, FilesystemIterator::SKIP_DOTS);
+    foreach ($items as $file) {
+        if ($file->isFile() && $file->getFilename() !== '.htaccess') {
+            $total += $file->getSize();
+        }
+    }
+    return $total;
+}
+
+/**
+ * Space taken by everything the app keeps on the server (bytes), by kind.
+ * $sharesActive: size of shares still on the list - the rest of share/ is the bin and unfinished uploads.
+ * STORAGE_QUOTA_GB in api/.env (the hosting plan) adds the "of X GB" bar.
+ */
+function shareStorage($sharesActive)
+{
+    $uploads = __DIR__ . '/../uploads';
+    $shares = shareFolderSize($uploads . '/share');
+    $parts = [
+        'shares' => $shares,
+        'documents' => shareFolderSize($uploads . '/documents'),
+        'attachments' => shareFolderSize($uploads, false), // attachments sit directly in uploads/
+        'inbox' => shareFolderSize($uploads . '/inbox'),
+        'backups' => shareFolderSize(__DIR__ . '/../backups'),
+    ];
+    $quotaGb = (float) str_replace(',', '.', (string) ($_ENV['STORAGE_QUOTA_GB'] ?? '0'));
+
+    return [
+        'total' => array_sum($parts),
+        'parts' => $parts,
+        'shares_bin' => max(0, $shares - $sharesActive), // deleted (30 days in the bin) + unfinished uploads
+        'quota' => $quotaGb > 0 ? (int) round($quotaGb * 1073741824) : null,
+    ];
+}
+
 /** Drop pieces of uploads abandoned more than a day ago. */
 function shareCleanupTmp()
 {
