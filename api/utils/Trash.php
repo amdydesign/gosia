@@ -1,7 +1,7 @@
 <?php
 /**
  * Kosz: deleting never asks "Czy na pewno?" - the thing moves here for 30 days
- * and "Cofnij" (or Ustawienia -> Kosz) puts it back.
+ * and "Cofnij" (or Ustawienia -> Kosz) puts it back. The bin can also be emptied by hand.
  *
  * The row and its children are kept as JSON, files stay on disk until the purge.
  * Restoring re-inserts them with the same ids (a new id only if that one got taken).
@@ -161,10 +161,35 @@ class Trash
     {
         Schema::ensure($conn, 'trash');
         $old = $conn->query("SELECT id, files FROM trash WHERE deleted_at < DATE_SUB(NOW(), INTERVAL " . self::DAYS . " DAY)")->fetchAll(PDO::FETCH_ASSOC);
+        self::remove($conn, $old);
+        return count($old);
+    }
+
+    /** "Opróżnij kosz" / "Usuń na zawsze": these bin items (of this user) gone now, files too. @return int how many */
+    public static function discard(PDO $conn, $userId, array $ids)
+    {
+        Schema::ensure($conn, 'trash');
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) {
+            return 0;
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $conn->prepare("SELECT id, files FROM trash WHERE user_id = ? AND id IN ($placeholders)");
+        $stmt->execute(array_merge([$userId], $ids));
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        self::remove($conn, $items);
+        return count($items);
+    }
+
+    private static function remove(PDO $conn, array $items)
+    {
         $uploads = realpath(__DIR__ . '/../uploads');
-        foreach ($old as $item) {
+        foreach ($items as $item) {
             foreach (json_decode((string) $item['files'], true) ?: [] as $file) {
                 $path = realpath($uploads . '/' . $file);
+                if (!$path && strpos($file, 'attachments/') === 0) {
+                    $path = realpath($uploads . '/' . basename($file)); // attachments sit directly in uploads/
+                }
                 // only files inside uploads/ (never follow a path out of it)
                 if ($path && $uploads && strpos($path, $uploads . DIRECTORY_SEPARATOR) === 0 && is_file($path)) {
                     @unlink($path);
@@ -172,7 +197,6 @@ class Trash
             }
             $conn->prepare("DELETE FROM trash WHERE id = :id")->execute(['id' => $item['id']]);
         }
-        return count($old);
     }
 
     private static function attachmentsOf(PDO $conn, $userId, $type, $id)

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RotateCcw, Trash2, X } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import EmptyState from '../ui/EmptyState';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
-import { listTrash, restoreFromTrash } from '../../services/trash';
+import { discardFromTrash, listTrash, restoreFromTrash } from '../../services/trash';
 
 const TYPE_LABEL = {
     collaboration: 'Współpraca',
@@ -18,8 +18,11 @@ const TYPE_LABEL = {
 
 const BUMP = { collaboration: 'collaborations', purchase: 'purchases', idea: 'ideas', document: 'documents', share: 'shares' };
 
+const UNDO_MS = 6000;
+
 /**
  * Kosz: what was deleted in the last 30 days - one tap puts it back.
+ * Emptying (all or one thing) asks nothing: it waits 6 s with "Cofnij", then it is gone for good.
  */
 export default function TrashSheet({ open, onClose }) {
     const toast = useToast();
@@ -38,6 +41,54 @@ export default function TrashSheet({ open, onClose }) {
         if (open) load();
     }, [open, load]);
 
+    // Emptying waits for the "Cofnij" toast; only then the server deletes (files too)
+    const pending = useRef(null);
+    const commit = useCallback(
+        async (job) => {
+            try {
+                await discardFromTrash(job.ids);
+                job.types.forEach((type) => BUMP[type] && bump(BUMP[type])); // e.g. the space counter in Udostępnij
+            } catch (err) {
+                toast.error(err.message || 'Nie udało się usunąć');
+                load();
+            }
+        },
+        [bump, toast, load]
+    );
+    const flush = useCallback(() => {
+        const job = pending.current;
+        if (!job) return;
+        clearTimeout(job.timer);
+        pending.current = null;
+        commit(job);
+    }, [commit]);
+    useEffect(() => flush, [flush]);
+
+    const discard = (gone) => {
+        if (!gone.length) return;
+        flush(); // an earlier one goes now
+        const before = items;
+        const ids = gone.map((i) => i.id);
+        setItems((list) => list.filter((i) => !ids.includes(i.id)));
+        const job = { ids, types: [...new Set(gone.map((i) => i.entity_type))] };
+        job.timer = setTimeout(() => {
+            if (pending.current === job) pending.current = null;
+            commit(job);
+        }, UNDO_MS);
+        pending.current = job;
+        toast.success(gone.length === 1 ? `Usunięte na zawsze: ${gone[0].title || TYPE_LABEL[gone[0].entity_type]}` : `Kosz opróżniony (${gone.length})`, {
+            duration: UNDO_MS,
+            action: {
+                label: 'Cofnij',
+                onClick: () => {
+                    clearTimeout(job.timer);
+                    if (pending.current === job) pending.current = null;
+                    setItems(before);
+                },
+            },
+        });
+    };
+
     const restore = async (item) => {
         setBusyId(item.id);
         try {
@@ -54,7 +105,7 @@ export default function TrashSheet({ open, onClose }) {
     };
 
     return (
-        <Sheet open={open} onClose={onClose} title="Kosz" description="Usunięte rzeczy czekają tu 30 dni, potem znikają na dobre." size="sm">
+        <Sheet open={open} onClose={onClose} title="Kosz" description="Usunięte rzeczy czekają tu 30 dni, potem znikają same. Możesz też opróżnić kosz od razu." size="sm">
             {items === null ? (
                 <p className="text-sm text-ink-muted py-6 text-center">Ładowanie…</p>
             ) : items.length === 0 ? (
@@ -77,9 +128,28 @@ export default function TrashSheet({ open, onClose }) {
                             >
                                 <RotateCcw size={14} /> Przywróć
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => discard([item])}
+                                disabled={busyId === item.id}
+                                className="-mr-1 w-9 h-9 rounded-full text-ink-muted hover:text-red-600 hover:bg-red-50 inline-flex items-center justify-center shrink-0 disabled:opacity-50"
+                                aria-label="Usuń na zawsze"
+                                title="Usuń na zawsze"
+                            >
+                                <X size={16} />
+                            </button>
                         </div>
                     ))}
                 </div>
+            )}
+            {items?.length > 0 && (
+                <button
+                    type="button"
+                    onClick={() => discard(items)}
+                    className="btn btn-ghost w-full mt-3 !text-red-600 hover:!bg-red-50"
+                >
+                    <Trash2 size={16} /> Opróżnij kosz · {items.length}
+                </button>
             )}
         </Sheet>
     );

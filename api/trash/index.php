@@ -4,6 +4,7 @@
  *
  * GET  /api/trash/index.php            -> [{ id, entity_type, entity_id, title, deleted_at, days_left }]
  * POST /api/trash/index.php?restore=ID -> { type, id }  (puts it back - "Cofnij" / "Przywróć")
+ * DELETE /api/trash/index.php { ids: [...] } -> { removed }  (gone for good now, files too - "Opróżnij kosz")
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -23,6 +24,11 @@ try {
             Response::notFound('Tego już nie ma w koszu');
         }
         Response::success($restored, 'Przywrócone');
+    }
+    if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        $input = json_decode(file_get_contents('php://input'), true) ?: [];
+        $removed = Trash::discard($conn, $userId, (array) ($input['ids'] ?? []));
+        Response::success(['removed' => $removed], 'Usunięte na zawsze');
     }
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
         Response::error('Method not allowed', 405);

@@ -11,6 +11,11 @@ export function restoreFromTrash(trashId) {
     return apiRequest(`/trash/index.php?restore=${trashId}`, 'POST', {});
 }
 
+/** Gone for good now (files too) - "Opróżnij kosz" / "Usuń na zawsze". */
+export function discardFromTrash(ids) {
+    return apiRequest('/trash/index.php', 'DELETE', { ids });
+}
+
 /** Toast after deleting: "Usunięte" + "Cofnij" (puts it back from the bin). */
 export function deletedToast(toast, label, trashId, onRestored) {
     toast.success(label, {
