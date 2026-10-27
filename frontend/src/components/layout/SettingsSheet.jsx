@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyRound, Trash2, HardDrive, Share, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
+import { KeyRound, Trash2, HardDrive, Share, LogOut, Bell, BellOff, ChevronRight, Sparkles, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Logo from '../ui/Logo';
 import Switch from '../ui/Switch';
@@ -7,7 +7,6 @@ import { userName } from '../../utils/format';
 import { updateProfile } from '../../services/users';
 import { useToast } from '../../context/ToastContext';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
-import ExportModal from '../../pages/collaborations/ExportModal';
 import NotificationsSheet from '../settings/NotificationsSheet';
 import UsersSheet from '../settings/UsersSheet';
 import SecuritySheet from '../settings/SecuritySheet';
@@ -74,7 +73,6 @@ export default function SettingsSheet({ open, onClose }) {
     const { theme, setTheme, hideByDefault, setHideByDefault } = usePreferences();
     const ai = dashboard?.ai;
     const [passwordOpen, setPasswordOpen] = useState(false);
-    const [exportOpen, setExportOpen] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [usersOpen, setUsersOpen] = useState(false);
     const [securityOpen, setSecurityOpen] = useState(false);
@@ -117,7 +115,7 @@ export default function SettingsSheet({ open, onClose }) {
 
     return (
         <>
-            <Sheet open={open && !passwordOpen && !exportOpen && !notificationsOpen && !usersOpen && !securityOpen && !trashOpen && !backupOpen && !shareOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
+            <Sheet open={open && !passwordOpen && !notificationsOpen && !usersOpen && !securityOpen && !trashOpen && !backupOpen && !shareOpen} onClose={onClose} title="Profil i ustawienia" size="sm">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-12 h-12 shrink-0 rounded-full bg-surface-2 border border-line text-ink flex items-center justify-center font-semibold text-lg">
                         {name.charAt(0).toUpperCase()}
@@ -211,7 +209,6 @@ export default function SettingsSheet({ open, onClose }) {
 
                 <Section title="Dane">
                     <Row icon={Trash2} title="Kosz" text="Usunięte w ostatnich 30 dniach" onClick={() => setTrashOpen(true)} />
-                    <Row icon={Download} title="Eksport współprac" text="Plik CSV, np. dla księgowej" onClick={() => setExportOpen(true)} />
                     {user?.is_admin && <Row icon={HardDrive} title="Kopie zapasowe" text="Co noc, same się robią" onClick={() => setBackupOpen(true)} />}
                 </Section>
 
@@ -230,7 +227,6 @@ export default function SettingsSheet({ open, onClose }) {
             </Sheet>
 
             <ChangePasswordModal isOpen={passwordOpen} onClose={() => setPasswordOpen(false)} />
-            <ExportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
             <NotificationsSheet open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
             <UsersSheet open={usersOpen} onClose={() => setUsersOpen(false)} />
             <TrashSheet open={trashOpen} onClose={() => setTrashOpen(false)} />
