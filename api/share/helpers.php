@@ -34,15 +34,21 @@ function shareTmpDir()
     return shareDir() . '/tmp';
 }
 
-/** Link base: SHARE_URL from api/.env (e.g. https://share.malgorzatamordarska.pl), else this host + /share. */
+// Subdomain pointing at the share/ folder (panel.malgorzatamordarska.pl/share/<token> works too)
+const SHARE_DEFAULT_URL = 'https://share.malgorzatamordarska.pl';
+
+/** Link base: SHARE_URL from api/.env overrides; locally (no subdomain) this host + /share. */
 function shareBaseUrl()
 {
     $configured = rtrim(trim($_ENV['SHARE_URL'] ?? ''), '/');
     if ($configured !== '') {
         return $configured;
     }
+    $host = preg_replace('/[^A-Za-z0-9.:-]/', '', $_SERVER['HTTP_HOST'] ?? '');
+    if (substr($host, -strlen('malgorzatamordarska.pl')) === 'malgorzatamordarska.pl') {
+        return SHARE_DEFAULT_URL;
+    }
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-    $host = preg_replace('/[^A-Za-z0-9.:-]/', '', $_SERVER['HTTP_HOST'] ?? 'panel.malgorzatamordarska.pl');
     return ($https ? 'https' : 'http') . '://' . $host . '/share';
 }
 
