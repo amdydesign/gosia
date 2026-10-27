@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { KeyRound, Trash2, HardDrive, Share, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, FolderLock, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
+import { KeyRound, Trash2, HardDrive, Share, LogOut, Bell, BellOff, Download, ChevronRight, Sparkles, Moon, Sun, Smartphone, EyeOff, Pencil, Users, Check } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Logo from '../ui/Logo';
 import Switch from '../ui/Switch';
@@ -28,11 +27,44 @@ const THEMES = [
     { value: 'auto', label: 'Auto', icon: Smartphone },
 ];
 
+/** A labelled group of rows - the menu reads as a few short lists, not one long one. */
+function Section({ title, children }) {
+    return (
+        <section className="mb-4">
+            <h3 className="px-1 mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">{title}</h3>
+            <div className="card divide-y divide-line overflow-hidden">{children}</div>
+        </section>
+    );
+}
+
+/** One setting: icon, name, current state / what it does, then a chevron (or a switch). */
+function Row({ icon, title, text, onClick, right, active = false, switchOn }) {
+    const Icon = icon;
+    const isSwitch = switchOn !== undefined;
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            role={isSwitch ? 'switch' : undefined}
+            aria-checked={isSwitch ? switchOn : undefined}
+            className="row w-full text-left hover:bg-surface-2"
+        >
+            <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${active ? 'bg-primary-50 text-primary-700' : 'bg-surface-2 text-ink-soft'}`}>
+                <Icon size={18} />
+            </span>
+            <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-ink">{title}</span>
+                {text && <span className="block text-xs text-ink-muted">{text}</span>}
+            </span>
+            {right || <ChevronRight size={18} className="text-ink-muted shrink-0" />}
+        </button>
+    );
+}
+
 /**
- * Profile menu (avatar): look, privacy, notifications and account.
+ * Profile menu (avatar): look, privacy, notifications and account - in short labelled groups.
  */
 export default function SettingsSheet({ open, onClose }) {
-    const navigate = useNavigate();
     const { user, logout, updateUser } = useAuth();
     const toast = useToast();
     const push = usePush();
@@ -52,6 +84,7 @@ export default function SettingsSheet({ open, onClose }) {
     const [editingName, setEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
     const name = userName(user);
+    const ThemeIcon = (THEMES.find((t) => t.value === theme) || THEMES[2]).icon;
 
     const saveName = async (e) => {
         e.preventDefault();
@@ -122,156 +155,76 @@ export default function SettingsSheet({ open, onClose }) {
                     )}
                 </div>
 
-                <div className="mb-5">
-                    <div className="text-sm font-semibold text-ink mb-2">Wygląd</div>
-                    <div role="group" aria-label="Wygląd" className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-canvas border border-line">
-                        {THEMES.map((t) => {
-                            const active = theme === t.value;
-                            return (
-                                <button
-                                    key={t.value}
-                                    type="button"
-                                    aria-pressed={active}
-                                    onClick={() => setTheme(t.value)}
-                                    className={`h-11 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 transition-colors ${
-                                        active ? 'bg-ink text-canvas' : 'text-ink-soft hover:text-ink'
-                                    }`}
-                                >
-                                    <t.icon size={16} /> {t.label}
-                                </button>
-                            );
-                        })}
+                <Section title="Na co dzień">
+                    <div className="row">
+                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center shrink-0">
+                            <ThemeIcon size={18} />
+                        </span>
+                        <span className="flex-1 text-sm font-semibold text-ink">Wygląd</span>
+                        <div role="group" aria-label="Wygląd" title="„Auto” przełącza się samo według ustawień telefonu" className="flex gap-0.5 p-0.5 rounded-xl bg-canvas border border-line shrink-0">
+                            {THEMES.map((t) => {
+                                const active = theme === t.value;
+                                return (
+                                    <button
+                                        key={t.value}
+                                        type="button"
+                                        aria-pressed={active}
+                                        onClick={() => setTheme(t.value)}
+                                        className={`h-8 px-2.5 rounded-lg text-xs font-semibold transition-colors ${active ? 'bg-ink text-canvas' : 'text-ink-soft hover:text-ink'}`}
+                                    >
+                                        {t.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <p className="hint">„Auto” przełącza się samo według ustawień telefonu.</p>
-                </div>
+                    <Row
+                        icon={EyeOff}
+                        title="Zawsze ukrywaj kwoty"
+                        text="Rozmyte po otwarciu, odkryjesz okiem u góry"
+                        onClick={() => setHideByDefault(!hideByDefault)}
+                        right={<Switch on={hideByDefault} />}
+                        switchOn={hideByDefault}
+                    />
+                    <Row
+                        icon={push.status === 'subscribed' ? Bell : BellOff}
+                        active={push.status === 'subscribed'}
+                        title="Powiadomienia"
+                        text={pushText}
+                        onClick={() => setNotificationsOpen(true)}
+                    />
+                </Section>
 
-                <div className="card divide-y divide-line overflow-hidden">
-                    <button type="button" role="switch" aria-checked={hideByDefault} onClick={() => setHideByDefault(!hideByDefault)} className="row w-full text-left hover:bg-surface-2">
-                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <EyeOff size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Zawsze ukrywaj kwoty</span>
-                            <span className="block text-xs text-ink-muted">Rozmyte po otwarciu, pokażesz je okiem u góry</span>
-                        </span>
-                        <Switch on={hideByDefault} />
-                    </button>
-                    <button type="button" onClick={() => setNotificationsOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${push.status === 'subscribed' ? 'bg-primary-50 text-primary-700' : 'bg-surface-2 text-ink-muted'}`}>
-                            {push.status === 'subscribed' ? <Bell size={18} /> : <BellOff size={18} />}
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Powiadomienia</span>
-                            <span className="block text-xs text-ink-muted">{pushText}</span>
-                        </span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            onClose();
-                            navigate('/documents');
-                        }}
-                        className="row w-full text-left hover:bg-surface-2"
-                    >
-                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <FolderLock size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Dokumenty</span>
-                            <span className="block text-xs text-ink-muted">Archiwum umów z wyszukiwarką</span>
-                        </span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    <button
-                        type="button"
+                <Section title="Dodawanie">
+                    <Row
+                        icon={Sparkles}
+                        active={!!ai?.enabled}
+                        title="Czytanie screenów (AI)"
+                        text={ai?.enabled ? `Włączone · ${ai.provider === 'gemini' ? 'Gemini' : 'Claude'}` : 'Wyłączone — wpisz klucz API'}
                         onClick={() => {
                             onClose();
                             openAiSettings();
                         }}
-                        className="row w-full text-left hover:bg-surface-2"
-                    >
-                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${ai?.enabled ? 'bg-primary-50 text-primary-700' : 'bg-surface-2 text-ink-muted'}`}>
-                            <Sparkles size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Czytanie screenów (AI)</span>
-                            <span className="block text-xs text-ink-muted">
-                                {ai?.enabled ? `Włączone · ${ai.provider === 'gemini' ? 'Gemini' : 'Claude'}` : 'Wyłączone — wpisz klucz API'}
-                            </span>
-                        </span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    <button type="button" onClick={() => setShareOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <Share size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Udostępnianie z iPhone’a</span>
-                            <span className="block text-xs text-ink-muted">Screen → Udostępnij → Gonia</span>
-                        </span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    <button type="button" onClick={() => setExportOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <Download size={18} />
-                        </span>
-                        <span className="flex-1 text-sm font-semibold text-ink">Eksport współprac (CSV)</span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    <button type="button" onClick={() => setTrashOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <Trash2 size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Kosz</span>
-                            <span className="block text-xs text-ink-muted">Usunięte w ostatnich 30 dniach</span>
-                        </span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    {user?.is_admin && (
-                        <button type="button" onClick={() => setUsersOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                            <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                                <Users size={18} />
-                            </span>
-                            <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-semibold text-ink">Konta</span>
-                                <span className="block text-xs text-ink-muted">Dodaj osobę, nowe hasło, blokada</span>
-                            </span>
-                            <ChevronRight size={18} className="text-ink-muted" />
-                        </button>
-                    )}
-                    {user?.is_admin && (
-                        <button type="button" onClick={() => setBackupOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                            <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                                <HardDrive size={18} />
-                            </span>
-                            <span className="flex-1 min-w-0">
-                                <span className="block text-sm font-semibold text-ink">Kopie zapasowe</span>
-                                <span className="block text-xs text-ink-muted">Co noc, sama się robi</span>
-                            </span>
-                            <ChevronRight size={18} className="text-ink-muted" />
-                        </button>
-                    )}
-                    <button type="button" onClick={() => setSecurityOpen(true)} className="row w-full text-left hover:bg-surface-2">
-                        <span className="w-9 h-9 rounded-xl bg-surface-2 text-ink-soft flex items-center justify-center">
-                            <KeyRound size={18} />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink">Logowanie</span>
-                            <span className="block text-xs text-ink-muted">E-mail do odzyskania, hasło</span>
-                        </span>
-                        <ChevronRight size={18} className="text-ink-muted" />
-                    </button>
-                    <button type="button" onClick={handleLogout} className="row w-full text-left hover:bg-red-50">
-                        <span className="w-9 h-9 rounded-xl bg-red-50 text-red-700 flex items-center justify-center">
-                            <LogOut size={18} />
-                        </span>
-                        <span className="flex-1 text-sm font-semibold text-red-700">Wyloguj</span>
-                    </button>
-                </div>
+                    />
+                    <Row icon={Share} title="Screeny z iPhone’a" text="Screen → Udostępnij → Gonia" onClick={() => setShareOpen(true)} />
+                </Section>
 
-                <div className="flex justify-center mt-5 pb-1 opacity-80">
+                <Section title="Dane">
+                    <Row icon={Trash2} title="Kosz" text="Usunięte w ostatnich 30 dniach" onClick={() => setTrashOpen(true)} />
+                    <Row icon={Download} title="Eksport współprac" text="Plik CSV, np. dla księgowej" onClick={() => setExportOpen(true)} />
+                    {user?.is_admin && <Row icon={HardDrive} title="Kopie zapasowe" text="Co noc, same się robią" onClick={() => setBackupOpen(true)} />}
+                </Section>
+
+                <Section title="Konto">
+                    <Row icon={KeyRound} title="Logowanie" text="Hasło, e-mail do odzyskania" onClick={() => setSecurityOpen(true)} />
+                    {user?.is_admin && <Row icon={Users} title="Konta" text="Dodaj osobę, nowe hasło, blokada" onClick={() => setUsersOpen(true)} />}
+                </Section>
+
+                <button type="button" onClick={handleLogout} className="btn btn-ghost w-full !text-red-600 hover:!bg-red-50">
+                    <LogOut size={17} /> Wyloguj
+                </button>
+
+                <div className="flex justify-center mt-3 pb-1 opacity-80">
                     <Logo size="sm" />
                 </div>
             </Sheet>
