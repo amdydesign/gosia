@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RotateCcw, Trash2, X } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import EmptyState from '../ui/EmptyState';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { discardFromTrash, listTrash, restoreFromTrash } from '../../services/trash';
 
 const TYPE_LABEL = {
@@ -18,16 +19,15 @@ const TYPE_LABEL = {
 
 const BUMP = { collaboration: 'collaborations', purchase: 'purchases', idea: 'ideas', document: 'documents', share: 'shares' };
 
-const UNDO_MS = 6000;
-
 /**
  * Kosz: what was deleted in the last 30 days - one tap puts it back.
- * Emptying (all or one thing) asks nothing: it waits 6 s with "Cofnij", then it is gone for good.
+ * Emptying (all or one thing) asks first - that one cannot be undone.
  */
 export default function TrashSheet({ open, onClose }) {
     const toast = useToast();
     const { refresh } = useDashboard();
     const { bump } = useQuickActions();
+    const confirm = useConfirm();
     const [items, setItems] = useState(null);
     const [busyId, setBusyId] = useState(null);
 
@@ -41,52 +41,29 @@ export default function TrashSheet({ open, onClose }) {
         if (open) load();
     }, [open, load]);
 
-    // Emptying waits for the "Cofnij" toast; only then the server deletes (files too)
-    const pending = useRef(null);
-    const commit = useCallback(
-        async (job) => {
-            try {
-                await discardFromTrash(job.ids);
-                job.types.forEach((type) => BUMP[type] && bump(BUMP[type])); // e.g. the space counter in Udostępnij
-            } catch (err) {
-                toast.error(err.message || 'Nie udało się usunąć');
-                load();
-            }
-        },
-        [bump, toast, load]
-    );
-    const flush = useCallback(() => {
-        const job = pending.current;
-        if (!job) return;
-        clearTimeout(job.timer);
-        pending.current = null;
-        commit(job);
-    }, [commit]);
-    useEffect(() => flush, [flush]);
-
-    const discard = (gone) => {
+    // Gone for good (files too) - only after "Tak, usuń"
+    const discard = async (gone) => {
         if (!gone.length) return;
-        flush(); // an earlier one goes now
-        const before = items;
+        const one = gone.length === 1;
+        const ok = await confirm({
+            title: one ? 'Usunąć na zawsze?' : `Opróżnić kosz (${gone.length})?`,
+            message: one
+                ? `„${gone[0].title || TYPE_LABEL[gone[0].entity_type]}” zniknie razem z plikami. Tego nie da się cofnąć.`
+                : 'Wszystko z kosza zniknie razem z plikami. Tego nie da się cofnąć.',
+            confirmLabel: one ? 'Tak, usuń' : 'Tak, opróżnij',
+            danger: true,
+        });
+        if (!ok) return;
         const ids = gone.map((i) => i.id);
         setItems((list) => list.filter((i) => !ids.includes(i.id)));
-        const job = { ids, types: [...new Set(gone.map((i) => i.entity_type))] };
-        job.timer = setTimeout(() => {
-            if (pending.current === job) pending.current = null;
-            commit(job);
-        }, UNDO_MS);
-        pending.current = job;
-        toast.success(gone.length === 1 ? `Usunięte na zawsze: ${gone[0].title || TYPE_LABEL[gone[0].entity_type]}` : `Kosz opróżniony (${gone.length})`, {
-            duration: UNDO_MS,
-            action: {
-                label: 'Cofnij',
-                onClick: () => {
-                    clearTimeout(job.timer);
-                    if (pending.current === job) pending.current = null;
-                    setItems(before);
-                },
-            },
-        });
+        try {
+            await discardFromTrash(ids);
+            new Set(gone.map((i) => i.entity_type)).forEach((type) => BUMP[type] && bump(BUMP[type])); // e.g. the space counter in Udostępnij
+            toast.success(one ? 'Usunięte na zawsze' : 'Kosz opróżniony');
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się usunąć');
+            load();
+        }
     };
 
     const restore = async (item) => {
