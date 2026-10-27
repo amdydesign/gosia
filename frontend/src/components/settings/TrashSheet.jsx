@@ -13,9 +13,10 @@ const TYPE_LABEL = {
     idea: 'Pomysł',
     document: 'Dokument',
     attachment: 'Załącznik',
+    share: 'Udostępniony plik',
 };
 
-const BUMP = { collaboration: 'collaborations', purchase: 'purchases', idea: 'ideas', document: 'documents' };
+const BUMP = { collaboration: 'collaborations', purchase: 'purchases', idea: 'ideas', document: 'documents', share: 'shares' };
 
 /**
  * Kosz: what was deleted in the last 30 days - one tap puts it back.

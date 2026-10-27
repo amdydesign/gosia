@@ -1,0 +1,18 @@
+# Public links to shared reels / files: https://share.malgorzatamordarska.pl/<token>
+# (the subdomain points at this folder; panel.malgorzatamordarska.pl/share/<token> works too)
+Options -Indexes
+
+<IfModule mod_headers.c>
+    Header always set Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    Header always set X-Robots-Tag "noindex, nofollow"
+    Header always set Referrer-Policy "no-referrer"
+</IfModule>
+
+RewriteEngine On
+
+# /<token>, /<token>/file, /<token>/download, /<token>/poster
+RewriteRule ^([A-Za-z0-9]{8,20})/?$ index.php?t=$1 [L,QSA]
+RewriteRule ^([A-Za-z0-9]{8,20})/(file|download|poster)$ index.php?t=$1&a=$2 [L,QSA]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]

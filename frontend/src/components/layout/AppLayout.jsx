@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import SettingsSheet from './SettingsSheet';
+import NavMenuSheet from './NavMenuSheet';
 import PullToRefresh from './PullToRefresh';
 import { getRouteMeta } from './routeMeta';
 import { useQuickActions } from '../../context/QuickActionsContext';
@@ -14,6 +15,7 @@ export default function AppLayout() {
     const navigate = useNavigate();
     const { openCollab, openPurchase, openQuickAdd } = useQuickActions();
     const [profileOpen, setProfileOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
     const meta = getRouteMeta(location.pathname);
 
     // Keep this device's push subscription fresh (iOS may rotate it)
@@ -37,12 +39,13 @@ export default function AppLayout() {
         else if (meta.section === 'purchases') openPurchase();
         else if (meta.section === 'ideas') navigate('/ideas/new');
         else if (meta.section === 'documents') navigate('/documents?add=1');
+        else if (meta.section === 'share') navigate('/share?add=1');
         else openQuickAdd();
     };
 
     return (
         <div className="min-h-dvh bg-canvas">
-            <TopBar meta={meta} onOpenProfile={() => setProfileOpen(true)} onAdd={openQuickAdd} />
+            <TopBar meta={meta} onOpenProfile={() => setProfileOpen(true)} onAdd={openQuickAdd} onOpenMenu={() => setMenuOpen(true)} />
 
             <main className="px-4 pt-2 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-10 lg:pt-4 lg:pb-14">
                 <div className="mx-auto w-full max-w-6xl">
@@ -62,7 +65,8 @@ export default function AppLayout() {
                 </button>
             )}
 
-            <MobileNav />
+            <MobileNav onOpenMenu={() => setMenuOpen(true)} />
+            <NavMenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} onOpenSettings={() => setProfileOpen(true)} />
             <PullToRefresh />
             <SettingsSheet open={profileOpen} onClose={() => setProfileOpen(false)} />
         </div>

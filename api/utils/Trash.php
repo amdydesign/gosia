@@ -19,6 +19,7 @@ class Trash
         'idea' => 'ideas',
         'document' => 'documents',
         'attachment' => 'attachments',
+        'share' => 'shares',
     ];
 
     /**
@@ -57,6 +58,13 @@ class Trash
         }
         if ($type === 'attachment') {
             $files[] = 'attachments/' . $row['stored_name'];
+        }
+        if ($type === 'share') {
+            // the link stops working right away; the file stays until the purge ("Cofnij" brings the same link back)
+            $files[] = 'share/' . $row['stored_name'];
+            if (!empty($row['poster_name'])) {
+                $files[] = 'share/' . $row['poster_name'];
+            }
         }
 
         $conn->beginTransaction();

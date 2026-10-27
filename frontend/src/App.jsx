@@ -19,6 +19,7 @@ import Collaborations from './pages/collaborations/Collaborations';
 import Purchases from './pages/purchases/Purchases';
 
 import Documents from './pages/documents/Documents';
+import Shares from './pages/shares/Shares';
 import IdeaList from './pages/ideas/IdeaList';
 import IdeaForm from './pages/ideas/IdeaForm';
 import IdeaView from './pages/ideas/IdeaView';
@@ -75,6 +76,7 @@ function App() {
                                             <Route path="/ideas/:id/edit" element={<IdeaForm />} />
 
                                             <Route path="/documents" element={<Documents />} />
+                                            <Route path="/share" element={<Shares />} />
 
                                             <Route path="/statistics" element={<Statistics />} />
                                         </Route>

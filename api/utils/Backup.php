@@ -147,6 +147,10 @@ class Backup
         foreach ($files as $file) {
             if ($file->isFile() && $file->getFilename() !== '.htaccess') {
                 $name = substr($file->getPathname(), strlen($source) + 1);
+                // shared reels (gigabytes, copies of what is on the phone) stay out of the backup
+                if (strpos(str_replace('\\', '/', $name), 'share/') === 0) {
+                    continue;
+                }
                 $zip->addFile($file->getPathname(), $name);
                 // already compressed (PDF, JPG) - just store, much faster
                 $zip->setCompressionName($name, ZipArchive::CM_STORE);
