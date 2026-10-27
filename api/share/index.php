@@ -1,7 +1,7 @@
 <?php
 /**
  * Shared files (newest first) + how much space they take
- * GET /api/share/index.php -> { items: [...], total_size, max_size, base_url }
+ * GET /api/share/index.php -> { items: [...], total_size, storage, max_size, base_url }
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -23,10 +23,12 @@ try {
     $stmt = $conn->prepare("SELECT * FROM shares WHERE user_id = :user_id ORDER BY created_at DESC, id DESC");
     $stmt->execute(['user_id' => $userId]);
     $items = array_map('shareForPanel', $stmt->fetchAll(PDO::FETCH_ASSOC));
+    $totalSize = array_sum(array_column($items, 'size'));
 
     Response::success([
         'items' => $items,
-        'total_size' => array_sum(array_column($items, 'size')),
+        'total_size' => $totalSize,
+        'storage' => shareStorage($totalSize),
         'max_size' => shareMaxSize(),
         'base_url' => shareBaseUrl(),
     ]);

@@ -9,6 +9,9 @@
 
 require_once __DIR__ . '/../config/Schema.php';
 
+// dHosting plan size for the "Zajęte miejsce" bar; STORAGE_QUOTA_GB in api/.env changes it
+const SHARE_DEFAULT_QUOTA_GB = 20;
+
 // Default cap per file; SHARE_MAX_SIZE_MB in api/.env changes it
 const SHARE_DEFAULT_MAX_MB = 5120; // 5 GB
 
@@ -151,6 +154,50 @@ function shareForPanel(array $row)
         'downloads' => (int) $row['downloads'],
         'last_viewed_at' => $row['last_viewed_at'],
         'created_at' => $row['created_at'],
+    ];
+}
+
+function shareFolderSize($dir, $recursive = true)
+{
+    if (!is_dir($dir)) {
+        return 0;
+    }
+    $total = 0;
+    $items = $recursive
+        ? new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS))
+        : new FilesystemIterator($dir, FilesystemIterator::SKIP_DOTS);
+    foreach ($items as $file) {
+        if ($file->isFile() && $file->getFilename() !== '.htaccess') {
+            $total += $file->getSize();
+        }
+    }
+    return $total;
+}
+
+/**
+ * Space taken by everything the app keeps on the server (bytes), by kind.
+ * $sharesActive: size of shares still on the list - the rest of share/ is the bin and unfinished uploads.
+ * Measured against the hosting plan (20 GB; STORAGE_QUOTA_GB in api/.env, 0 = no bar).
+ */
+function shareStorage($sharesActive)
+{
+    $uploads = __DIR__ . '/../uploads';
+    $shares = shareFolderSize($uploads . '/share');
+    $parts = [
+        'shares' => $shares,
+        'documents' => shareFolderSize($uploads . '/documents'),
+        'attachments' => shareFolderSize($uploads, false), // attachments sit directly in uploads/
+        'inbox' => shareFolderSize($uploads . '/inbox'),
+        'backups' => shareFolderSize(__DIR__ . '/../backups'),
+    ];
+    $quotaEnv = trim((string) ($_ENV['STORAGE_QUOTA_GB'] ?? ''));
+    $quotaGb = $quotaEnv !== '' ? (float) str_replace(',', '.', $quotaEnv) : SHARE_DEFAULT_QUOTA_GB;
+
+    return [
+        'total' => array_sum($parts),
+        'parts' => $parts,
+        'shares_bin' => max(0, $shares - $sharesActive), // deleted (30 days in the bin) + unfinished uploads
+        'quota' => $quotaGb > 0 ? (int) round($quotaGb * 1073741824) : null,
     ];
 }
 

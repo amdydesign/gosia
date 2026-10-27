@@ -80,4 +80,8 @@ Ten sam plik otwiera się też pod `https://panel.malgorzatamordarska.pl/share/<
 Inny adres linków: `SHARE_URL=https://...` w `api/.env`.
 
 Opcjonalnie: `SHARE_BRAND=Małgorzata Mordarska` — nazwa na górze strony z filmem.
+
+**Licznik miejsca** (Udostępnij → „Zajęte miejsce”): suma wszystkiego, co aplikacja trzyma na serwerze —
+rolki, dokumenty, załączniki, screeny, kopie zapasowe — na tle pakietu **20 GB** (pasek zielony / żółty / czerwony).
+Po zmianie pakietu: `STORAGE_QUOTA_GB=50` w `api/.env`.
 Usunięty plik przez 30 dni leży w Koszu („Cofnij” przywraca ten sam link), potem znika z dysku.

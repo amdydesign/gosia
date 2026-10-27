@@ -18,6 +18,7 @@ import {
 } from '../../services/shares';
 import { formatBytes, formatShareDate } from '../../utils/shares';
 import ShareDetailSheet, { ShareIcon } from '../../components/shares/ShareDetailSheet';
+import StorageCard from '../../components/shares/StorageCard';
 import PageHeader from '../../components/ui/PageHeader';
 import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
@@ -117,6 +118,7 @@ export default function Shares() {
             onShareUploaded((share) => {
                 setData((prev) => (prev ? { ...prev, items: [share, ...prev.items], total_size: prev.total_size + share.size } : prev));
                 setFreshId(share.id);
+                load(); // fresh space counter
                 toast.success(`Gotowe: ${share.title}`, {
                     duration: 10000,
                     action: {
@@ -127,7 +129,7 @@ export default function Shares() {
                     },
                 });
             }),
-        [toast]
+        [toast, load]
     );
 
     // "+" / Dodaj -> straight to picking a file
@@ -173,6 +175,7 @@ export default function Shares() {
             const res = await deleteShare(share.id);
             setSelectedId(null);
             setData((prev) => (prev ? { ...prev, items: prev.items.filter((s) => s.id !== share.id), total_size: prev.total_size - share.size } : prev));
+            load(); // space counter: the file now sits in the bin
             deletedToast(toast, 'Usunięte — link przestał działać', res?.trash_id, load);
         } catch (err) {
             toast.error(err.message || 'Nie udało się usunąć');
@@ -275,11 +278,16 @@ export default function Shares() {
                     </div>
                 )}
 
+                {data?.storage && (
+                    <div className="mt-5">
+                        <StorageCard storage={data.storage} />
+                    </div>
+                )}
+
                 {items.length > 0 && (
                     <div className="mt-5 mb-3 space-y-2.5">
                         <div className="text-sm text-ink-soft">
-                            <b className="text-ink">{items.length}</b> {items.length === 1 ? 'plik' : items.length < 5 ? 'pliki' : 'plików'} ·{' '}
-                            <b className="text-ink">{formatBytes(data.total_size)}</b> na serwerze
+                            <b className="text-ink">{items.length}</b> {items.length === 1 ? 'plik udostępniony' : items.length < 5 ? 'pliki udostępnione' : 'plików udostępnionych'}
                             {unseen > 0 && (
                                 <>
                                     {' '}· <b className="text-amber-600">{unseen} nieotwarte</b>

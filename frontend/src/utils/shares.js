@@ -2,6 +2,7 @@
 
 export function formatBytes(bytes) {
     const n = Number(bytes) || 0;
+    if (n === 0) return '0 MB';
     if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1).replace(/\.0$/, '').replace('.', ',')} GB`;
     if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`;
     return `${Math.max(1, Math.round(n / 1024))} KB`;
