@@ -18,6 +18,21 @@ const HISTORY_FILTERS = [
 ];
 const HISTORY_STEP = 30;
 
+// Like "Nierozliczone" in Współprace: what still needs doing stands out, colour = how urgent
+const SUMMARY_TONE = {
+    danger: { box: 'bg-red-50 border-red-200', label: '!text-red-700' },
+    warning: { box: 'bg-amber-50 border-amber-100', label: '!text-amber-700' },
+    ok: { box: 'bg-amber-50 border-amber-100', label: '!text-amber-700' },
+    none: { box: 'bg-emerald-50 border-emerald-100', label: '!text-emerald-700' },
+};
+const FRAME_TONE = {
+    danger: 'border-red-300 bg-red-50',
+    warning: 'border-amber-300 bg-amber-50',
+    ok: 'border-amber-300 bg-amber-50',
+    none: '',
+};
+const STRIPE = { danger: '!border-l-red-500', warning: '!border-l-amber-400', ok: '!border-l-emerald-400' };
+
 /**
  * Purchases & returns: add from a screenshot, decide with one tap
  * (Zwrócone / Zostawiam), history below. /purchases/:id opens details.
@@ -78,6 +93,9 @@ export default function Purchases() {
     const history = useMemo(() => groupHistory(purchases.filter((p) => bucket(p) === historyFilter)), [purchases, historyFilter]);
     const [historyOpen, setHistoryOpen] = useState({});
 
+    // The most pressing deadline colours the summary and the frame: red (≤ 2 days), amber, or green when nothing is left
+    const urgency = returns.length === 0 ? 'none' : deadlineTone(returns[0].days_remaining);
+
     const year = String(new Date().getFullYear());
     const activeValue = active.reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const recovered = purchases
@@ -121,10 +139,12 @@ export default function Purchases() {
             {/* Summary */}
             {(activeValue > 0 || recovered > 0) && (
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="card px-4 py-3">
-                        <div className="section-label">Do decyzji</div>
+                    <div className={`rounded-2xl px-4 py-3 border ${SUMMARY_TONE[urgency].box}`}>
+                        <div className={`section-label ${SUMMARY_TONE[urgency].label}`}>Do zwrotu</div>
                         <div className="amount text-lg font-display font-semibold text-ink mt-0.5 tabular-nums">{formatCurrency(activeValue)}</div>
-                        <div className="text-xs text-ink-muted">{active.length} {active.length === 1 ? 'rzecz' : 'rzeczy'} z terminem zwrotu</div>
+                        <div className="text-xs text-ink-muted">
+                            {active.length ? `${active.length} ${active.length === 1 ? 'rzecz' : 'rzeczy'} · ${returns.length} ${returns.length === 1 ? 'sklep' : 'sklepy'}` : 'Wszystko zrobione'}
+                        </div>
                     </div>
                     <div className="card px-4 py-3">
                         <div className="section-label">Odzyskane w {year}</div>
@@ -145,8 +165,10 @@ export default function Purchases() {
             ) : (
                 <>
                     <section>
-                        <div className="flex items-center justify-between px-1 mb-2">
-                            <h2 className="section-label">Zwroty do zrobienia</h2>
+                        <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+                            <h2 className="text-base font-semibold text-ink">
+                                Zwroty do zrobienia {returns.length > 0 && <span className="text-ink-muted font-medium">· {active.length}</span>}
+                            </h2>
                             {returns.length > 1 && (
                                 <button
                                     type="button"
@@ -160,7 +182,7 @@ export default function Purchases() {
                         {returns.length === 0 ? (
                             <div className="card px-4 py-5 text-sm text-ink-muted text-center">Nic nie czeka na zwrot. 🎉</div>
                         ) : (
-                            <div className="space-y-3">
+                            <div className={`rounded-3xl border-2 p-2 space-y-2 ${FRAME_TONE[urgency]}`}>
                                 {returns.map((group) => (
                                     <ReturnCard
                                         key={group.key}
@@ -408,7 +430,7 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
     const total = group.items.reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
     return (
-        <div className="card overflow-hidden">
+        <div className={`card overflow-hidden border-l-4 ${STRIPE[tone]}`}>
             <GroupHeader
                 open={open}
                 onToggle={onToggleOpen}
