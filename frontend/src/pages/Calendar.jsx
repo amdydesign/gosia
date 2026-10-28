@@ -10,14 +10,16 @@ const MONTH_KEY = 'gonia.calendarMonth';
 const DAY_KEY = 'gonia.calendarDay';
 const WEEKDAYS = ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd'];
 
-// Dot / accent per tone - deadlines and money at a glance, no counting days
+// Dot / accent per tone - deadlines and money at a glance, no counting days.
+// A day with something on it is tinted in its most pressing tone.
 const TONE = {
-    late: { dot: 'bg-red-500', text: 'text-red-700' },
-    money: { dot: 'bg-emerald-500', text: 'text-emerald-700' },
-    deadline: { dot: 'bg-amber-400', text: 'text-amber-700' },
-    plan: { dot: 'bg-chart', text: 'text-ink' },
-    info: { dot: 'bg-line-strong', text: 'text-ink-muted' },
+    late: { dot: 'bg-red-500', text: 'text-red-700', cell: 'bg-red-100 border-red-200' },
+    money: { dot: 'bg-emerald-500', text: 'text-emerald-700', cell: 'bg-emerald-100 border-emerald-200' },
+    deadline: { dot: 'bg-amber-400', text: 'text-amber-700', cell: 'bg-amber-100 border-amber-200' },
+    plan: { dot: 'bg-chart', text: 'text-ink', cell: 'bg-primary-100 border-primary-200' },
+    info: { dot: 'bg-line-strong', text: 'text-ink-muted', cell: 'bg-surface-2 border-line-strong' },
 };
+const TONE_ORDER = ['late', 'deadline', 'money', 'plan', 'info'];
 
 const ICON = {
     task: SquareCheck,
@@ -170,7 +172,8 @@ export default function Calendar() {
                         const inMonth = ymd.startsWith(month);
                         const isToday = ymd === today;
                         const selected = ymd === day;
-                        const tones = [...new Set(events.map((e) => e.tone))].slice(0, 3);
+                        const tones = TONE_ORDER.filter((t) => events.some((e) => e.tone === t)).slice(0, 3);
+                        const marked = tones.length > 0 && !selected && !isToday;
                         return (
                             <button
                                 key={ymd}
@@ -178,25 +181,28 @@ export default function Calendar() {
                                 onClick={() => pickDay(ymd)}
                                 aria-pressed={selected}
                                 aria-label={`${ymd}${events.length ? `, ${events.length}` : ''}`}
-                                className={`h-12 sm:h-14 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
-                                    selected ? 'bg-ink text-canvas' : isToday ? 'bg-accent text-on-accent' : 'hover:bg-surface-2'
-                                } ${inMonth ? '' : 'opacity-40'} ${ymd < today && !selected ? 'text-ink-muted' : ''}`}
+                                className={`relative h-12 sm:h-14 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors ${
+                                    selected ? 'bg-ink text-canvas border-ink' : isToday ? 'bg-accent text-on-accent border-accent' : marked ? `${TONE[tones[0]].cell} text-ink` : 'border-transparent hover:bg-surface-2'
+                                } ${inMonth ? '' : 'opacity-40'} ${ymd < today && !selected && !marked ? 'text-ink-muted' : ''}`}
                             >
-                                <span className={`text-sm ${isToday || selected ? 'font-bold' : 'font-medium'}`}>{Number(ymd.slice(8))}</span>
-                                <span className="flex gap-0.5 h-1.5">
+                                {events.length > 1 && (
+                                    <span className={`absolute top-0.5 right-1 text-[10px] font-bold leading-none ${selected ? 'text-canvas' : 'text-ink'}`}>{events.length}</span>
+                                )}
+                                <span className={`text-sm ${tones.length || isToday || selected ? 'font-bold' : 'font-medium'}`}>{Number(ymd.slice(8))}</span>
+                                <span className="flex gap-1 h-2">
                                     {tones.map((t) => (
-                                        <span key={t} className={`w-1.5 h-1.5 rounded-full ${TONE[t]?.dot || 'bg-line-strong'}`} />
+                                        <span key={t} className={`w-2 h-2 rounded-full ${TONE[t]?.dot || 'bg-line-strong'} ${selected ? 'ring-1 ring-canvas' : ''}`} />
                                     ))}
                                 </span>
                             </button>
                         );
                     })}
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 px-1 pt-3 text-[11px] text-ink-muted">
-                    <Legend tone="late" label="po terminie" />
-                    <Legend tone="money" label="płatność" />
-                    <Legend tone="deadline" label="termin" />
-                    <Legend tone="plan" label="do zrobienia" />
+                <div className="flex flex-wrap gap-1.5 px-1 pt-3">
+                    <Legend tone="late" label="Spóźnione" />
+                    <Legend tone="deadline" label="Ostatni dzień: zwrot, publikacja" />
+                    <Legend tone="money" label="Przelew dla Ciebie" />
+                    <Legend tone="plan" label="Zadanie, przypomnienie" />
                 </div>
             </section>
 
@@ -215,9 +221,10 @@ export default function Calendar() {
     );
 }
 
+/** Same look as a marked day, so the colour is easy to match. */
 function Legend({ tone, label }) {
     return (
-        <span className="inline-flex items-center gap-1.5">
+        <span className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-medium text-ink ${TONE[tone].cell}`}>
             <span className={`w-2 h-2 rounded-full ${TONE[tone].dot}`} /> {label}
         </span>
     );
