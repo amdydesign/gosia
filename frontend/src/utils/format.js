@@ -65,6 +65,15 @@ export function toDateInput(date = new Date()) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** onClick for date / time inputs: the whole field opens the picker, not only its tiny icon (desktop). */
+export function openPicker(e) {
+    try {
+        e.currentTarget.showPicker?.();
+    } catch {
+        // not allowed here - the field still works by typing
+    }
+}
+
 export function getTodayDate() {
     return toDateInput(new Date());
 }
