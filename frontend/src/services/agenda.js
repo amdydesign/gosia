@@ -9,8 +9,9 @@ export const SNOOZE_PRESETS = [
     { value: 'tomorrow', label: 'Jutro 9:00' },
 ];
 
-export function snooze(item, preset = 'tomorrow') {
-    return apiRequest('/reminders/create.php', 'POST', { ref_key: item.ref_key, title: item.title, url: item.url, preset });
+/** remindAt "YYYY-MM-DD HH:MM" = own date and time instead of a preset. */
+export function snooze(item, preset = 'tomorrow', remindAt) {
+    return apiRequest('/reminders/create.php', 'POST', { ref_key: item.ref_key, title: item.title, url: item.url, preset, ...(remindAt ? { remind_at: remindAt } : {}) });
 }
 
 export function cancelSnooze(refKey) {
@@ -28,6 +29,11 @@ export function setTaskDone(id, done) {
 
 export function deleteTask(id) {
     return apiRequest(`/tasks/delete.php?id=${id}`, 'DELETE');
+}
+
+/** "Kalendarz": everything with a date between two days (YYYY-MM-DD). */
+export function calendarEvents(from, to) {
+    return apiRequest(`/agenda/calendar.php?from=${from}&to=${to}`);
 }
 
 /** "Historia": what got done in the last `days` days -> { items, has_older }. */
