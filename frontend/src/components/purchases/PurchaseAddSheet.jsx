@@ -9,7 +9,7 @@ import { RETURN_DAY_PRESETS, buildStoreMemory } from '../../utils/purchases';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
-import { addDays, formatCurrency, formatDateLong, formatDateShort, getTodayDate, parseAmount, yesterdayDate } from '../../utils/format';
+import { addDays, formatCurrency, formatDateLong, formatDateShort, getTodayDate, openPicker, parseAmount, yesterdayDate } from '../../utils/format';
 
 const today = getTodayDate();
 const emptyItem = () => ({ name: '', amount: '', include: true });
@@ -306,7 +306,7 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
                             <button type="button" onClick={() => setForm((f) => ({ ...f, purchase_date: yesterdayDate() }))} className={`choice ${dateChoice === 'yesterday' ? 'choice-active' : ''}`}>Wczoraj</button>
                             <label className={`choice relative cursor-pointer ${dateChoice === 'other' ? 'choice-active' : ''}`}>
                                 {dateChoice === 'other' ? formatDateShort(form.purchase_date) : 'Inna data'}
-                                <input type="date" value={form.purchase_date} max={today} onChange={(e) => e.target.value && setForm((f) => ({ ...f, purchase_date: e.target.value }))} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Data zakupu" />
+                                <input type="date" onClick={openPicker} value={form.purchase_date} max={today} onChange={(e) => e.target.value && setForm((f) => ({ ...f, purchase_date: e.target.value }))} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Data zakupu" />
                             </label>
                         </div>
                     </div>

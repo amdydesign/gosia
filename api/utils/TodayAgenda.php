@@ -24,6 +24,7 @@ class TodayAgenda
         Schema::ensureCollaborations($conn);
         $today = date('Y-m-d');
         $skip = self::skippedKeys($conn, $userId);
+        $timesToday = self::timesToday($conn, $userId);
         $items = [];
 
         self::returns($conn, $userId, $today, $items);
@@ -37,11 +38,21 @@ class TodayAgenda
 
         // Snoozed ("Później"): still listed, but never "Teraz" until the reminder time.
         // Later today -> bucket "later" (still counts for today); another day -> "snoozed".
+        // A time today (reminder, also one that already rang) orders the day list: the next one is "Teraz".
         foreach ($items as &$item) {
             if (isset($skip[$item['ref_key']])) {
                 $until = $skip[$item['ref_key']];
                 $item['snoozed_until'] = $until;
                 $item['bucket'] = substr($until, 0, 10) === $today ? 'later' : 'snoozed';
+            }
+            $at = $item['bucket'] === 'later' ? $item['snoozed_until'] : ($item['bucket'] === 'today' ? ($timesToday[$item['ref_key']] ?? null) : null);
+            if ($at) {
+                $item['time'] = substr($at, 11, 5);
+                // set for today = it is for today, not "po terminie"
+                if ($item['kind'] === 'task') {
+                    $item['meta'] = 'na dziś';
+                    $item['late'] = false;
+                }
             }
         }
         unset($item);
@@ -414,6 +425,27 @@ class TodayAgenda
             // optional tables
         }
         return $skip;
+    }
+
+    /** ref_key => latest reminder time today that already passed (rang or not). */
+    private static function timesToday(PDO $conn, $userId)
+    {
+        $times = [];
+        try {
+            Schema::ensure($conn, 'reminders');
+            $stmt = $conn->prepare("
+                SELECT ref_key, MAX(remind_at) AS at FROM reminders
+                WHERE user_id = :user_id AND remind_at >= :today AND remind_at <= :now
+                GROUP BY ref_key
+            ");
+            $stmt->execute(['user_id' => $userId, 'today' => date('Y-m-d 00:00:00'), 'now' => date('Y-m-d H:i:s')]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $times[$row['ref_key']] = $row['at'];
+            }
+        } catch (Exception $e) {
+            // optional tables
+        }
+        return $times;
     }
 
     /** Contract dates already acknowledged ("OK" on Start) - ref_key => true. */

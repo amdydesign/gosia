@@ -7,7 +7,7 @@ import { apiRequest } from '../../utils/api';
 import { readScreens } from '../../services/ai';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
-import { addDays, formatCurrency, getTaxBreakdown, getTodayDate, parseAmount, yesterdayDate, formatDateShort } from '../../utils/format';
+import { addDays, formatCurrency, getTaxBreakdown, getTodayDate, openPicker, parseAmount, yesterdayDate, formatDateShort } from '../../utils/format';
 import { BILLING_OPTIONS, PAYMENT_DAY_PRESETS, TYPE_OPTIONS, WAGE_TYPE, buildBrandMemory, grossOf, wageLabel } from '../../utils/collabs';
 
 const today = getTodayDate();
@@ -359,7 +359,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                             <label className={`choice relative cursor-pointer ${dateChoice === 'other' ? 'choice-active' : ''}`}>
                                 {dateChoice === 'other' ? formatDateShort(form.date) : 'Inna data'}
                                 <input
-                                    type="date"
+                                    type="date" onClick={openPicker}
                                     value={form.date}
                                     onChange={(e) => e.target.value && set('date', e.target.value)}
                                     className="absolute inset-0 opacity-0 cursor-pointer"
@@ -445,7 +445,7 @@ function Deadlines({ form, onPublishBy, onPaymentDays, onPaidAt, isEdit }) {
                             <CalendarClock size={15} />
                             {form.publish_by ? `do ${formatDateShort(form.publish_by)}` : 'Wybierz datę'}
                             <input
-                                type="date"
+                                type="date" onClick={openPicker}
                                 value={form.publish_by}
                                 onChange={(e) => onPublishBy(e.target.value)}
                                 className="absolute inset-0 opacity-0 cursor-pointer"
@@ -512,7 +512,7 @@ function Deadlines({ form, onPublishBy, onPaymentDays, onPaidAt, isEdit }) {
                             <button type="button" onClick={() => onPaidAt(yesterdayDate())} className={`choice ${form.paid_at === yesterdayDate() ? 'choice-active' : ''}`}>Wczoraj</button>
                             <label className={`choice relative cursor-pointer ${form.paid_at && form.paid_at !== getTodayDate() && form.paid_at !== yesterdayDate() ? 'choice-active' : ''}`}>
                                 {form.paid_at && form.paid_at !== getTodayDate() && form.paid_at !== yesterdayDate() ? formatDateShort(form.paid_at) : 'Inna data'}
-                                <input type="date" value={form.paid_at} max={getTodayDate()} onChange={(e) => e.target.value && onPaidAt(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Data wpłaty" />
+                                <input type="date" onClick={openPicker} value={form.paid_at} max={getTodayDate()} onChange={(e) => e.target.value && onPaidAt(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Data wpłaty" />
                             </label>
                         </div>
                         <p className="hint">Liczy się do miesiąca i roku podatkowego, w którym pieniądze przyszły.</p>

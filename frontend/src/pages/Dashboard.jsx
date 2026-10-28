@@ -32,7 +32,7 @@ import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { addDays, formatCurrency, formatDateShort, formatWeekdayDate, getTodayDate, greetingForHour, toDateInput, userName } from '../utils/format';
+import { addDays, formatCurrency, formatDateShort, formatWeekdayDate, getTodayDate, greetingForHour, openPicker, toDateInput, userName } from '../utils/format';
 import { imagesFromDataTransfer } from '../utils/images';
 import {
     SNOOZE_PRESETS,
@@ -122,16 +122,20 @@ export default function Dashboard() {
     }, [refresh]);
 
     const agenda = useMemo(() => data?.agenda || [], [data]);
-    const todayItems = useMemo(() => agenda.filter((i) => i.bucket === 'today'), [agenda]);
+    // Today's list in time order: things with an hour today first (the next one is "Teraz"),
+    // then the rest by urgency. Snoozed to another day goes to "Odłożone".
+    const todayItems = useMemo(() => {
+        const list = agenda.filter((i) => i.bucket === 'today' || i.bucket === 'later');
+        const timed = list.filter((i) => i.time).sort((a, b) => a.time.localeCompare(b.time));
+        return [...timed, ...list.filter((i) => !i.time)];
+    }, [agenda]);
     const weekItems = useMemo(() => agenda.filter((i) => i.bucket === 'week'), [agenda]);
-    // "Później" today stays on today's list (not in Teraz); snoozed to another day goes to "Odłożone"
-    const laterToday = useMemo(() => agenda.filter((i) => i.bucket === 'later'), [agenda]);
     const snoozed = useMemo(() => agenda.filter((i) => i.bucket === 'snoozed'), [agenda]);
     const done = useMemo(() => data?.done_today || [], [data]);
 
     useEffect(() => {
-        if (data) setAppBadge(todayItems.length + laterToday.length);
-    }, [data, todayItems.length, laterToday.length]);
+        if (data) setAppBadge(todayItems.length);
+    }, [data, todayItems.length]);
 
     const toggleFocus = () => {
         setFocus((f) => {
@@ -155,8 +159,8 @@ export default function Dashboard() {
     const index = todayItems.length ? skip % todayItems.length : 0;
     const current = todayItems[index] || null;
     const later = todayItems.filter((i) => i !== current);
-    const total = done.length + todayItems.length + laterToday.length;
-    const todayCount = todayItems.length + laterToday.length;
+    const total = done.length + todayItems.length;
+    const todayCount = todayItems.length;
 
     return (
         <div className="space-y-4 lg:space-y-5 animate-fade-in">
@@ -206,7 +210,7 @@ export default function Dashboard() {
                 </p>
             ) : (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
-                    <LaterList items={later} laterToday={laterToday} snoozed={snoozed} done={done} weekItems={weekItems} actions={actions} />
+                    <LaterList items={later} snoozed={snoozed} done={done} weekItems={weekItems} actions={actions} />
                     <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} onPlan={actions.planIdeaToday} onInbox={actions.handleInboxResult} />
                     <MoneyCard data={data} />
                     {/* phone: earnings at the end, after what needs doing */}
@@ -570,6 +574,7 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
                 {item.title}
             </h2>
             <p className="text-[15px]">
+                {item.time && <span className="font-semibold">o {item.time.replace(/^0/, '')} · </span>}
                 {item.meta}
                 {item.amount > 0 && (
                     <>
@@ -758,7 +763,7 @@ function EarningsCard({ data, display }) {
     );
 }
 
-function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
+function LaterList({ items, snoozed, done, weekItems, actions }) {
     const [weekOpen, toggleWeek] = useFlag(WEEK_OPEN_KEY);
     const [snoozedOpen, toggleSnoozed] = useFlag(SNOOZED_OPEN_KEY);
     const [lateOpen, toggleLate] = useFlag(LATE_OPEN_KEY);
@@ -773,7 +778,7 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
     return (
         <section className="card p-2 pt-4 flex flex-col">
             <h3 className="px-3 mb-1 text-base font-semibold text-ink">Potem dziś</h3>
-            {shown.length === 0 && !groupLate && laterToday.length === 0 && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
+            {shown.length === 0 && !groupLate && done.length === 0 && <p className="px-3 py-2 text-sm text-ink-muted">Nic więcej na dziś.</p>}
 
             {groupLate && (
                 <div className="mx-1 mb-1 rounded-2xl bg-amber-50 border border-amber-200">
@@ -805,9 +810,6 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
                 <AgendaRow key={item.ref_key} item={item} actions={actions} />
             ))}
             {hidden > 0 && <p className="px-3 py-1 text-xs text-ink-muted">+ {hidden} kolejne, pokażą się po kolei w „Teraz”</p>}
-            {laterToday.map((item) => (
-                <AgendaRow key={item.ref_key} item={item} actions={actions} />
-            ))}
             {done.slice(0, 3).map((d) => (
                 <div key={d.ref_key + d.done_at} className="flex items-center gap-3 px-3 py-2">
                     <span className="w-7 h-7 rounded-full bg-chart text-on-accent flex items-center justify-center shrink-0">
@@ -1004,6 +1006,13 @@ function AgendaRow({ item, actions }) {
                         <>
                             <span className="inline-flex items-center gap-1 font-medium text-ink-soft">
                                 <Clock size={11} /> {snoozeLabel(item.snoozed_until)}
+                            </span>
+                            {' · '}
+                        </>
+                    ) : item.time ? (
+                        <>
+                            <span className="inline-flex items-center gap-1 font-semibold text-ink-soft">
+                                <Clock size={11} /> {item.time.replace(/^0/, '')}
                             </span>
                             {' · '}
                         </>
@@ -1321,8 +1330,8 @@ function CustomSnooze({ onPick }) {
             className="rounded-2xl border border-line-strong p-3 grid gap-2"
         >
             <div className="flex gap-2">
-                <input type="date" value={date} min={getTodayDate()} onChange={(e) => setDate(e.target.value)} aria-label="Dzień" className="input !h-12 flex-1 min-w-0" />
-                <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Godzina" className="input !h-12 w-32 shrink-0" />
+                <input type="date" value={date} min={getTodayDate()} onClick={openPicker} onChange={(e) => setDate(e.target.value)} aria-label="Dzień" className="input !h-12 flex-1 min-w-0" />
+                <input type="time" value={time} onClick={openPicker} onChange={(e) => setTime(e.target.value)} aria-label="Godzina" className="input !h-12 w-32 shrink-0" />
             </div>
             <button type="submit" disabled={!valid} className="h-12 rounded-full bg-ink text-canvas font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-40">
                 <Check size={16} /> Przypomnij {date ? weekdayShort(date) : ''} o {time}

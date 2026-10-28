@@ -4,7 +4,7 @@ import { ArrowRight, Bell, Briefcase, CalendarClock, ChevronLeft, ChevronRight, 
 import { useToast } from '../context/ToastContext';
 import { useDashboard } from '../context/DashboardContext';
 import { calendarEvents, createTask, deleteTask } from '../services/agenda';
-import { formatCurrency, getTodayDate, toDateInput } from '../utils/format';
+import { formatCurrency, getTodayDate, openPicker, toDateInput } from '../utils/format';
 
 const MONTH_KEY = 'gonia.calendarMonth';
 const DAY_KEY = 'gonia.calendarDay';
@@ -281,7 +281,7 @@ function AddForDay({ day, toast, onAdded }) {
                 className="input !h-11 !rounded-xl flex-1 min-w-0"
                 enterKeyHint="done"
             />
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Godzina przypomnienia (opcjonalnie)" title="Godzina przypomnienia (opcjonalnie)" className="input !h-11 !rounded-xl !px-2 w-[92px] shrink-0" />
+            <input type="time" value={time} onClick={openPicker} onChange={(e) => setTime(e.target.value)} aria-label="Godzina przypomnienia (opcjonalnie)" title="Godzina przypomnienia (opcjonalnie)" className="input !h-11 !rounded-xl !px-2 w-[92px] shrink-0" />
             <button type="submit" disabled={saving || !title.trim()} aria-label="Zapisz" className="w-11 h-11 rounded-xl bg-ink text-canvas flex items-center justify-center shrink-0 disabled:opacity-40">
                 {saving ? <Loader2 size={17} className="animate-spin" /> : <ArrowRight size={18} />}
             </button>
