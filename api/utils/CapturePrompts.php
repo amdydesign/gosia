@@ -6,11 +6,12 @@
 
 const CAPTURE_KINDS = ['idea', 'task', 'purchase', 'collaboration'];
 
-function capturePrompt($today, $weekday)
+function capturePrompt($today, $weekday, $time = null)
 {
+    $time = $time ?: date('H:i');
     return <<<PROMPT
 Jesteś asystentem stylistki i influencerki. Dostajesz krótką notatkę wpisaną w pośpiechu (często bez polskich znaków, z literówkami).
-Dzisiaj jest {$today} ({$weekday}). Zdecyduj, czym jest notatka, i zwróć dane w podanym schemacie JSON.
+Dzisiaj jest {$today} ({$weekday}), teraz jest godzina {$time}. Zdecyduj, czym jest notatka, i zwróć dane w podanym schemacie JSON.
 
 Rodzaje (kind):
 - "idea" - pomysł na rolkę / post / nagranie (np. "rolka o płaszczach camel", "nagrać haul jesienny").
@@ -27,6 +28,11 @@ Rodzaje (kind):
 Zasady:
 - title: krótki, konkretny tytuł po polsku, z wielkiej litery, bez kropki na końcu (dla zadania zacznij od czasownika, np. "Zadzwoń do księgowej").
 - due_date: tylko dla "task", gdy w notatce jest termin ("jutro", "w piątek", "do 30.10") - jako YYYY-MM-DD; inaczej pusty tekst.
+- remind_at: tylko dla "task", gdy w notatce jest godzina albo prośba o przypomnienie ("o 19:00", "o 15", "za godzinę", "jutro o 9")
+  - jako "YYYY-MM-DD HH:MM"; inaczej pusty tekst. Sama godzina bez dnia = dziś, a jeśli ta godzina już minęła - jutro.
+  "Wieczorem" = 19:00, "rano" = 9:00. Ustaw wtedy też due_date na ten sam dzień.
+- Notatka typu "przypomnij mi o X" / "o 19 przypomnij o powerbanku" to "task" z tytułem "Przypomnienie o X"
+  (X w poprawnej formie, np. "Przypomnienie o powerbanku", "Przypomnienie o telefonie do mamy"), bez godziny w tytule.
 - idea.content: dla "idea" - rozwinięcie notatki w 1-3 zdaniach, jeśli jest z czego; inaczej pusty tekst.
 - collaboration: brand, amount_gross (kwota brutto w zł, 0 gdy brak), notes (co trzeba zrobić).
 - purchase: store (sklep), item (rzecz), amount (zł, 0 gdy brak).
@@ -43,6 +49,7 @@ function captureSchema()
             'kind' => ['type' => 'string', 'enum' => CAPTURE_KINDS],
             'title' => ['type' => 'string'],
             'due_date' => ['type' => 'string'],
+            'remind_at' => ['type' => 'string'],
             'idea' => [
                 'type' => 'object',
                 'properties' => ['content' => ['type' => 'string']],
@@ -70,7 +77,7 @@ function captureSchema()
                 'additionalProperties' => false,
             ],
         ],
-        'required' => ['kind', 'title', 'due_date', 'idea', 'collaboration', 'purchase'],
+        'required' => ['kind', 'title', 'due_date', 'remind_at', 'idea', 'collaboration', 'purchase'],
         'additionalProperties' => false,
     ];
 }
@@ -86,7 +93,12 @@ function normalizeCapture($r, $text)
         $kind = 'task';
     }
 
-    $out = ['kind' => $kind, 'title' => mb_substr($title, 0, 200), 'due_date' => $due];
+    $remindAt = $kind === 'task' ? captureRemindAt($r['remind_at'] ?? '') : null;
+    if ($remindAt) {
+        $due = substr($remindAt, 0, 10);
+    }
+
+    $out = ['kind' => $kind, 'title' => mb_substr($title, 0, 200), 'due_date' => $due, 'remind_at' => $remindAt];
     if ($kind === 'idea') {
         $out['idea'] = ['content' => trim((string) ($r['idea']['content'] ?? ''))];
     }
@@ -107,4 +119,18 @@ function normalizeCapture($r, $text)
         ];
     }
     return $out;
+}
+
+/** "YYYY-MM-DD HH:MM" in the future, or null. A time that already passed today means tomorrow. */
+function captureRemindAt($value)
+{
+    $at = DateTime::createFromFormat('Y-m-d H:i', trim((string) $value));
+    if (!$at) {
+        return null;
+    }
+    $now = new DateTime();
+    if ($at <= $now && $at->format('Y-m-d') === $now->format('Y-m-d')) {
+        $at->modify('+1 day');
+    }
+    return $at > $now ? $at->format('Y-m-d H:i') : null;
 }

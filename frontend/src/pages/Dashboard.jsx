@@ -32,7 +32,7 @@ import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { formatCurrency, formatDateShort, formatWeekdayDate, greetingForHour, userName } from '../utils/format';
+import { addDays, formatCurrency, formatDateShort, formatWeekdayDate, getTodayDate, greetingForHour, toDateInput, userName } from '../utils/format';
 import { imagesFromDataTransfer } from '../utils/images';
 import {
     SNOOZE_PRESETS,
@@ -74,6 +74,7 @@ function snoozeLabel(until) {
     const diff = Math.round((day - today) / 86400000);
     if (diff <= 0) return `przypomnę o ${hhmm}`;
     if (diff === 1) return `jutro o ${hhmm}`;
+    if (diff > 6) return `${formatDateShort(date)} o ${hhmm}`;
     return `${new Intl.DateTimeFormat('pl-PL', { weekday: 'short' }).format(day).replace('.', '')} o ${hhmm}`;
 }
 
@@ -303,7 +304,8 @@ function useAgendaActions() {
     const handleInboxResult = useCallback(
         (res, file) => {
             if (res.done && res.created?.task_id) {
-                undoToast(`Zapisane jako zadanie: ${res.data?.title || res.title}`, () => deleteTask(res.created.task_id));
+                const when = res.data?.remind_at ? ` — ${snoozeLabel(res.data.remind_at)}` : '';
+                undoToast(`Zapisane jako zadanie: ${res.data?.title || res.title}${when}`, () => deleteTask(res.created.task_id));
             } else if (res.done && res.created?.idea_id) {
                 undoToast('Zapisane jako pomysł na rolkę', () => deleteIdea(res.created.idea_id));
             } else {
@@ -380,15 +382,14 @@ function useAgendaActions() {
     );
 
     const snoozeWith = useCallback(
-        (preset) => {
+        (preset, remindAt) => {
             const item = snoozeTarget;
             setSnoozeTarget(null);
             if (!item) return;
             run(item, async () => {
-                const res = await snooze(item, preset);
-                const at = res?.remind_at ? res.remind_at.slice(11, 16) : '';
-                const label = SNOOZE_PRESETS.find((p) => p.value === preset)?.label || '';
-                toast.success(`Odłożone — przypomnę ${preset === 'tomorrow' ? 'jutro o 9:00' : at ? `o ${at}` : label.toLowerCase()}`, {
+                const res = await snooze(item, preset, remindAt);
+                const when = res?.remind_at ? snoozeLabel(res.remind_at).replace(/^przypomnę /, '') : SNOOZE_PRESETS.find((p) => p.value === preset)?.label.toLowerCase() || '';
+                toast.success(`Odłożone — przypomnę ${when}`, {
                     duration: 5000,
                     action: { label: 'Cofnij', onClick: () => cancelSnooze(item.ref_key).then(() => refresh()) },
                 });
@@ -429,7 +430,7 @@ function useAgendaActions() {
                     action: {
                         label: 'Cofnij',
                         onClick: async () => {
-                            const res = await createTask(item.title, item.deadline || undefined);
+                            const res = await createTask(item.title, item.deadline || undefined, item.snoozed_until?.slice(0, 16));
                             if (wasDone && res?.id) await setTaskDone(res.id, true);
                             refresh();
                         },
@@ -862,7 +863,10 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
                     )}
                 </div>
             )}
-                <div className="flex justify-end px-3 pt-1">
+                <div className="flex justify-between px-3 pt-1">
+                    <Link to="/calendar" className="h-9 -ml-2 px-2 inline-flex items-center gap-1 text-xs text-ink-muted hover:text-ink">
+                        <CalendarDays size={13} /> Kalendarz
+                    </Link>
                     <button
                         type="button"
                         onClick={() => setHistoryOpen(true)}
@@ -1079,9 +1083,9 @@ function CaptureCard({ ai, ideas, onPlan, onInbox }) {
     // A suggestion only - reels count as "na dziś" after "Nagram dziś"
     const nextIdea = ideas.find((i) => Number(i.words) > 0 && !i.planned_for);
 
-    const saveAsTask = async (title, due) => {
-        const res = await createTask(title, due);
-        toast.success('Zapisane jako zadanie', {
+    const saveAsTask = async (title, due, remindAt) => {
+        const res = await createTask(title, due, remindAt);
+        toast.success(res?.remind_at ? `${title} — ${snoozeLabel(res.remind_at)}` : 'Zapisane jako zadanie', {
             duration: 5000,
             action: { label: 'Cofnij', onClick: () => deleteTask(res.id).then(() => refresh()) },
         });
@@ -1136,7 +1140,7 @@ function CaptureCard({ ai, ideas, onPlan, onInbox }) {
                 } else if (result.kind === 'purchase') {
                     openPurchase({ manual: true, prefill: result.purchase });
                 } else {
-                    await saveAsTask(result.title || note, result.due_date);
+                    await saveAsTask(result.title || note, result.due_date, result.remind_at);
                 }
             }
             setText('');
@@ -1256,6 +1260,7 @@ function SnoozeSheet({ target, onPick, onRemove, onUnplan, onDropInbox, onClose 
                         <Clock size={18} className="text-ink-muted" /> {p.label}
                     </button>
                 ))}
+                {target && <CustomSnooze key={target.ref_key} onPick={onPick} />}
                 <p className="hint">Do tego czasu zniknie z listy, a potem przyjdzie powiadomienie.</p>
                 {target?.kind === 'idea' && (
                     <button
@@ -1286,6 +1291,43 @@ function SnoozeSheet({ target, onPick, onRemove, onUnplan, onDropInbox, onClose 
                 )}
             </div>
         </Sheet>
+    );
+}
+
+/** "Inny dzień i godzina": own date + time (tomorrow 9:00 to start with). */
+function CustomSnooze({ onPick }) {
+    const [open, setOpen] = useState(false);
+    const [date, setDate] = useState(() => toDateInput(addDays(getTodayDate(), 1)));
+    const [time, setTime] = useState('09:00');
+    const valid = !!date && /^\d{2}:\d{2}$/.test(time) && new Date(`${date}T${time}`) > new Date();
+
+    if (!open) {
+        return (
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="h-14 px-4 rounded-2xl border border-line-strong text-left font-semibold text-ink hover:bg-surface-2 inline-flex items-center gap-3"
+            >
+                <CalendarDays size={18} className="text-ink-muted" /> Inny dzień i godzina
+            </button>
+        );
+    }
+    return (
+        <form
+            onSubmit={(e) => {
+                e.preventDefault();
+                if (valid) onPick('custom', `${date} ${time}`);
+            }}
+            className="rounded-2xl border border-line-strong p-3 grid gap-2"
+        >
+            <div className="flex gap-2">
+                <input type="date" value={date} min={getTodayDate()} onChange={(e) => setDate(e.target.value)} aria-label="Dzień" className="input !h-12 flex-1 min-w-0" />
+                <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Godzina" className="input !h-12 w-32 shrink-0" />
+            </div>
+            <button type="submit" disabled={!valid} className="h-12 rounded-full bg-ink text-canvas font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-40">
+                <Check size={16} /> Przypomnij {date ? weekdayShort(date) : ''} o {time}
+            </button>
+        </form>
     );
 }
 

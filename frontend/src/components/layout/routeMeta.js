@@ -12,6 +12,7 @@ const ROUTES = [
     { pattern: '/ideas', title: 'Pomysły na rolki', subtitle: 'Scenariusze i prompter', root: true, section: 'ideas' },
     { pattern: '/documents', title: 'Dokumenty', subtitle: 'Umowy i dokumenty poufne', root: true, section: 'documents' },
     { pattern: '/share', title: 'Udostępnij', subtitle: 'Rolki dla marek — wyślij link', root: true, section: 'share' },
+    { pattern: '/calendar', title: 'Kalendarz', subtitle: 'Zadania, płatności i terminy', root: true, section: 'calendar' },
     { pattern: '/statistics', title: 'Statystyki', root: true, section: 'statistics' },
     { pattern: '/dashboard', title: 'Start', root: true, section: 'dashboard' },
     { pattern: '/', title: 'Start', root: true, section: 'dashboard' },

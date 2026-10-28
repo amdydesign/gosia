@@ -17,6 +17,7 @@ require_once __DIR__ . '/../config/Response.php';
 require_once __DIR__ . '/../config/AiSettings.php';
 require_once __DIR__ . '/../config/RateLimit.php';
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../utils/TaskReminder.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed', 405);
@@ -116,7 +117,7 @@ try {
             $result = inboxNormalize(AiClient::classifyImage(inboxPrompt(date('Y-m-d'), $text), [$image], inboxSchema()));
         } elseif (AiClient::provider()) {
             $note = normalizeCapture(AiClient::classifyText(capturePrompt(date('Y-m-d'), date('l')), $text, captureSchema()), $text);
-            $data = $note['kind'] === 'task' ? ['title' => $note['title'], 'due_date' => $note['due_date']]
+            $data = $note['kind'] === 'task' ? ['title' => $note['title'], 'due_date' => $note['due_date'], 'remind_at' => $note['remind_at']]
                 : ($note['kind'] === 'idea' ? ['title' => $note['title'], 'content' => $note['idea']['content'] ?: $text]
                     : ($note[$note['kind']] ?? []));
             $result = ['kind' => $note['kind'], 'title' => $note['title'], 'data' => $data];
@@ -135,6 +136,9 @@ try {
         $conn->prepare("INSERT INTO tasks (user_id, title, due_date) VALUES (:user_id, :title, :due)")
             ->execute(['user_id' => $userId, 'title' => mb_substr($data['title'] ?: $result['title'], 0, 255), 'due' => $data['due_date'] ?? date('Y-m-d')]);
         $created = ['task_id' => (int) $conn->lastInsertId()];
+        if (!empty($data['remind_at'])) {
+            setTaskReminder($conn, $userId, $created['task_id'], $data['title'] ?: $result['title'], $data['remind_at']);
+        }
         $done = true;
     } elseif ($kind === 'idea') {
         $conn->prepare("INSERT INTO ideas (user_id, title, content, status) VALUES (:user_id, :title, :content, 'draft')")
@@ -164,6 +168,9 @@ try {
     $labels = ['task' => 'Zadanie', 'idea' => 'Pomysł na rolkę', 'purchase' => 'Zakup', 'collaboration' => 'Współpraca', 'document' => 'Dokument'];
     if ($done) {
         $message = '✓ ' . $labels[$kind] . ': ' . ($data['title'] ?: $result['title']);
+        if (!empty($data['remind_at'])) {
+            $message .= ' (przypomnę ' . (substr($data['remind_at'], 0, 10) === date('Y-m-d') ? '' : substr($data['remind_at'], 8, 2) . '.' . substr($data['remind_at'], 5, 2) . ' ') . 'o ' . substr($data['remind_at'], 11, 5) . ')';
+        }
     } elseif ($kind) {
         $message = '✓ ' . $result['title'] . ' - dokończ na Starcie w Goni.';
     } else {

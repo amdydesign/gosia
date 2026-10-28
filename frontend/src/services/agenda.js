@@ -9,16 +9,18 @@ export const SNOOZE_PRESETS = [
     { value: 'tomorrow', label: 'Jutro 9:00' },
 ];
 
-export function snooze(item, preset = 'tomorrow') {
-    return apiRequest('/reminders/create.php', 'POST', { ref_key: item.ref_key, title: item.title, url: item.url, preset });
+/** remindAt "YYYY-MM-DD HH:MM" = own date and time instead of a preset. */
+export function snooze(item, preset = 'tomorrow', remindAt) {
+    return apiRequest('/reminders/create.php', 'POST', { ref_key: item.ref_key, title: item.title, url: item.url, preset, ...(remindAt ? { remind_at: remindAt } : {}) });
 }
 
 export function cancelSnooze(refKey) {
     return apiRequest(`/reminders/delete.php?ref_key=${encodeURIComponent(refKey)}`, 'DELETE');
 }
 
-export function createTask(title, dueDate) {
-    return apiRequest('/tasks/create.php', 'POST', { title, ...(dueDate ? { due_date: dueDate } : {}) });
+/** remindAt "YYYY-MM-DD HH:MM": the task waits on Start and a push comes then. */
+export function createTask(title, dueDate, remindAt) {
+    return apiRequest('/tasks/create.php', 'POST', { title, ...(dueDate ? { due_date: dueDate } : {}), ...(remindAt ? { remind_at: remindAt } : {}) });
 }
 
 export function setTaskDone(id, done) {
@@ -27,6 +29,11 @@ export function setTaskDone(id, done) {
 
 export function deleteTask(id) {
     return apiRequest(`/tasks/delete.php?id=${id}`, 'DELETE');
+}
+
+/** "Kalendarz": everything with a date between two days (YYYY-MM-DD). */
+export function calendarEvents(from, to) {
+    return apiRequest(`/agenda/calendar.php?from=${from}&to=${to}`);
 }
 
 /** "Historia": what got done in the last `days` days -> { items, has_older }. */
