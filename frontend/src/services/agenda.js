@@ -29,6 +29,11 @@ export function deleteTask(id) {
     return apiRequest(`/tasks/delete.php?id=${id}`, 'DELETE');
 }
 
+/** "Historia": what got done in the last `days` days -> { items, has_older }. */
+export function doneHistory(days = 30) {
+    return apiRequest(`/agenda/history.php?days=${days}`);
+}
+
 /** AI sorts a quick note into idea / task / purchase / collaboration (Claude Sonnet). */
 export function classifyNote(text) {
     return apiRequest('/ai/capture.php', 'POST', { text });

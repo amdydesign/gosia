@@ -11,6 +11,7 @@ import {
     Check,
     ChevronDown,
     Clock,
+    History,
     Crosshair,
     FileText,
     ImagePlus,
@@ -43,6 +44,7 @@ import {
     deleteIdea,
     deleteTask,
     dismissAgenda,
+    doneHistory,
     hoursLeft,
     planIdea,
     setPublished,
@@ -759,6 +761,7 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
     const [weekOpen, toggleWeek] = useFlag(WEEK_OPEN_KEY);
     const [snoozedOpen, toggleSnoozed] = useFlag(SNOOZED_OPEN_KEY);
     const [lateOpen, toggleLate] = useFlag(LATE_OPEN_KEY);
+    const [historyOpen, setHistoryOpen] = useState(false);
     // Several late things: one calm row instead of a wall of red
     const late = items.filter((i) => i.late);
     const groupLate = late.length >= 2;
@@ -843,8 +846,9 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
                 </div>
             )}
 
+            <div className="mt-auto">
             {weekItems.length > 0 && (
-                <div className="mt-auto pt-2 mx-3 border-t border-line">
+                <div className="pt-2 mx-3 border-t border-line">
                     <button type="button" onClick={toggleWeek} aria-expanded={weekOpen} className="w-full flex justify-between items-center py-2.5 text-sm text-ink-muted">
                         <span>W tym tygodniu jeszcze {weekItems.length}</span>
                         <span className="font-medium text-ink">{weekOpen ? 'Zwiń' : 'Pokaż'}</span>
@@ -858,7 +862,108 @@ function LaterList({ items, laterToday, snoozed, done, weekItems, actions }) {
                     )}
                 </div>
             )}
+                <div className="flex justify-end px-3 pt-1">
+                    <button
+                        type="button"
+                        onClick={() => setHistoryOpen(true)}
+                        className="h-9 -mr-2 px-2 inline-flex items-center gap-1 text-xs text-ink-muted hover:text-ink"
+                    >
+                        <History size={13} /> Historia
+                    </button>
+                </div>
+            </div>
+            {historyOpen && <HistorySheet onClose={() => setHistoryOpen(false)} />}
         </section>
+    );
+}
+
+/** "Dziś" / "Wczoraj" / "pon 26 paź" for a YYYY-MM-DD day. */
+function historyDayLabel(ymd) {
+    const today = new Date();
+    const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (ymd === key(today)) return 'Dziś';
+    today.setDate(today.getDate() - 1);
+    if (ymd === key(today)) return 'Wczoraj';
+    return weekdayShort(ymd);
+}
+
+/** What got done, day by day - fetched each time it opens, 30 days at a time. */
+function HistorySheet({ onClose }) {
+    const [days, setDays] = useState(30);
+    const [state, setState] = useState({ loading: true, error: null, items: [], hasOlder: false });
+
+    useEffect(() => {
+        let alive = true;
+        doneHistory(days)
+            .then((res) => alive && setState({ loading: false, error: null, items: res?.items || [], hasOlder: !!res?.has_older }))
+            .catch((err) => alive && setState((s) => ({ ...s, loading: false, error: err.message || 'Nie udało się pobrać historii' })));
+        return () => {
+            alive = false;
+        };
+    }, [days]);
+
+    const showOlder = () => {
+        setState((s) => ({ ...s, loading: true, error: null }));
+        setDays((n) => n + 30);
+    };
+
+    const groups = useMemo(() => {
+        const out = [];
+        for (const item of state.items) {
+            const day = item.done_at.slice(0, 10);
+            const last = out[out.length - 1];
+            if (last && last.day === day) last.items.push(item);
+            else out.push({ day, items: [item] });
+        }
+        return out;
+    }, [state.items]);
+
+    return (
+        <Sheet open onClose={onClose} title="Historia" description="Co już ogarnięte, dzień po dniu" size="md">
+            {state.loading && !state.items.length ? (
+                <div className="flex justify-center py-8 text-ink-muted">
+                    <Loader2 size={20} className="animate-spin" />
+                </div>
+            ) : state.error && !state.items.length ? (
+                <p className="py-4 text-sm text-secondary">{state.error}</p>
+            ) : groups.length === 0 ? (
+                <p className="py-4 text-sm text-ink-muted">Jeszcze nic tu nie ma — pierwsze odhaczone zadanie pojawi się w historii.</p>
+            ) : (
+                <div className="space-y-4">
+                    {groups.map((g) => (
+                        <div key={g.day}>
+                            <div className="flex items-baseline justify-between pb-1 border-b border-line">
+                                <span className="text-sm font-semibold text-ink">{historyDayLabel(g.day)}</span>
+                                <span className="text-xs text-ink-muted">
+                                    ogarnięte: <span className="font-semibold text-ink">{g.items.length}</span>
+                                </span>
+                            </div>
+                            <ul>
+                                {g.items.map((d) => (
+                                    <li key={d.ref_key + d.done_at} className="flex items-center gap-3 py-1.5">
+                                        <span className="w-6 h-6 rounded-full bg-chart text-on-accent flex items-center justify-center shrink-0">
+                                            <Check size={12} strokeWidth={3} />
+                                        </span>
+                                        <span className="flex-1 min-w-0 text-sm text-ink truncate">{d.title}</span>
+                                        <span className="text-xs text-ink-muted">{d.done_at.slice(11, 16)}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                    {state.hasOlder && (
+                        <button
+                            type="button"
+                            onClick={showOlder}
+                            disabled={state.loading}
+                            className="w-full h-11 rounded-full border border-line-strong text-sm font-medium text-ink inline-flex items-center justify-center gap-2 hover:bg-surface-2 disabled:opacity-50"
+                        >
+                            {state.loading && <Loader2 size={15} className="animate-spin" />} Pokaż starsze
+                        </button>
+                    )}
+                </div>
+            )}
+        </Sheet>
     );
 }
 
