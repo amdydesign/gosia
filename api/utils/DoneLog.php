@@ -52,4 +52,27 @@ class DoneLog
         $stmt->execute(['user_id' => $userId, 'today' => date('Y-m-d 00:00:00')]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * "Historia" on Start: what was finished in the last $days days, newest first.
+     * @return array ['items' => [...], 'has_older' => bool]
+     */
+    public static function history(PDO $conn, $userId, $days = 30)
+    {
+        Schema::ensure($conn, 'done_log');
+        $from = date('Y-m-d 00:00:00', strtotime('-' . ((int) $days - 1) . ' days'));
+        $stmt = $conn->prepare("
+            SELECT ref_key, title, done_at FROM done_log
+            WHERE user_id = :user_id AND done_at >= :from
+            ORDER BY done_at DESC
+            LIMIT 1000
+        ");
+        $stmt->execute(['user_id' => $userId, 'from' => $from]);
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $stmt = $conn->prepare("SELECT 1 FROM done_log WHERE user_id = :user_id AND done_at < :from LIMIT 1");
+        $stmt->execute(['user_id' => $userId, 'from' => $from]);
+
+        return ['items' => $items, 'has_older' => (bool) $stmt->fetchColumn()];
+    }
 }
