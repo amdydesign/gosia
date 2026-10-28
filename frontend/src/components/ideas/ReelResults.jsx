@@ -5,7 +5,7 @@ import Button from '../ui/Button';
 import ideasService from '../../services/ideas';
 import { readScreens } from '../../services/ai';
 import { useToast } from '../../context/ToastContext';
-import { formatDateShort, getTodayDate } from '../../utils/format';
+import { formatDateShort, getTodayDate, openPicker } from '../../utils/format';
 
 const STATS = [
     { key: 'likes', label: 'polubienia' },
@@ -95,7 +95,7 @@ export default function ReelResults({ idea, aiEnabled, onChange }) {
                     </label>
                     <label className="text-xs text-ink-muted">
                         Opublikowana
-                        <input type="date" className="input !py-2 mt-1" value={draft.published_at} max={getTodayDate()} onChange={(e) => setDraft({ ...draft, published_at: e.target.value })} />
+                        <input type="date" onClick={openPicker} className="input !py-2 mt-1" value={draft.published_at} max={getTodayDate()} onChange={(e) => setDraft({ ...draft, published_at: e.target.value })} />
                     </label>
                 </div>
                 <p className="text-xs text-ink-muted">

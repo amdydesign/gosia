@@ -10,7 +10,7 @@ import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { bucket, deadlineText, deadlineTone, recoveredOf, refundPending, RETURN_DAY_PRESETS, withPatch } from '../../utils/purchases';
-import { formatCurrency, formatDateLong, parseAmount } from '../../utils/format';
+import { formatCurrency, formatDateLong, openPicker, parseAmount } from '../../utils/format';
 
 /**
  * One purchased item: decide (returned / keep / partial), edit, delete, attachments.
@@ -258,7 +258,7 @@ function EditField({ label, value, onChange, type = 'text', ...rest }) {
     return (
         <label className="block">
             <span className="label">{label}</span>
-            <input type={type} className="input" value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
+            <input type={type} className="input" value={value} onClick={type === 'date' || type === 'time' ? openPicker : undefined} onChange={(e) => onChange(e.target.value)} {...rest} />
         </label>
     );
 }

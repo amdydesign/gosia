@@ -4,7 +4,7 @@ import Button from '../ui/Button';
 import documentsService from '../../services/documents';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
-import { daysFromToday, formatDateLong } from '../../utils/format';
+import { daysFromToday, formatDateLong, openPicker } from '../../utils/format';
 
 const DATE_FIELDS = [
     { key: 'publish_by', label: 'Publikacja do' },
@@ -66,7 +66,7 @@ export default function ContractTerms({ doc, onSaved }) {
                     {DATE_FIELDS.map((f) => (
                         <label key={f.key} className="text-xs text-ink-muted">
                             {f.label}
-                            <input type="date" className="input !py-2 mt-1" value={draft[f.key] || ''} onChange={(e) => set(f.key, e.target.value)} />
+                            <input type="date" onClick={openPicker} className="input !py-2 mt-1" value={draft[f.key] || ''} onChange={(e) => set(f.key, e.target.value)} />
                         </label>
                     ))}
                     <label className="text-xs text-ink-muted">
