@@ -303,7 +303,8 @@ function useAgendaActions() {
     const handleInboxResult = useCallback(
         (res, file) => {
             if (res.done && res.created?.task_id) {
-                undoToast(`Zapisane jako zadanie: ${res.data?.title || res.title}`, () => deleteTask(res.created.task_id));
+                const when = res.data?.remind_at ? ` — ${snoozeLabel(res.data.remind_at)}` : '';
+                undoToast(`Zapisane jako zadanie: ${res.data?.title || res.title}${when}`, () => deleteTask(res.created.task_id));
             } else if (res.done && res.created?.idea_id) {
                 undoToast('Zapisane jako pomysł na rolkę', () => deleteIdea(res.created.idea_id));
             } else {
@@ -429,7 +430,7 @@ function useAgendaActions() {
                     action: {
                         label: 'Cofnij',
                         onClick: async () => {
-                            const res = await createTask(item.title, item.deadline || undefined);
+                            const res = await createTask(item.title, item.deadline || undefined, item.snoozed_until?.slice(0, 16));
                             if (wasDone && res?.id) await setTaskDone(res.id, true);
                             refresh();
                         },
@@ -1079,9 +1080,9 @@ function CaptureCard({ ai, ideas, onPlan, onInbox }) {
     // A suggestion only - reels count as "na dziś" after "Nagram dziś"
     const nextIdea = ideas.find((i) => Number(i.words) > 0 && !i.planned_for);
 
-    const saveAsTask = async (title, due) => {
-        const res = await createTask(title, due);
-        toast.success('Zapisane jako zadanie', {
+    const saveAsTask = async (title, due, remindAt) => {
+        const res = await createTask(title, due, remindAt);
+        toast.success(res?.remind_at ? `${title} — ${snoozeLabel(res.remind_at)}` : 'Zapisane jako zadanie', {
             duration: 5000,
             action: { label: 'Cofnij', onClick: () => deleteTask(res.id).then(() => refresh()) },
         });
@@ -1136,7 +1137,7 @@ function CaptureCard({ ai, ideas, onPlan, onInbox }) {
                 } else if (result.kind === 'purchase') {
                     openPurchase({ manual: true, prefill: result.purchase });
                 } else {
-                    await saveAsTask(result.title || note, result.due_date);
+                    await saveAsTask(result.title || note, result.due_date, result.remind_at);
                 }
             }
             setText('');

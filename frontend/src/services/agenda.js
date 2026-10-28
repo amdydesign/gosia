@@ -17,8 +17,9 @@ export function cancelSnooze(refKey) {
     return apiRequest(`/reminders/delete.php?ref_key=${encodeURIComponent(refKey)}`, 'DELETE');
 }
 
-export function createTask(title, dueDate) {
-    return apiRequest('/tasks/create.php', 'POST', { title, ...(dueDate ? { due_date: dueDate } : {}) });
+/** remindAt "YYYY-MM-DD HH:MM": the task waits on Start and a push comes then. */
+export function createTask(title, dueDate, remindAt) {
+    return apiRequest('/tasks/create.php', 'POST', { title, ...(dueDate ? { due_date: dueDate } : {}), ...(remindAt ? { remind_at: remindAt } : {}) });
 }
 
 export function setTaskDone(id, done) {
