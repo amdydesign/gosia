@@ -30,7 +30,7 @@ const COLLAB_TYPES = ['post-instagram', 'story', 'reel', 'sesja', 'event', 'kons
 
 try {
     $userId = getCurrentUserId();
-    @set_time_limit(120);
+    @set_time_limit(180); // a long brief on Sonnet can take a while
 
     $db = new Database();
     AiSettings::apply($db->getConnection(), $userId);
@@ -79,7 +79,7 @@ try {
     if ($text !== '') {
         $prompt .= "\n\nTreść dokumentów (tekst z PDF, wszystkie strony):\n<<<\n" . $text . "\n>>>";
     }
-    $result = AiClient::extract($prompt, $images, collaborationSchema());
+    $result = AiClient::extractBrief($prompt, $images, collaborationSchema());
     Response::success(normalizeCollaboration($result));
 
 } catch (RuntimeException $e) {

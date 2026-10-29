@@ -19,11 +19,12 @@ class AiClient
 {
     const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
     // Screenshots are simple extraction - the cheap, fast Haiku reads them (ANTHROPIC_MODEL overrides).
-    // Contracts and "Zrzuć tutaj" notes need more judgement - Sonnet
-    // (ANTHROPIC_DOCS_MODEL / ANTHROPIC_NOTES_MODEL override).
+    // Contracts, briefs and "Zrzuć tutaj" notes need more judgement - Sonnet
+    // (ANTHROPIC_DOCS_MODEL / ANTHROPIC_BRIEF_MODEL / ANTHROPIC_NOTES_MODEL override).
     const CLAUDE_MODEL = 'claude-haiku-5-5';
     const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     const CLAUDE_DOCS_MODEL = 'claude-sonnet-5-5';
+    const CLAUDE_BRIEF_MODEL = 'claude-sonnet-5-5';
     const CLAUDE_NOTES_MODEL = 'claude-sonnet-5-5';
     const CLAUDE_IDEAS_MODEL = 'claude-opus-5-5';
     const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent';
@@ -101,6 +102,23 @@ class AiClient
             return self::extractWithGemini($prompt, $images, $schema);
         }
         throw new RuntimeException('Rozpoznawanie screenów jest wyłączone - brak klucza AI na serwerze.');
+    }
+
+    /**
+     * A brief / collaboration order (screens or a whole PDF as text): Sonnet 5.5 - it must catch every
+     * format in long, multi-file briefs ("Reels Instagram ... 3 x IGS"), where Haiku missed sections.
+     * Claude whenever its key is there (briefs may be under NDA); Gemini only when it is the sole provider.
+     */
+    public static function extractBrief($prompt, array $images, array $schema)
+    {
+        if (self::key('claude') !== '') {
+            return self::extractWithClaude($prompt, $images, $schema, [
+                'model' => trim($_ENV['ANTHROPIC_BRIEF_MODEL'] ?? '') ?: self::CLAUDE_BRIEF_MODEL,
+                'max_tokens' => 8000,
+                'timeout' => 150,
+            ]);
+        }
+        return self::extract($prompt, $images, $schema);
     }
 
     /**
