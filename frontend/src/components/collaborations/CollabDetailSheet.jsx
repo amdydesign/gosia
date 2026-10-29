@@ -124,6 +124,12 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
         }
     };
 
+    // Date of one thing from the brief (empty = no date) - Start and the calendar follow it
+    const setDue = (index, due) => {
+        const list = (collab.deliverables || []).map((d, i) => (i === index ? { ...d, due: due || null } : d));
+        save({ deliverables: list }, due ? `${list[index].label} — do ${formatDateShort(due)}` : `${list[index].label} — bez terminu`);
+    };
+
     // Published on another day than today: the payment term counts from that day
     const setPublishedOn = (date) => {
         if (!date || date === collab.published_at) return;
@@ -258,7 +264,12 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                                                     <span key={n} className={`w-2 h-2 rounded-full ${n < Number(d.done) ? 'bg-emerald-500' : 'bg-line-strong'}`} />
                                                 ))}
                                                 <span className="text-xs text-ink-muted tabular-nums ml-1">{d.done}/{d.count}</span>
-                                                {d.due && left > 0 && <span className={`text-xs ${dueTone}`}>· do {formatDateShort(d.due)}</span>}
+                                                {left > 0 && (
+                                                    // the date sits where it is shown: tap it to change, "+ termin" when there is none
+                                                    <DateTap value={d.due} disabled={busy} onPick={(due) => setDue(i, due)} className={`text-xs ml-0.5 ${d.due ? `${dueTone} underline decoration-dotted underline-offset-2` : 'text-ink-muted/70 hover:text-ink'}`}>
+                                                        {d.due ? `· do ${formatDateShort(d.due)}` : '· + termin'}
+                                                    </DateTap>
+                                                )}
                                             </span>
                                         </span>
                                         {left > 0 ? (
@@ -368,15 +379,13 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
 
                 {/* Payment (a brief is not money yet; with work left nothing to wait for) */}
                 {brief ? null : !paid && hasWorkLeft(collab) ? (
-                    <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
-                        <div className="text-sm font-bold text-violet-900">Najpierw do zrobienia — {progress.done}/{progress.total}</div>
-                        <div className="text-xs text-ink-muted mt-0.5">
-                            Na przelew czekasz od publikacji: ostatnie „Zrobione” ją oznaczy, potem {Number(collab.payment_days) || 30} dni na płatność.
-                        </div>
-                        <button type="button" disabled={busy} onClick={() => save({ payment_status: 'paid' }, `${collab.brand} — opłacone`)} className="mt-2 text-xs font-semibold text-ink-muted hover:text-ink">
-                            Pieniądze już przyszły?
+                    // progress is in "Do zrobienia" above - here only the payment rule, one quiet line
+                    <p className="text-xs text-ink-muted px-1 -mt-1">
+                        Przelew: {Number(collab.payment_days) || 30} dni od publikacji (ostatnie „Zrobione” ją oznaczy) ·{' '}
+                        <button type="button" disabled={busy} onClick={() => save({ payment_status: 'paid' }, `${collab.brand} — opłacone`)} className="font-semibold text-ink-soft hover:text-ink underline underline-offset-2">
+                            pieniądze już przyszły?
                         </button>
-                    </div>
+                    </p>
                 ) : paid ? (
                     <div className="flex items-center justify-between gap-3 rounded-2xl bg-emerald-50/70 border border-emerald-100 px-4 py-3">
                         <span className="flex items-center gap-2 text-sm font-bold text-emerald-800">
@@ -473,8 +482,8 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     );
 }
 
-/** A label that opens the date picker (no later than today). */
-function PublishedDate({ value, onPick, disabled, className, children }) {
+/** A label that opens the date picker (the text stays as it is - no extra field on the card). */
+function DateTap({ value, onPick, disabled, className, children, max, label = 'Termin' }) {
     return (
         <label className={`relative cursor-pointer ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}>
             {children}
@@ -482,13 +491,18 @@ function PublishedDate({ value, onPick, disabled, className, children }) {
                 type="date"
                 onClick={openPicker}
                 value={value || ''}
-                max={getTodayDate()}
+                max={max}
                 onChange={(e) => onPick(e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer"
-                aria-label="Data publikacji"
+                aria-label={label}
             />
         </label>
     );
+}
+
+/** Published on (no later than today). */
+function PublishedDate(props) {
+    return <DateTap {...props} max={getTodayDate()} label="Data publikacji" />;
 }
 
 function isTrue(v) {
