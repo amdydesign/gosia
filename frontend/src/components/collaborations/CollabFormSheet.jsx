@@ -225,7 +225,8 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
         setError('');
         const payload = {
             brand: form.brand.trim(),
-            type: form.type,
+            // a brief has no "Co to było" - guessed from the list (Reels -> Rolka…)
+            type: form.brief ? typeFromDeliverables(form.deliverables) || form.type : form.type,
             collab_type: form.collab_type,
             fiscal_tracking: form.collab_type !== 'gotowka',
             amount_gross: amount,
@@ -355,11 +356,12 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                                 value={form.brief ? 'brief' : 'agreed'}
                                 onChange={(v) => setForm((f) => ({ ...f, brief: v === 'brief', paid: v === 'brief' ? false : f.paid }))}
                             />
-                            {form.brief && <p className="hint">Czeka w „W przygotowaniu” — nie liczę jej do pieniędzy, aż przyjdzie umowa.</p>}
+                            {form.brief && <p className="hint">Czeka w „W przygotowaniu”. Kwotę i rozliczenie uzupełni umowa — teraz tylko co i do kiedy.</p>}
                         </div>
                     )}
 
-                    {/* Amount */}
+                    {/* Amount (a brief has none yet - the contract brings it) */}
+                    {!form.brief && (
                     <div>
                         <label className="label" htmlFor="collab-amount">
                             {form.collab_type === 'gotowka' ? 'Kwota' : 'Kwota brutto'}
@@ -384,22 +386,28 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                             </p>
                         )}
                     </div>
+                    )}
 
                     {!isWage && (
                         <>
-                            <div>
-                                <div className="section-label mb-2">Rozliczenie</div>
-                                <ChoiceChips options={BILLING_OPTIONS} value={form.collab_type} onChange={(v) => set('collab_type', v)} />
-                            </div>
-                            <div>
-                                <div className="section-label mb-2">Co to było</div>
-                                <ChoiceChips options={TYPE_OPTIONS} value={form.type} onChange={(v) => set('type', v)} />
-                            </div>
+                            {!form.brief && (
+                                <>
+                                    <div>
+                                        <div className="section-label mb-2">Rozliczenie</div>
+                                        <ChoiceChips options={BILLING_OPTIONS} value={form.collab_type} onChange={(v) => set('collab_type', v)} />
+                                    </div>
+                                    <div>
+                                        <div className="section-label mb-2">Co to było</div>
+                                        <ChoiceChips options={TYPE_OPTIONS} value={form.type} onChange={(v) => set('type', v)} />
+                                    </div>
+                                </>
+                            )}
                             <DeliverablesEditor list={form.deliverables} onChange={(deliverables) => setForm((f) => ({ ...f, deliverables }))} />
                         </>
                     )}
 
-                    {/* Date */}
+                    {/* Date (a brief: the day it came in) */}
+                    {!form.brief && (
                     <div>
                         <div className="section-label mb-2">Kiedy</div>
                         <div className="flex flex-wrap gap-2">
@@ -417,6 +425,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                             </label>
                         </div>
                     </div>
+                    )}
 
                     {!isWage && (
                         <Deadlines
@@ -523,7 +532,7 @@ function Deadlines({ form, onPublishBy, onPaymentDays, onPaidAt, isEdit }) {
                 {form.publish_by && <p className="hint">Przypomnę na Starcie 2 dni wcześniej.</p>}
             </div>
 
-            {!form.paid ? (
+            {form.brief ? null : !form.paid ? (
                 <div>
                     <div className="section-label mb-2">Płatność w ciągu</div>
                     <div className="flex flex-wrap gap-2">
