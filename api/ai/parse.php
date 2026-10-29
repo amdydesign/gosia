@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 const MAX_IMAGES = 8;
+const MAX_TEXT_CHARS = 60000; // text layer of PDFs (a whole brief), read in the browser
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -56,8 +57,10 @@ try {
         }
         $images[] = ['media_type' => $type, 'data' => $data];
     }
-    if (!$images) {
-        Response::error('Dodaj przynajmniej jeden obraz (JPG, PNG, WEBP).', 400);
+    // PDFs with a text layer come as text (every page, cheaper and more exact than page images)
+    $text = trim(mb_substr((string) ($input['text'] ?? ''), 0, MAX_TEXT_CHARS));
+    if (!$images && ($text === '' || $mode !== 'collaboration')) {
+        Response::error('Dodaj przynajmniej jeden obraz (JPG, PNG, WEBP) albo PDF.', 400);
     }
 
     $today = date('Y-m-d');
@@ -72,7 +75,11 @@ try {
         Response::success(normalizeInsights($result));
     }
 
-    $result = AiClient::extract(collaborationPrompt($today), $images, collaborationSchema());
+    $prompt = collaborationPrompt($today);
+    if ($text !== '') {
+        $prompt .= "\n\nTreść dokumentów (tekst z PDF, wszystkie strony):\n<<<\n" . $text . "\n>>>";
+    }
+    $result = AiClient::extract($prompt, $images, collaborationSchema());
     Response::success(normalizeCollaboration($result));
 
 } catch (RuntimeException $e) {
@@ -181,7 +188,7 @@ function collaborationPrompt($today)
     $billing = implode(', ', BILLING_TYPES);
     $types = implode(', ', COLLAB_TYPES);
     return <<<TXT
-Jesteś asystentką stylistki i influencerki z Polski. Na obrazach jest zlecenie współpracy: e-mail lub wiadomość od marki, brief, umowa, zlecenie z Use.me albo faktura.
+Jesteś asystentką stylistki i influencerki z Polski. Na obrazach lub w tekście poniżej jest zlecenie współpracy: e-mail lub wiadomość od marki, brief (może mieć kilka plików), umowa, zlecenie z Use.me albo faktura.
 
 Dzisiaj jest {$today}.
 
@@ -195,7 +202,11 @@ Wypełnij pola:
 - publish_by: do kiedy trzeba opublikować / oddać materiał (RRRR-MM-DD), pusty tekst gdy nie podano.
 - payment_days: w ilu dniach marka zapłaci (np. 14, 30), 0 gdy nie podano.
 - is_brief: true, jeśli to brief / propozycja / zapytanie, a współpraca nie jest jeszcze potwierdzona (brak umowy, zlecenia, faktury ani potwierdzonej stawki). false dla umowy, zlecenia, faktury albo wiadomości potwierdzającej warunki.
-- deliverables: lista rzeczy do zrobienia dla marki, każda osobno z liczbą sztuk. label: krótko, po polsku, z platformą, np. "Reels IG", "Stories IG", "Post IG", "Karuzela IG", "TikTok", "YouTube", "Sesja zdjęciowa", "Zdjęcia do e-commerce". count: ile sztuk (np. "3 relacje" -> 3, "set stories" bez liczby -> 1). due: termin tej pozycji (RRRR-MM-DD) albo pusty tekst. Nie dubluj pozycji; pusta lista, gdy nic nie wymieniono.
+- deliverables: lista WSZYSTKICH rzeczy do zrobienia dla marki - przeczytaj cały materiał (wszystkie strony, sekcje i platformy: Instagram, TikTok, YouTube, Facebook...) i wypisz każdy format osobno z liczbą sztuk.
+  label: krótko, po polsku, z platformą: "Reels IG", "Stories IG", "Post IG", "Karuzela IG", "TikTok", "YouTube", "YouTube Shorts", "Sesja zdjęciowa", "Zdjęcia do e-commerce", "Live".
+  Skróty: IGS / IG Stories / relacje / stories = "Stories IG"; IGR / Reels Instagram / rolka IG = "Reels IG"; IGP / post / feed = "Post IG"; karuzela / carousel = "Karuzela IG"; Video TikTok / TT = "TikTok".
+  count: ile sztuk. "3 x IGS" / "3x IGS" / "3 relacje" -> 3. Format wymieniony bez liczby (np. "Reels Instagram, czas 25-60 s") -> 1. Jedno zdanie może zawierać kilka formatów (np. "Reels Instagram ... 3 x IGS" = Reels IG 1 + Stories IG 3).
+  due: termin tej pozycji (RRRR-MM-DD) albo pusty tekst. Ten sam format z tym samym terminem wpisz raz (zsumuj sztuki). Pusta lista tylko wtedy, gdy materiał nie wymienia żadnego formatu.
 TXT;
 }
 
