@@ -102,11 +102,6 @@ export default function Collaborations() {
     const todo = unpaid.filter(hasWorkLeft);
     const history = useMemo(() => groupByMonth(filtered.filter(isPaid)), [filtered]);
 
-    const yearNet = useMemo(() => {
-        const year = String(new Date().getFullYear());
-        return collabs.filter((c) => isPaid(c) && (c.date || '').startsWith(year)).reduce((s, c) => s + netOf(c), 0);
-    }, [collabs]);
-
     const openDetail = (collab) => navigate(`/collaborations/${collab.id}`, { state: { fromList: true } });
     const closeDetail = () => (location.state?.fromList ? navigate(-1) : navigate('/collaborations', { replace: true }));
 
@@ -172,44 +167,6 @@ export default function Collaborations() {
                 </div>
             </div>
 
-            {docSuggestions > 0 && (
-                <button
-                    type="button"
-                    onClick={() => navigate('/documents?suggestions=1')}
-                    className="w-full flex items-center gap-3 rounded-2xl border border-primary-200 bg-primary-50/70 hover:bg-primary-50 px-4 py-3 text-left transition-colors"
-                >
-                    <span className="w-9 h-9 rounded-xl bg-accent text-on-accent flex items-center justify-center shrink-0">
-                        <FileText size={17} />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-bold text-ink">Do uzupełnienia z umów i rachunków: {docSuggestions}</span>
-                        <span className="block text-xs text-ink-soft truncate">Sprawdź propozycje i potwierdź jednym kliknięciem</span>
-                    </span>
-                    <ChevronRight size={18} className="text-primary-600 shrink-0" />
-                </button>
-            )}
-
-            {/* Summary */}
-            <div className="grid grid-cols-2 gap-3">
-                <div className={`rounded-2xl p-4 border ${awaiting.length ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                    <div className={`section-label ${awaiting.length ? '!text-amber-700' : '!text-emerald-700'}`}>Czeka na przelew</div>
-                    <div className="amount text-xl sm:text-2xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(awaitingTotal)}</div>
-                    <div className="text-xs text-ink-muted mt-0.5">
-                        {awaiting.length ? `${awaiting.length} ${plural(awaiting.length)}` : todo.length ? 'Nic — najpierw do zrobienia' : 'Wszystko opłacone'}
-                    </div>
-                    {todo.length > 0 && (
-                        <div className="text-xs font-semibold text-violet-700 mt-1">
-                            + do zrobienia: {todo.length} · <span className="amount">{formatCurrency(todo.reduce((s, c) => s + grossOf(c), 0))}</span>
-                        </div>
-                    )}
-                </div>
-                <div className="rounded-2xl p-4 bg-surface border border-line shadow-card">
-                    <div className="section-label">Na rękę w {new Date().getFullYear()}</div>
-                    <div className="amount text-xl sm:text-2xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(yearNet)}</div>
-                    <div className="text-xs text-ink-muted mt-0.5">z opłaconych współprac</div>
-                </div>
-            </div>
-
             {/* Search */}
             {searchOpen ? (
                 <div className="relative">
@@ -233,6 +190,20 @@ export default function Collaborations() {
                         <span className="hidden lg:inline">Szukaj</span>
                     </Button>
                 </div>
+            )}
+
+            {docSuggestions > 0 && (
+                <button
+                    type="button"
+                    onClick={() => navigate('/documents?suggestions=1')}
+                    className="-mt-2 flex items-center gap-2 px-1 text-sm text-left text-primary-700 hover:text-primary-800"
+                >
+                    <FileText size={15} className="shrink-0" />
+                    <span>
+                        <b>{docSuggestions} {docSuggestions === 1 ? 'dokument czeka' : 'dokumenty czekają'}</b> na połączenie ze współpracą
+                    </span>
+                    <ChevronRight size={15} className="shrink-0" />
+                </button>
             )}
 
             {loading ? (
@@ -268,11 +239,19 @@ export default function Collaborations() {
 
                     {unpaid.length > 0 && (
                         <section>
-                            <div className="flex items-baseline justify-between px-1 mb-2">
-                                <h2 className="text-base font-semibold text-ink">
-                                    Nierozliczone <span className="text-ink-muted font-medium">· {unpaid.length}</span>
-                                </h2>
-                                <span className="amount text-sm font-semibold text-ink tabular-nums">{formatCurrency(unpaidTotal)}</span>
+                            <div className="px-1 mb-2">
+                                <div className="flex items-baseline justify-between">
+                                    <h2 className="text-base font-semibold text-ink">
+                                        Nierozliczone <span className="text-ink-muted font-medium">· {unpaid.length}</span>
+                                    </h2>
+                                    <span className="amount text-base font-bold text-ink tabular-nums">{formatCurrency(unpaidTotal)}</span>
+                                </div>
+                                {awaiting.length > 0 && todo.length > 0 && (
+                                    <div className="text-xs text-ink-muted mt-0.5">
+                                        czeka na przelew <b className="amount text-amber-800">{formatCurrency(awaitingTotal)}</b> · do zrobienia{' '}
+                                        <b className="amount text-violet-700">{formatCurrency(unpaidTotal - awaitingTotal)}</b>
+                                    </div>
+                                )}
                             </div>
                             <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 divide-y divide-amber-200 overflow-hidden">
                                 {unpaid.map((c) => (
@@ -462,18 +441,7 @@ function PaidRow({ collab, onOpen }) {
                     {formatDateShort(collab.date)} · {label}{billing && ` · ${billing}`}
                 </div>
             </div>
-            <div className="text-right shrink-0">
-                <div className="amount font-bold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</div>
-                <div className="amount text-[11px] text-emerald-700 font-semibold tabular-nums">{formatCurrency(netOf(collab))}</div>
-            </div>
+            <div className="amount font-bold text-ink tabular-nums shrink-0">{formatCurrency(grossOf(collab))}</div>
         </button>
     );
-}
-
-function plural(n) {
-    if (n === 1) return 'współpraca';
-    const last = n % 10;
-    const lastTwo = n % 100;
-    if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return 'współprace';
-    return 'współprac';
 }

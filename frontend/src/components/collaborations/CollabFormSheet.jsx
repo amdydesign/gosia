@@ -15,9 +15,13 @@ import DeliverablesEditor from './DeliverablesEditor';
 const today = getTodayDate();
 
 const STAGE_OPTIONS = [
-    { value: 'brief', label: 'Brief — jeszcze bez umowy' },
-    { value: 'agreed', label: 'Ustalona' },
+    { value: 'agreed', label: 'Umowa / zlecenie' },
+    { value: 'brief', label: 'Sam brief' },
 ];
+
+// Jobs that are not a post: picked by hand (reels / stories / posts follow from the list)
+const KIND_OPTIONS = TYPE_OPTIONS.filter((o) => ['sesja', 'event', 'konsultacja'].includes(o.value));
+const KIND_VALUES = KIND_OPTIONS.map((o) => o.value);
 
 /**
  * Quick add / edit collaboration. Minimum input: brand + amount - everything
@@ -225,8 +229,8 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
         setError('');
         const payload = {
             brand: form.brand.trim(),
-            // a brief has no "Co to było" - guessed from the list (Reels -> Rolka…)
-            type: form.brief ? typeFromDeliverables(form.deliverables) || form.type : form.type,
+            // "Co to było" is not asked: a session / event / consultation picked by hand, else guessed from the list (Reels -> Rolka…)
+            type: isWage || (!form.brief && KIND_VALUES.includes(form.type)) ? form.type : typeFromDeliverables(form.deliverables) || form.type,
             collab_type: form.collab_type,
             fiscal_tracking: form.collab_type !== 'gotowka',
             amount_gross: amount,
@@ -350,7 +354,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
 
                     {!isWage && (
                         <div>
-                            <div className="section-label mb-2">Etap</div>
+                            <div className="section-label mb-2">Co masz?</div>
                             <ChoiceChips
                                 options={STAGE_OPTIONS}
                                 value={form.brief ? 'brief' : 'agreed'}
@@ -390,73 +394,43 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
 
                     {!isWage && (
                         <>
-                            {!form.brief && (
-                                <>
-                                    <div>
-                                        <div className="section-label mb-2">Rozliczenie</div>
-                                        <ChoiceChips options={BILLING_OPTIONS} value={form.collab_type} onChange={(v) => set('collab_type', v)} />
-                                    </div>
-                                    <div>
-                                        <div className="section-label mb-2">Co to było</div>
-                                        <ChoiceChips options={TYPE_OPTIONS} value={form.type} onChange={(v) => set('type', v)} />
-                                    </div>
-                                </>
-                            )}
-                            <DeliverablesEditor list={form.deliverables} onChange={(deliverables) => setForm((f) => ({ ...f, deliverables }))} />
+                            {/* "Co to było" lives here too: a session / event / consultation is one tap, the rest follows from the list */}
+                            <DeliverablesEditor
+                                list={form.deliverables}
+                                onChange={(deliverables) => setForm((f) => ({ ...f, deliverables }))}
+                                kinds={form.brief ? [] : KIND_OPTIONS.map((o) => ({
+                                    label: o.label,
+                                    active: form.type === o.value,
+                                    onClick: () => set('type', form.type === o.value ? 'inne' : o.value),
+                                }))}
+                            />
+                            <PublishBy value={form.publish_by} onChange={(v) => setForm((f) => ({ ...f, publish_by: v }))} />
                         </>
                     )}
 
-                    {/* Date (a brief: the day it came in) */}
+                    {/* Billing, date, payment term: "jak ostatnio" in one line, open only to change */}
                     {!form.brief && (
-                    <div>
-                        <div className="section-label mb-2">Kiedy</div>
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={() => set('date', today)} className={`choice ${dateChoice === 'today' ? 'choice-active' : ''}`}>Dziś</button>
-                            <button type="button" onClick={() => set('date', yesterdayDate())} className={`choice ${dateChoice === 'yesterday' ? 'choice-active' : ''}`}>Wczoraj</button>
-                            <label className={`choice relative cursor-pointer ${dateChoice === 'other' ? 'choice-active' : ''}`}>
-                                {dateChoice === 'other' ? formatDateShort(form.date) : 'Inna data'}
-                                <input
-                                    type="date" onClick={openPicker}
-                                    value={form.date}
-                                    onChange={(e) => e.target.value && set('date', e.target.value)}
-                                    className="absolute inset-0 opacity-0 cursor-pointer"
-                                    aria-label="Wybierz datę"
-                                />
-                            </label>
-                        </div>
-                    </div>
-                    )}
-
-                    {!isWage && (
-                        <Deadlines
-                            form={form}
-                            onPublishBy={(v) => setForm((f) => ({ ...f, publish_by: v }))}
-                            onPaymentDays={(v) => set('payment_days', v)}
-                            onPaidAt={(v) => setForm((f) => ({ ...f, paid_at: v }))}
-                            isEdit={isEdit}
-                        />
+                        <Terms form={form} isWage={isWage} dateChoice={dateChoice} set={set} onPaidAt={(v) => setForm((f) => ({ ...f, paid_at: v }))} isEdit={isEdit} />
                     )}
 
                     <ExclusivityNote brand={form.brand} exclusivities={dashboard?.exclusivities} />
 
-                    {/* Paid */}
                     {!form.brief && (
-                    <button
-                        type="button"
-                        onClick={() => set('paid', !form.paid)}
-                        className={`w-full flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors ${
-                            form.paid ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50/60 border-amber-200'
-                        }`}
-                        aria-pressed={form.paid}
-                    >
-                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 ${form.paid ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-amber-400 bg-surface'}`}>
-                            {form.paid && <Check size={15} strokeWidth={3} />}
-                        </span>
-                        <span className="flex-1">
-                            <span className="block text-sm font-bold text-ink">{form.paid ? 'Pieniądze już są' : 'Czekam na przelew'}</span>
-                            <span className="block text-xs text-ink-muted">{form.paid ? 'Opłacone' : 'Przypomnę, jeśli przelew się spóźni'}</span>
-                        </span>
-                    </button>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={form.paid}
+                            onClick={() => set('paid', !form.paid)}
+                            className="w-full flex items-center gap-3 px-1 text-left"
+                        >
+                            <span className="flex-1">
+                                <span className="block text-sm font-semibold text-ink">Już opłacone</span>
+                                <span className="block text-xs text-ink-muted">{form.paid ? 'Pieniądze są na koncie' : 'Wyłączone — przypomnę, jeśli przelew się spóźni'}</span>
+                            </span>
+                            <span className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${form.paid ? 'bg-emerald-600' : 'bg-line-strong'}`}>
+                                <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${form.paid ? 'left-6' : 'left-1'}`} />
+                            </span>
+                        </button>
                     )}
 
                     {/* More */}
@@ -487,9 +461,69 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
     );
 }
 
-/** Payment term (14 / 30 / 60 days, "jak ostatnio"), optional publish deadline, paid on (edit). */
-function Deadlines({ form, onPublishBy, onPaymentDays, onPaidAt, isEdit }) {
-    const [publishOpen, setPublishOpen] = useState(!!form.publish_by);
+/** Publish deadline: one quiet "+ termin publikacji" until it is set (tap the date to change). */
+function PublishBy({ value, onChange }) {
+    return (
+        <div className="flex items-center gap-2 -mt-1">
+            <label
+                className={`relative cursor-pointer inline-flex items-center gap-1.5 text-sm ${value ? 'choice choice-active' : 'px-1 font-semibold text-ink-muted hover:text-ink'}`}
+            >
+                <CalendarClock size={15} />
+                {value ? `Publikacja do ${formatDateShort(value)}` : '+ termin publikacji'}
+                <input type="date" onClick={openPicker} value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Termin publikacji" />
+            </label>
+            {value && (
+                <button type="button" onClick={() => onChange('')} className="w-9 h-9 rounded-full flex items-center justify-center text-ink-muted hover:bg-ink/5" aria-label="Bez terminu publikacji">
+                    <X size={16} />
+                </button>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Billing + date + payment term folded into one line ("UoD 50% · dziś · płatność 30 dni — zmień"):
+ * they are pre-filled "jak ostatnio", so usually nothing to touch.
+ */
+function Terms({ form, isWage, dateChoice, set, onPaidAt, isEdit }) {
+    const [open, setOpen] = useState(false);
+    const billing = BILLING_OPTIONS.find((o) => o.value === form.collab_type)?.label;
+    const when = dateChoice === 'today' ? 'dziś' : dateChoice === 'yesterday' ? 'wczoraj' : formatDateShort(form.date);
+    const summary = [!isWage && billing, when, !form.paid && !isWage && `płatność ${form.payment_days || 30} dni`].filter(Boolean).join(' · ');
+
+    if (!open) {
+        return (
+            <button type="button" onClick={() => setOpen(true)} className="w-full text-left px-1 text-sm text-ink-muted">
+                {summary} — <span className="font-semibold text-primary-700">zmień</span>
+            </button>
+        );
+    }
+    return (
+        <div className="space-y-4 rounded-2xl border border-line p-4">
+            {!isWage && (
+                <div>
+                    <div className="section-label mb-2">Rozliczenie</div>
+                    <ChoiceChips options={BILLING_OPTIONS} value={form.collab_type} onChange={(v) => set('collab_type', v)} />
+                </div>
+            )}
+            <div>
+                <div className="section-label mb-2">Kiedy</div>
+                <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => set('date', today)} className={`choice ${dateChoice === 'today' ? 'choice-active' : ''}`}>Dziś</button>
+                    <button type="button" onClick={() => set('date', yesterdayDate())} className={`choice ${dateChoice === 'yesterday' ? 'choice-active' : ''}`}>Wczoraj</button>
+                    <label className={`choice relative cursor-pointer ${dateChoice === 'other' ? 'choice-active' : ''}`}>
+                        {dateChoice === 'other' ? formatDateShort(form.date) : 'Inna data'}
+                        <input type="date" onClick={openPicker} value={form.date} onChange={(e) => e.target.value && set('date', e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Wybierz datę" />
+                    </label>
+                </div>
+            </div>
+            {!isWage && <PaymentTerm form={form} onPaymentDays={(v) => set('payment_days', v)} onPaidAt={onPaidAt} isEdit={isEdit} />}
+        </div>
+    );
+}
+
+/** Payment term (14 / 30 / 60 days, "jak ostatnio") or, once paid (edit), the day it came in. */
+function PaymentTerm({ form, onPaymentDays, onPaidAt, isEdit }) {
     const days = form.payment_days || 30;
     const base = form.publish_by || form.date;
     const due = base ? addDays(base, days) : null;
@@ -497,42 +531,7 @@ function Deadlines({ form, onPublishBy, onPaymentDays, onPaidAt, isEdit }) {
 
     return (
         <div className="space-y-4">
-            <div>
-                <div className="section-label mb-2">Termin publikacji</div>
-                {form.publish_by || publishOpen ? (
-                    <div className="flex items-center gap-2">
-                        <label className="choice choice-active relative cursor-pointer inline-flex items-center gap-1.5">
-                            <CalendarClock size={15} />
-                            {form.publish_by ? `do ${formatDateShort(form.publish_by)}` : 'Wybierz datę'}
-                            <input
-                                type="date" onClick={openPicker}
-                                value={form.publish_by}
-                                onChange={(e) => onPublishBy(e.target.value)}
-                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                aria-label="Termin publikacji"
-                            />
-                        </label>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                onPublishBy('');
-                                setPublishOpen(false);
-                            }}
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-ink-muted hover:bg-ink/5"
-                            aria-label="Bez terminu publikacji"
-                        >
-                            <X size={16} />
-                        </button>
-                    </div>
-                ) : (
-                    <button type="button" onClick={() => setPublishOpen(true)} className="choice inline-flex items-center gap-1.5">
-                        <Plus size={14} /> Dodaj termin
-                    </button>
-                )}
-                {form.publish_by && <p className="hint">Przypomnę na Starcie 2 dni wcześniej.</p>}
-            </div>
-
-            {form.brief ? null : !form.paid ? (
+            {!form.paid ? (
                 <div>
                     <div className="section-label mb-2">Płatność w ciągu</div>
                     <div className="flex flex-wrap gap-2">

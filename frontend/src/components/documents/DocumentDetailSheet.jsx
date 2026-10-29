@@ -204,14 +204,10 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                     </div>
                 )}
 
+                {/* date, brand, counterparty and size are already at the top - only what is not */}
                 <div className="divide-y divide-line">
-                    <Row icon={CalendarDays} label="Data dokumentu">{formatDay(doc.doc_date) || '—'}</Row>
-                    <Row icon={Building2} label="Kontrahent">{doc.counterparty || '—'}</Row>
-                    <Row icon={Tag} label="Marka">{doc.brand || '—'}</Row>
-                    <Row icon={Banknote} label="Kwota brutto">{doc.amount ? <span className="amount">{formatCurrency(doc.amount)}</span> : '—'}</Row>
-                    <Row icon={FileIcon} label="Plik">
-                        {doc.original_name} · {formatSize(doc.size)}
-                    </Row>
+                    {doc.amount > 0 && <Row icon={Banknote} label="Kwota brutto"><span className="amount">{formatCurrency(doc.amount)}</span></Row>}
+                    <Row icon={FileIcon} label="Plik">{doc.original_name}</Row>
                     <Row icon={CalendarDays} label="Dodano">{formatDay(doc.created_at)}</Row>
                 </div>
 

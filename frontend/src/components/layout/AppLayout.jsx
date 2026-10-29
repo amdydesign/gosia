@@ -13,7 +13,7 @@ import { resyncPush } from '../../services/push';
 export default function AppLayout() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { openCollab, openPurchase, openQuickAdd } = useQuickActions();
+    const { openQuickAdd } = useQuickActions();
     const [profileOpen, setProfileOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const meta = getRouteMeta(location.pathname);
@@ -33,15 +33,8 @@ export default function AppLayout() {
         return () => navigator.serviceWorker.removeEventListener('message', onMessage);
     }, [navigate]);
 
-    // "+" adds what the current screen is about; Start has its own capture field + chooser
-    const handleFab = () => {
-        if (meta.section === 'collaborations') openCollab();
-        else if (meta.section === 'purchases') openPurchase();
-        else if (meta.section === 'ideas') navigate('/ideas/new');
-        else if (meta.section === 'documents') navigate('/documents?add=1');
-        else if (meta.section === 'share') navigate('/share?add=1');
-        else openQuickAdd();
-    };
+    // One "Dodaj" per screen: the other lists have their own add button at the top, ideas get the "+"
+    const showFab = meta.root && meta.section === 'ideas';
 
     return (
         <div className="min-h-dvh bg-canvas">
@@ -53,10 +46,10 @@ export default function AppLayout() {
                 </div>
             </main>
 
-            {meta.root && meta.section !== 'dashboard' && meta.section !== 'statistics' && (
+            {showFab && (
                 <button
                     type="button"
-                    onClick={handleFab}
+                    onClick={() => navigate('/ideas/new')}
                     className="lg:hidden fixed right-4 z-40 w-14 h-14 rounded-full bg-accent text-on-accent shadow-float flex items-center justify-center active:scale-95 transition-transform"
                     style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)' }}
                     aria-label="Dodaj"

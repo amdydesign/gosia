@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Paperclip, Download, Trash2, Loader2, FileText, Image as ImageIcon, Plus, Camera } from 'lucide-react';
+import { Paperclip, Download, Trash2, Loader2, FileText, Image as ImageIcon, Plus, Camera, ChevronDown } from 'lucide-react';
 import { apiFetch, apiRequest } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import { deletedToast } from '../../services/trash';
@@ -14,16 +14,39 @@ function formatSize(bytes) {
     return bytes + ' B';
 }
 
+const OPEN_KEY = 'gonia.filesOpen';
+
+function readOpen() {
+    try {
+        return localStorage.getItem(OPEN_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
 /**
- * Attachment list + upload for a collaboration or purchase.
+ * Files of a collaboration or purchase as one row ("Pliki · 3"); tap to see the list.
+ * `extra` (e.g. linked contracts) is listed first and counted with the files.
  * Usage: <Attachments entityType="collaboration" entityId={id} />
  */
-export default function Attachments({ entityType, entityId }) {
+export default function Attachments({ entityType, entityId, extra = null, extraCount = 0 }) {
     const toast = useToast();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
+    const [open, setOpen] = useState(readOpen);
+
+    const toggleOpen = () => {
+        setOpen((o) => {
+            try {
+                localStorage.setItem(OPEN_KEY, o ? '0' : '1');
+            } catch {
+                // ignore
+            }
+            return !o;
+        });
+    };
     const fileInputRef = useRef(null);
     const cameraInputRef = useRef(null);
 
@@ -107,21 +130,25 @@ export default function Attachments({ entityType, entityId }) {
         }
     };
 
+    const total = items.length + extraCount;
+    const expanded = open && total > 0;
+
     return (
         <Card padded={false}>
-            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-line">
-                <h2 className="card-title flex items-center gap-2">
-                    <Paperclip size={16} className="text-primary-500" />
-                    Załączniki
-                    {items.length > 0 && <span className="text-xs font-semibold text-ink-muted">({items.length})</span>}
-                </h2>
+            <div className={`flex items-center justify-between gap-3 pl-4 sm:pl-5 pr-3 py-2.5 ${expanded ? 'border-b border-line' : ''}`}>
+                <button type="button" onClick={toggleOpen} disabled={!total} aria-expanded={expanded} className="flex-1 min-w-0 flex items-center gap-2 text-left py-1">
+                    <Paperclip size={16} className="text-primary-500 shrink-0" />
+                    <span className="text-sm font-semibold text-ink">Pliki</span>
+                    <span className="text-sm text-ink-muted">{loading ? '' : total ? `· ${total}` : '· brak'}</span>
+                    {total > 0 && <ChevronDown size={15} className={`text-ink-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />}
+                </button>
                 <div className="flex items-center gap-1">
                     <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="btn btn-ghost btn-sm sm:hidden" aria-label="Zrób zdjęcie">
                         <Camera size={15} />
                     </button>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn btn-soft btn-sm">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn btn-ghost btn-sm">
                         {uploading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                        {uploading ? 'Wysyłanie…' : 'Dodaj plik'}
+                        {uploading ? 'Wysyłanie…' : 'Plik'}
                     </button>
                 </div>
                 <input ref={fileInputRef} type="file" accept={ALLOWED_EXTENSIONS} onChange={handleUpload} className="hidden" multiple />
@@ -130,12 +157,9 @@ export default function Attachments({ entityType, entityId }) {
 
             {error && <div className="mx-4 mt-3 text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
 
-            {loading ? (
-                <div className="px-5 py-4 text-sm text-ink-muted">Ładowanie…</div>
-            ) : items.length === 0 ? (
-                <p className="px-5 py-4 text-sm text-ink-muted">Brak załączników. Dodaj umowę, fakturę albo zdjęcie paragonu.</p>
-            ) : (
-                <ul className="divide-y divide-line">
+            {expanded && extra}
+            {expanded && items.length > 0 && (
+                <ul className={`divide-y divide-line ${extra ? 'border-t border-line' : ''}`}>
                     {items.map((item) => {
                         const isImage = (item.mime_type || '').startsWith('image/');
                         return (

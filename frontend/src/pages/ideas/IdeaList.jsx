@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Lightbulb, CheckCircle2, Circle, Clock, Play, CalendarCheck, Sparkles } from 'lucide-react';
+import { Plus, Lightbulb, Check, Sparkles } from 'lucide-react';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -10,16 +10,25 @@ import Segmented from '../../components/ui/Segmented';
 import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
 import { CardSkeleton } from '../../components/ui/Skeleton';
-import { estimateSpeechSeconds, formatSeconds, formatDateShort } from '../../utils/format';
-import { isPlanned, localToday, planIdea } from '../../services/agenda';
+import { estimateSpeechSeconds, formatSeconds } from '../../utils/format';
+import { isPlanned } from '../../services/agenda';
 import ReelGenerator from '../../components/ideas/ReelGenerator';
 
 const FILTERS = [
     { value: 'draft', label: 'Do nagrania' },
     { value: 'recorded', label: 'Nagrane' },
     { value: 'published', label: 'Wyniki' },
-    { value: 'all', label: 'Wszystkie' },
 ];
+const TAB_KEY = 'gonia.ideasTab';
+
+function readTab() {
+    try {
+        const v = localStorage.getItem(TAB_KEY);
+        return FILTERS.some((f) => f.value === v) ? v : 'draft';
+    } catch {
+        return 'draft';
+    }
+}
 
 export default function IdeaList() {
     const toast = useToast();
@@ -27,7 +36,15 @@ export default function IdeaList() {
     const [ideas, setIdeas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [filter, setFilter] = useState('draft');
+    const [filter, setFilterState] = useState(readTab);
+    const setFilter = (v) => {
+        setFilterState(v);
+        try {
+            localStorage.setItem(TAB_KEY, v);
+        } catch {
+            // ignore
+        }
+    };
     const [query, setQuery] = useState('');
     const [aiEnabled, setAiEnabled] = useState(false);
     const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -59,7 +76,6 @@ export default function IdeaList() {
             draft: ideas.filter((i) => i.status === 'draft').length,
             recorded: ideas.filter((i) => i.status === 'recorded').length,
             published: ideas.filter((i) => i.published_at).length,
-            all: ideas.length,
         }),
         [ideas]
     );
@@ -67,7 +83,7 @@ export default function IdeaList() {
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         const list = ideas.filter((i) => {
-            if (filter === 'published' ? !i.published_at : filter !== 'all' && i.status !== filter) return false;
+            if (filter === 'published' ? !i.published_at : i.status !== filter) return false;
             if (q && !`${i.title} ${i.content || ''}`.toLowerCase().includes(q)) return false;
             return true;
         });
@@ -81,24 +97,15 @@ export default function IdeaList() {
         try {
             await ideasService.update(null, idea.id, { status: next });
             refresh();
-            if (next === 'recorded') toast.success(`„${idea.title}” — nagrane 🎬`);
+            if (next === 'recorded') {
+                toast.success(`„${idea.title}” — nagrane 🎬`, {
+                    duration: 5000,
+                    action: { label: 'Cofnij', onClick: () => toggleStatus({ ...idea, status: 'recorded' }) },
+                });
+            }
         } catch (err) {
             setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: idea.status } : i)));
             toast.error(err.message || 'Nie udało się zmienić statusu');
-        }
-    };
-
-    const togglePlan = async (idea) => {
-        const on = !isPlanned(idea);
-        const before = idea.planned_for;
-        setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, planned_for: on ? localToday() : null } : i)));
-        try {
-            await planIdea(idea.id, on);
-            refresh();
-            toast.success(on ? 'Na dziś — pojawi się na Starcie' : 'Zdjęte z dzisiejszej listy');
-        } catch (err) {
-            setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, planned_for: before } : i)));
-            toast.error(err.message || 'Nie udało się zapisać');
         }
     };
 
@@ -147,59 +154,29 @@ export default function IdeaList() {
                         const recorded = idea.status === 'recorded';
                         const planned = isPlanned(idea);
                         const seconds = estimateSpeechSeconds(idea.content);
+                        const hasViews = idea.views !== null && idea.views !== undefined;
                         return (
-                            <div key={idea.id} className={`card flex flex-col transition-all ${recorded ? 'opacity-70 hover:opacity-100' : 'hover:border-secondary/40 hover:shadow-md'}`}>
-                                <Link to={`/ideas/${idea.id}`} className="card-pad flex-1 flex flex-col">
-                                    <div className="flex items-start justify-between gap-3 mb-3">
-                                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${recorded ? 'bg-slate-100 text-ink-muted' : 'bg-secondary-light text-secondary-dark'}`}>
-                                            <Lightbulb size={18} />
-                                        </span>
-                                        <span className="flex items-center gap-2">
-                                            {planned && <span className="badge bg-accent text-on-accent">Na dziś</span>}
-                                            {seconds > 0 && (
-                                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
-                                                    <Clock size={11} /> ~{formatSeconds(seconds)}
-                                                </span>
-                                            )}
-                                        </span>
-                                    </div>
-                                    <h3 className={`font-bold text-[15px] leading-snug line-clamp-2 ${recorded ? 'text-ink-soft' : 'text-ink'}`}>{idea.title}</h3>
-                                    <p className="text-sm text-ink-muted line-clamp-3 mt-1.5 flex-1">
-                                        {idea.content || <span className="italic">Brak scenariusza…</span>}
+                            <div key={idea.id} className="card flex items-center gap-3 pl-4 pr-3 py-3.5">
+                                <Link to={`/ideas/${idea.id}`} className="flex-1 min-w-0">
+                                    <h3 className="font-semibold text-[15px] leading-snug line-clamp-2 text-ink">{idea.title}</h3>
+                                    <p className="text-xs text-ink-muted mt-1 truncate">
+                                        {planned && !recorded && <span className="font-semibold text-primary-700">na dziś · </span>}
+                                        {seconds > 0 ? `~${formatSeconds(seconds)}` : 'bez scenariusza'}
+                                        {recorded && !idea.published_at && ' · czeka na publikację'}
                                     </p>
-                                    <div className="text-[11px] text-ink-muted mt-3">
-                                        {idea.views !== null && idea.views !== undefined ? (
-                                            <span className="font-semibold text-ink">{Number(idea.views).toLocaleString('pl-PL')} wyświetleń · </span>
-                                        ) : null}
-                                        {formatDateShort((idea.published_at || idea.created_at)?.slice(0, 10))}
-                                    </div>
                                 </Link>
-                                <div className="flex items-center gap-2 px-3 pb-3">
-                                    {!recorded && (
-                                        <button
-                                            type="button"
-                                            onClick={() => togglePlan(idea)}
-                                            aria-pressed={planned}
-                                            className={`btn btn-sm flex-1 ${planned ? 'bg-accent text-on-accent' : 'btn-secondary'}`}
-                                        >
-                                            <CalendarCheck size={14} />
-                                            {planned ? 'Na dziś' : 'Nagram dziś'}
-                                        </button>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleStatus(idea)}
-                                        className={`btn btn-sm flex-1 ${recorded ? 'btn-ghost' : 'btn-soft'}`}
-                                    >
-                                        {recorded ? <CheckCircle2 size={14} className="text-emerald-600" /> : <Circle size={14} />}
-                                        {recorded ? 'Nagrane' : 'Oznacz nagrane'}
+                                {/* one action per card: draft -> "Nagrane", recorded -> results */}
+                                {!recorded ? (
+                                    <button type="button" onClick={() => toggleStatus(idea)} className="btn btn-sm btn-dark shrink-0">
+                                        <Check size={14} /> Nagrane
                                     </button>
-                                    {!recorded && idea.content && (
-                                        <Link to={`/ideas/${idea.id}?prompter=1`} className="btn btn-sm btn-dark" title="Otwórz w prompterze">
-                                            <Play size={13} fill="currentColor" />
-                                        </Link>
-                                    )}
-                                </div>
+                                ) : hasViews ? (
+                                    <span className="shrink-0 text-sm font-bold text-emerald-700 tabular-nums">{Number(idea.views).toLocaleString('pl-PL')}</span>
+                                ) : (
+                                    <Link to={`/ideas/${idea.id}`} className="btn btn-sm btn-soft shrink-0">
+                                        Wyniki
+                                    </Link>
+                                )}
                             </div>
                         );
                     })}
@@ -211,7 +188,7 @@ export default function IdeaList() {
                 onClose={() => setGeneratorOpen(false)}
                 onAdded={(idea) => {
                     setIdeas((prev) => [idea, ...prev]);
-                    setFilter((f) => (f === 'recorded' ? 'draft' : f));
+                    if (filter === 'recorded') setFilter('draft');
                 }}
                 onRemoved={(id) => setIdeas((prev) => prev.filter((i) => i.id !== id))}
             />

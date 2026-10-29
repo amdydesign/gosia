@@ -1,4 +1,4 @@
-import { CalendarClock, Minus, Plus, X } from 'lucide-react';
+import { CalendarClock, Check, Minus, Plus, X } from 'lucide-react';
 import { formatDateShort, openPicker } from '../../utils/format';
 import { DELIVERABLE_PRESETS } from '../../utils/collabs';
 
@@ -6,8 +6,9 @@ import { DELIVERABLE_PRESETS } from '../../utils/collabs';
  * "Do zrobienia": what the brand wants (2× Reels IG, 3× Stories IG…).
  * Usually filled from the brief by AI - here only quick fixes: one tap adds / counts,
  * the date is optional. list: [{ label, count, done, due }]
+ * kinds: extra one-tap chips for jobs that are not a post (Sesja, Event…): [{ label, active, onClick }]
  */
-export default function DeliverablesEditor({ list, onChange }) {
+export default function DeliverablesEditor({ list, onChange, kinds = [] }) {
     const update = (i, patch) => onChange(list.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
     const setCount = (i, count) => {
         if (count < 1) return onChange(list.filter((_, idx) => idx !== i));
@@ -67,6 +68,11 @@ export default function DeliverablesEditor({ list, onChange }) {
                 {DELIVERABLE_PRESETS.map((label) => (
                     <button key={label} type="button" onClick={() => addPreset(label)} className="chip !py-1.5 !text-xs shrink-0">
                         <Plus size={12} /> {label}
+                    </button>
+                ))}
+                {kinds.map((k) => (
+                    <button key={k.label} type="button" onClick={k.onClick} aria-pressed={k.active} className={`chip !py-1.5 !text-xs shrink-0 ${k.active ? 'chip-active' : ''}`}>
+                        {k.active ? <Check size={12} /> : <Plus size={12} />} {k.label}
                     </button>
                 ))}
                 <button type="button" onClick={() => onChange([...list, { label: '', count: 1, done: 0, due: '' }])} className="chip !py-1.5 !text-xs shrink-0">

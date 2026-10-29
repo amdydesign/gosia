@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, Lightbulb, Clock, Type } from 'lucide-react';
+import { Save, Clock, Type } from 'lucide-react';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import Field from '../../components/ui/Field';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
-import Segmented from '../../components/ui/Segmented';
 import { PageSkeleton } from '../../components/ui/Skeleton';
 import { countWords, estimateSpeechSeconds, formatSeconds } from '../../utils/format';
 
@@ -115,25 +114,10 @@ export default function IdeaForm() {
                     />
                     {lengthHint && <p className="hint">{lengthHint} (czas mówienia ~2,3 słowa/s).</p>}
                 </div>
-
-                <Field label="Status">
-                    <Segmented
-                        className="w-full"
-                        value={form.status}
-                        onChange={(v) => setForm({ ...form, status: v })}
-                        options={[
-                            { value: 'draft', label: 'Do nagrania', icon: Lightbulb },
-                            { value: 'recorded', label: 'Nagrane', tone: 'success' },
-                        ]}
-                    />
-                </Field>
             </Card>
 
             <div className="sticky bottom-[calc(90px+env(safe-area-inset-bottom))] lg:static -mx-4 sm:mx-0 px-4 sm:px-0 py-3 lg:py-0 bg-canvas/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none border-t border-line lg:border-0">
-                <div className="flex gap-3">
-                    <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="flex-1 lg:flex-none">Anuluj</Button>
-                    <Button type="submit" variant="primary" icon={Save} loading={saving} className="flex-[2] lg:flex-none lg:px-8">Zapisz</Button>
-                </div>
+                <Button type="submit" variant="primary" icon={Save} loading={saving} className="w-full lg:w-auto lg:px-8">Zapisz</Button>
             </div>
         </form>
     );

@@ -4,10 +4,8 @@ import {
     AlertCircle,
     ArrowRight,
     Briefcase,
-    CalendarCheck,
     CalendarDays,
     CalendarX,
-    Camera,
     Check,
     ChevronDown,
     Clock,
@@ -15,7 +13,6 @@ import {
     Crosshair,
     FileText,
     ImagePlus,
-    Lightbulb,
     Loader2,
     Play,
     ShoppingBag,
@@ -194,29 +191,26 @@ export default function Dashboard() {
 
             {!focus && data?.week_review && <WeekReview review={data.week_review} />}
 
-            <div className={`grid grid-cols-1 gap-4 ${focus ? '' : 'lg:grid-cols-[1.6fr_1fr]'}`}>
-                <FocusCard
-                    item={current}
-                    canSkip={todayItems.length > 1}
-                    onSkip={() => setSkip((s) => s + 1)}
-                    actions={actions}
-                    doneCount={done.length}
-                />
-                {!focus && <EarningsCard data={data} display="hidden lg:flex" />}
-            </div>
+            <FocusCard
+                item={current}
+                canSkip={todayItems.length > 1}
+                onSkip={() => setSkip((s) => s + 1)}
+                actions={actions}
+                doneCount={done.length}
+            />
 
             {focus ? (
                 <p className="text-center text-sm text-ink-muted py-6">
                     Tylko ta jedna rzecz. Reszta jest schowana i poczeka — wyłącz tryb skupienia, gdy skończysz.
                 </p>
             ) : (
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
-                    <LaterList items={later} snoozed={snoozed} done={done} weekItems={weekItems} actions={actions} />
-                    <CaptureCard ai={data?.ai} ideas={data?.draft_ideas || []} onPlan={actions.planIdeaToday} onInbox={actions.handleInboxResult} />
-                    <MoneyCard data={data} />
-                    {/* phone: earnings at the end, after what needs doing */}
-                    <EarningsCard data={data} display="flex lg:hidden" />
-                </div>
+                <>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr]">
+                        <LaterList items={later} snoozed={snoozed} done={done} weekItems={weekItems} actions={actions} />
+                        <CaptureCard ai={data?.ai} onInbox={actions.handleInboxResult} />
+                    </div>
+                    <MoneyLine data={data} />
+                </>
             )}
 
             <SnoozeSheet
@@ -466,19 +460,6 @@ function useAgendaActions() {
         [refresh, run, toast]
     );
 
-    const planIdeaToday = useCallback(
-        async (idea) => {
-            try {
-                await planIdea(idea.id, true);
-                await refresh();
-                toast.success('Na dziś — jest na liście');
-            } catch (err) {
-                toast.error(err.message || 'Nie udało się zapisać');
-            }
-        },
-        [refresh, toast]
-    );
-
     const unsnooze = useCallback(
         (item) => {
             run(item, async () => {
@@ -499,7 +480,6 @@ function useAgendaActions() {
         unsnooze,
         removeTask,
         unplanIdea,
-        planIdeaToday,
         inboxChoice,
         setInboxChoice,
         openInboxAs,
@@ -736,38 +716,6 @@ function weekdayShort(ymd) {
     const [y, m, d] = ymd.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     return `${new Intl.DateTimeFormat('pl-PL', { weekday: 'short' }).format(date).replace('.', '')} ${formatDateShort(ymd)}`;
-}
-
-function EarningsCard({ data, display }) {
-    const months = data?.months || [];
-    const net = data?.financials?.month?.net || 0;
-    const count = data?.financials?.month?.count || 0;
-    const max = Math.max(...months.map((m) => m.net), 1);
-    const best = net > 0 && net >= max;
-
-    return (
-        <Link to="/statistics?tab=finanse" className={`card p-5 lg:p-6 ${display} flex-col gap-1 hover:border-line-strong transition-colors`}>
-            <span className="text-sm text-ink-muted">Na rękę · {new Intl.DateTimeFormat('pl-PL', { month: 'long' }).format(new Date())}</span>
-            <span className="amount font-display text-[32px] lg:text-[38px] font-semibold tracking-tight leading-none self-start">{formatCurrency(net)}</span>
-            <span className="text-xs text-ink-muted mt-1">
-                {count ? `${count} opłacone współprace` : 'jeszcze nic nie wpłynęło'}
-                {best && <span className="ml-2 inline-block rounded-full bg-accent text-on-accent font-semibold px-2 py-0.5">najlepszy miesiąc</span>}
-            </span>
-            <div className="amount flex-1 min-h-[72px] flex items-end gap-1.5 mt-3" aria-hidden="true">
-                {months.map((m, i) => (
-                    <span
-                        key={m.month}
-                        className={`flex-1 rounded-md ${i === months.length - 1 ? 'bg-chart' : 'bg-line'}`}
-                        style={{ height: `${Math.max(4, (m.net / max) * 100)}%` }}
-                    />
-                ))}
-            </div>
-            <span className="flex justify-between text-[11px] text-ink-muted mt-1">
-                <span>12 miesięcy temu</span>
-                <span>teraz</span>
-            </span>
-        </Link>
-    );
 }
 
 function LaterList({ items, snoozed, done, weekItems, actions }) {
@@ -1044,60 +992,41 @@ function AgendaRow({ item, actions }) {
     );
 }
 
-function MoneyCard({ data }) {
-    const fin = data?.financials || {};
+/** Money in one line: what waits for a transfer and what comes back from returns. Details live on their screens. */
+function MoneyLine({ data }) {
+    const pending = data?.financials?.pending || {};
     const counts = data?.counts || {};
-    const official = fin.official || {};
-    const progress = Math.min(100, official.tax_threshold_progress || 0);
-    const left = Math.max(0, (official.tax_threshold || 0) - (official.income || 0));
-
+    const overdue = pending.overdue_count || 0;
     return (
-        <section className="card p-5 flex flex-col gap-1">
-            <h3 className="text-base font-semibold text-ink mb-1">Pieniądze</h3>
-            <Link to="/collaborations" className="flex items-center gap-3 py-2.5 border-b border-line">
-                <span className="flex-1 min-w-0">
-                    <span className="block text-sm text-ink-muted">Czeka na płatność</span>
-                    <span className={`block text-xs ${fin.pending?.overdue_count ? 'text-secondary font-medium' : 'text-ink-muted'}`}>
-                        {fin.pending?.count ? `${fin.pending.count} współprace${fin.pending.overdue_count ? ` · ${fin.pending.overdue_count} po terminie` : ''}` : 'wszystko opłacone'}
-                    </span>
-                </span>
-                <span className="amount font-display text-xl font-semibold tracking-tight">{formatCurrency(fin.pending?.gross || 0)}</span>
+        <div className="card px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <Link to="/collaborations" className="inline-flex items-center gap-1.5 text-ink-muted hover:text-ink">
+                {pending.count ? (
+                    <>
+                        Czeka na przelew <span className="amount font-semibold text-ink">{formatCurrency(pending.gross || 0)}</span>
+                        {overdue > 0 && <span className="font-semibold text-secondary">· {overdue} po terminie</span>}
+                    </>
+                ) : (
+                    'Wszystko opłacone'
+                )}
+                <ArrowRight size={14} />
             </Link>
-            <Link to="/purchases" className="flex items-center gap-3 py-2.5 border-b border-line">
-                <span className="flex-1 min-w-0">
-                    <span className="block text-sm text-ink-muted">Do odzyskania ze zwrotów</span>
-                    <span className="block text-xs text-ink-muted">
-                        {counts.active_returns ? `${counts.active_returns} ${counts.active_returns === 1 ? 'rzecz' : 'rzeczy'}` : 'nic nie czeka'}
-                    </span>
-                </span>
-                <span className="amount font-display text-xl font-semibold tracking-tight">{formatCurrency(counts.active_returns_value || 0)}</span>
-            </Link>
-            <Link to="/statistics?tab=finanse" className="pt-3 block">
-                <span className="flex justify-between text-sm">
-                    <span className="text-ink-muted">Próg podatkowy</span>
-                    <span className="font-semibold text-ink">{Math.round(progress)}%</span>
-                </span>
-                <span className="block h-2 rounded-full bg-line overflow-hidden mt-2">
-                    <span className={`block h-full rounded-full ${progress >= 90 ? 'bg-secondary' : 'bg-chart'}`} style={{ width: `${progress}%` }} />
-                </span>
-                <span className="block text-xs text-ink-muted mt-1.5">
-                    zostało <span className="amount">{formatCurrency(left)}</span> do II progu
-                </span>
-            </Link>
-        </section>
+            {counts.active_returns > 0 && (
+                <Link to="/purchases" className="inline-flex items-center gap-1.5 text-ink-muted hover:text-ink">
+                    Wróci ze zwrotów <span className="amount font-semibold text-ink">{formatCurrency(counts.active_returns_value || 0)}</span>
+                    <ArrowRight size={14} />
+                </Link>
+            )}
+        </div>
     );
 }
 
-function CaptureCard({ ai, ideas, onPlan, onInbox }) {
+function CaptureCard({ ai, onInbox }) {
     const toast = useToast();
     const { refresh } = useDashboard();
-    const navigate = useNavigate();
     const { openCollab, openPurchase } = useQuickActions();
     const [text, setText] = useState('');
     const [saving, setSaving] = useState(false);
     const imageRef = useRef(null);
-    // A suggestion only - reels count as "na dziś" after "Nagram dziś"
-    const nextIdea = ideas.find((i) => Number(i.words) > 0 && !i.planned_for);
 
     const saveAsTask = async (title, due, remindAt) => {
         const res = await createTask(title, due, remindAt);
@@ -1220,44 +1149,6 @@ function CaptureCard({ ai, ideas, onPlan, onInbox }) {
                     </button>
                 </div>
             </form>
-            <div>
-                <div className="text-xs text-ink-muted mb-2">Albo dodaj od razu:</div>
-                <div className="grid grid-cols-2 gap-2">
-                    {[
-                        { label: 'Umowa', icon: FileText, run: () => navigate('/documents?add=1') },
-                        { label: 'Współpraca', icon: Briefcase, run: () => openCollab() },
-                        { label: 'Zakup', icon: Camera, run: () => openPurchase() },
-                        { label: 'Pomysł', icon: Lightbulb, run: () => navigate('/ideas/new') },
-                    ].map((a) => (
-                        <button
-                            key={a.label}
-                            type="button"
-                            onClick={a.run}
-                            className="h-12 px-3 rounded-2xl border border-line-strong bg-surface text-sm font-semibold text-ink inline-flex items-center gap-2 hover:bg-surface-2 active:scale-[0.98]"
-                        >
-                            <a.icon size={18} className="text-primary-600 shrink-0" /> {a.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-            {nextIdea && (
-                <div className="mt-auto flex items-center gap-3 p-3 rounded-2xl bg-canvas">
-                    <Link to={`/ideas/${nextIdea.id}?prompter=1`} aria-label="Otwórz prompter" className="w-11 h-11 rounded-full bg-accent text-on-accent flex items-center justify-center shrink-0">
-                        <Play size={15} fill="currentColor" />
-                    </Link>
-                    <Link to={`/ideas/${nextIdea.id}`} className="min-w-0 flex-1">
-                        <span className="block text-xs text-ink-muted">Pomysł do nagrania</span>
-                        <span className="block text-sm font-medium text-ink truncate">{nextIdea.title}</span>
-                    </Link>
-                    <button
-                        type="button"
-                        onClick={() => onPlan(nextIdea)}
-                        className="h-10 px-3 rounded-full border border-line-strong text-xs font-semibold text-ink inline-flex items-center gap-1.5 shrink-0 hover:bg-surface-2"
-                    >
-                        <CalendarCheck size={14} /> Na dziś
-                    </button>
-                </div>
-            )}
         </section>
     );
 }

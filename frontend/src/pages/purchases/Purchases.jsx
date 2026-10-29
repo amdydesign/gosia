@@ -32,6 +32,7 @@ const FRAME_TONE = {
     none: '',
 };
 const STRIPE = { danger: '!border-l-red-500', warning: '!border-l-amber-400', ok: '!border-l-emerald-400' };
+const HISTORY_OPEN_KEY = 'gosia-purchases-history';
 
 /**
  * Purchases & returns: add from a screenshot, decide with one tap
@@ -96,11 +97,26 @@ export default function Purchases() {
     // The most pressing deadline colours the summary and the frame: red (≤ 2 days), amber, or green when nothing is left
     const urgency = returns.length === 0 ? 'none' : deadlineTone(returns[0].days_remaining);
 
-    const year = String(new Date().getFullYear());
     const activeValue = active.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const recovered = purchases
-        .filter((p) => bucket(p) === 'returned' && (p.returned_at || p.purchase_date || '').startsWith(year))
-        .reduce((s, p) => s + recoveredOf(p), 0);
+    const [historyShownAll, setHistoryShownAll] = useState(() => {
+        try {
+            return localStorage.getItem(HISTORY_OPEN_KEY) === '1';
+        } catch {
+            return false;
+        }
+    });
+    const toggleHistory = () => {
+        setHistoryShownAll((o) => {
+            try {
+                localStorage.setItem(HISTORY_OPEN_KEY, o ? '0' : '1');
+            } catch {
+                // ignore
+            }
+            return !o;
+        });
+    };
+    // money sent back but not confirmed yet - shown even with the history folded
+    const awaitingRefund = useMemo(() => purchases.filter((p) => bucket(p) === 'returned' && refundPending(p)).length, [purchases]);
 
     const openDetail = (p) => navigate(`/purchases/${p.id}`, { state: { fromList: true } });
     const closeDetail = () => (location.state?.fromList ? navigate(-1) : navigate('/purchases', { replace: true }));
@@ -136,20 +152,15 @@ export default function Purchases() {
                 </button>
             </div>
 
-            {/* Summary */}
-            {(activeValue > 0 || recovered > 0) && (
-                <div className="grid grid-cols-2 gap-3">
-                    <div className={`rounded-2xl px-4 py-3 border ${SUMMARY_TONE[urgency].box}`}>
+            {/* Summary: only what still needs doing (the year's total lives in Statystyki) */}
+            {activeValue > 0 && (
+                <div className={`rounded-2xl px-4 py-3 border flex items-center gap-3 ${SUMMARY_TONE[urgency].box}`}>
+                    <div className="flex-1 min-w-0">
                         <div className={`section-label ${SUMMARY_TONE[urgency].label}`}>Do zwrotu</div>
-                        <div className="amount text-lg font-display font-semibold text-ink mt-0.5 tabular-nums">{formatCurrency(activeValue)}</div>
-                        <div className="text-xs text-ink-muted">
-                            {active.length ? `${active.length} ${active.length === 1 ? 'rzecz' : 'rzeczy'} · ${returns.length} ${returns.length === 1 ? 'sklep' : 'sklepy'}` : 'Wszystko zrobione'}
+                        <div className="text-sm text-ink-soft mt-0.5">
+                            <b className="amount text-lg font-display text-ink tabular-nums">{formatCurrency(activeValue)}</b> · {active.length} {active.length === 1 ? 'rzecz' : 'rzeczy'} · {returns.length}{' '}
+                            {returns.length === 1 ? 'sklep' : 'sklepy'}
                         </div>
-                    </div>
-                    <div className="card px-4 py-3">
-                        <div className="section-label">Odzyskane w {year}</div>
-                        <div className="amount text-lg font-display font-semibold text-emerald-700 mt-0.5 tabular-nums">{formatCurrency(recovered)}</div>
-                        <div className="text-xs text-ink-muted">ze zwrotów</div>
                     </div>
                 </div>
             )}
@@ -206,9 +217,16 @@ export default function Purchases() {
                         )}
                     </section>
 
+                    <button type="button" onClick={toggleHistory} aria-expanded={historyShownAll} className="w-full flex items-center justify-between gap-3 px-1 text-sm font-semibold text-ink-muted hover:text-ink">
+                        <span>
+                            Historia zakupów
+                            {awaitingRefund > 0 && <span className="ml-2 text-amber-800">· czekam na pieniądze: {awaitingRefund}</span>}
+                        </span>
+                        <ChevronDown size={17} className={`transition-transform ${historyShownAll ? 'rotate-180' : ''}`} />
+                    </button>
+                    {historyShownAll && (
                     <section>
-                        <div className="flex items-center justify-between px-1 mb-2">
-                            <h2 className="section-label">Historia</h2>
+                        <div className="flex items-center justify-end px-1 mb-2">
                             <div className="flex gap-1.5">
                                 {HISTORY_FILTERS.map((f) => (
                                     <button key={f.value} type="button" onClick={() => setHistoryFilter(f.value)} className={`chip !py-1 ${historyFilter === f.value ? 'chip-active' : ''}`}>
@@ -242,6 +260,7 @@ export default function Purchases() {
                             </Button>
                         )}
                     </section>
+                    )}
                 </>
             )}
 
@@ -250,6 +269,10 @@ export default function Purchases() {
             )}
         </div>
     );
+}
+
+function costLabel(c) {
+    return c === 0 ? 'za darmo' : `${String(c).replace('.', ',')} zł`;
 }
 
 function groupHistory(list) {
@@ -417,6 +440,7 @@ function useOpenBrands() {
  */
 function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onSettle, onDelivered, costGuess, busy }) {
     const [cost, setCost] = useState(costGuess);
+    const [costOpen, setCostOpen] = useState(false);
     const delivered = group.items.some((p) => p.delivered_at);
     const tone = deadlineTone(group.days_remaining);
     const badge = {
@@ -472,21 +496,38 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                         })}
                     </div>
                     <div className="p-3 border-t border-line">
-                        {toReturn.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
-                                <span className="text-xs text-ink-muted mr-1">Odesłanie kosztuje:</span>
-                                {RETURN_COST_PRESETS.map((c) => (
-                                    <button
-                                        key={c}
-                                        type="button"
-                                        onClick={() => setCost(cost === c ? null : c)}
-                                        className={`chip !py-1 !text-xs ${cost === c ? 'chip-active' : ''}`}
-                                    >
-                                        {c === 0 ? 'za darmo' : `${String(c).replace('.', ',')} zł`}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                        {toReturn.length > 0 &&
+                            (costOpen ? (
+                                <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+                                    <span className="text-xs text-ink-muted mr-1">Odesłanie kosztuje:</span>
+                                    {RETURN_COST_PRESETS.map((c) => (
+                                        <button
+                                            key={c}
+                                            type="button"
+                                            onClick={() => {
+                                                setCost(cost === c ? null : c);
+                                                setCostOpen(false);
+                                            }}
+                                            className={`chip !py-1 !text-xs ${cost === c ? 'chip-active' : ''}`}
+                                        >
+                                            {costLabel(c)}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                // "jak ostatnio" with this shop - one line, ✎ to change
+                                <button type="button" onClick={() => setCostOpen(true)} className="mb-2.5 px-1 text-xs text-ink-muted inline-flex items-center gap-1.5">
+                                    {cost == null ? (
+                                        <span className="font-semibold text-primary-700">+ koszt odesłania</span>
+                                    ) : (
+                                        <>
+                                            odesłanie: <b className="text-ink">{costLabel(cost)}</b>
+                                            {cost === costGuess && <span>(jak ostatnio)</span>}
+                                            <Pencil size={12} className="text-primary-700" />
+                                        </>
+                                    )}
+                                </button>
+                            ))}
                         <button
                             type="button"
                             disabled={busy}

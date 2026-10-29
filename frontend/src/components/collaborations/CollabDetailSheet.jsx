@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, Check, ChevronRight, ClipboardList, Copy, FilePlus2, FileText, Lock, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
+import { CalendarClock, Check, ChevronRight, ClipboardList, Copy, FilePlus2, FileText, Lock, MoreHorizontal, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Attachments from '../common/Attachments';
@@ -34,6 +34,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [showMath, setShowMath] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -202,10 +203,27 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
             onClose={onClose}
             size="lg"
             footer={
-                <div className="grid grid-cols-3 gap-2 w-full">
-                    <Button variant="secondary" icon={Pencil} onClick={() => openCollab({ id: collab.id })}>Edytuj</Button>
-                    <Button variant="secondary" icon={Copy} onClick={repeat}>Powtórz</Button>
-                    <Button variant="danger" icon={Trash2} onClick={remove}>Usuń</Button>
+                <div className="relative flex gap-2 w-full">
+                    <Button variant="secondary" icon={Pencil} className="flex-1" onClick={() => openCollab({ id: collab.id })}>Edytuj</Button>
+                    <button
+                        type="button"
+                        onClick={() => setMoreOpen((o) => !o)}
+                        aria-expanded={moreOpen}
+                        aria-label="Więcej"
+                        className="btn btn-secondary !px-0 w-12 shrink-0"
+                    >
+                        <MoreHorizontal size={20} />
+                    </button>
+                    {moreOpen && (
+                        <div className="absolute right-0 bottom-full mb-2 w-56 rounded-2xl bg-surface border border-line shadow-float overflow-hidden z-10">
+                            <button type="button" onClick={() => { setMoreOpen(false); repeat(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-ink hover:bg-canvas text-left">
+                                <Copy size={16} /> Powtórz współpracę
+                            </button>
+                            <button type="button" onClick={() => { setMoreOpen(false); remove(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-50 text-left border-t border-line">
+                                <Trash2 size={16} /> Usuń
+                            </button>
+                        </div>
+                    )}
                 </div>
             }
         >
@@ -294,50 +312,37 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                 {collab.type !== WAGE_TYPE && (
                     <>
                         <input ref={briefRef} type="file" accept="image/*,application/pdf,.pdf" multiple className="hidden" onChange={addBrief} />
-                        {deliverables.length === 0 && !paid ? (
-                            <button
-                                type="button"
-                                onClick={() => briefRef.current?.click()}
-                                disabled={readingBrief}
-                                className="w-full flex items-center gap-3 rounded-2xl border border-dashed border-sky-300 bg-sky-50/60 px-4 py-3 text-left hover:bg-sky-50 transition-colors disabled:opacity-60"
-                            >
-                                <span className="w-9 h-9 rounded-xl bg-surface text-sky-700 flex items-center justify-center shrink-0 shadow-sm">
-                                    {readingBrief ? <Loader2 size={18} className="animate-spin" /> : <FilePlus2 size={18} />}
-                                </span>
-                                <span className="min-w-0">
-                                    <span className="block text-sm font-bold text-sky-900">{readingBrief ? 'Czytam brief…' : 'Dodaj brief'}</span>
-                                    <span className="block text-xs text-sky-800/80">
-                                        {aiEnabled ? 'PDF albo screen — wypiszę, co trzeba zrobić, i przypnę plik' : 'PDF albo screen — przypnę go do współpracy'}
-                                    </span>
-                                </span>
-                            </button>
-                        ) : (
-                            <button type="button" onClick={() => briefRef.current?.click()} disabled={readingBrief} className="-mt-2 text-xs font-semibold text-sky-700 inline-flex items-center gap-1.5 px-1">
-                                {readingBrief ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
-                                {readingBrief ? 'Czytam brief…' : deliverables.length ? 'Dorzuć z kolejnego briefu' : 'Dodaj brief'}
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            onClick={() => briefRef.current?.click()}
+                            disabled={readingBrief}
+                            title={aiEnabled ? 'PDF albo screen — wypiszę, co trzeba zrobić, i przypnę plik' : 'PDF albo screen — przypnę go do współpracy'}
+                            className={`${deliverables.length ? '-mt-2' : ''} text-xs font-semibold text-sky-700 inline-flex items-center gap-1.5 px-1`}
+                        >
+                            {readingBrief ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
+                            {readingBrief ? 'Czytam brief…' : deliverables.length ? 'Dorzuć z kolejnego briefu' : 'Dodaj brief'}
+                        </button>
                     </>
                 )}
 
                 {(!brief || grossOf(collab) > 0) && (
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-canvas border border-line p-3.5">
-                        <div className="section-label">{isPrivate ? 'Kwota' : 'Brutto'}</div>
-                        <div className="amount text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(grossOf(collab))}</div>
-                    </div>
-                    <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3.5">
-                        <div className="section-label !text-emerald-700">Na rękę</div>
-                        <div className="amount text-xl font-display font-semibold text-emerald-800 mt-1 tabular-nums">{formatCurrency(netOf(collab))}</div>
-                    </div>
-                </div>
-                )}
-                {!isPrivate && breakdown?.gross > 0 && (
-                    <div>
-                        <button type="button" onClick={() => setShowMath((v) => !v)} className="text-xs font-semibold text-primary-700">
-                            {showMath ? 'Ukryj wyliczenie' : 'Jak to policzone?'}
-                        </button>
-                        {showMath && <div className="mt-2"><TaxBreakdown breakdown={breakdown} collabType={collab.collab_type} date={collab.date} /></div>}
+                    <div className="rounded-2xl bg-canvas border border-line px-4 py-3">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="amount text-xl font-display font-semibold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</span>
+                            {!isPrivate && (
+                                <span className="text-sm text-ink-muted">
+                                    brutto · <b className="amount text-emerald-700">{formatCurrency(netOf(collab))}</b> na rękę
+                                </span>
+                            )}
+                        </div>
+                        {!isPrivate && breakdown?.gross > 0 && (
+                            <>
+                                <button type="button" onClick={() => setShowMath((v) => !v)} className="text-xs font-semibold text-primary-700 mt-1">
+                                    {showMath ? 'Ukryj wyliczenie' : 'Jak to policzone?'}
+                                </button>
+                                {showMath && <div className="mt-2"><TaxBreakdown breakdown={breakdown} collabType={collab.collab_type} date={collab.date} /></div>}
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -450,33 +455,31 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     </div>
                 )}
 
-                {collab.documents?.length > 0 && (
-                    <div className="rounded-2xl border border-line overflow-hidden">
-                        <div className="px-4 py-2.5 bg-canvas border-b border-line">
-                            <span className="section-label">Umowy i rachunki</span>
-                        </div>
-                        <div className="divide-y divide-line">
-                            {collab.documents.map((d) => (
-                                <Link
-                                    key={d.id}
-                                    to={`/documents?doc=${d.id}`}
-                                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-canvas transition-colors"
-                                >
-                                    <FileText size={16} className="text-primary-500 shrink-0" />
-                                    <span className="flex-1 min-w-0">
-                                        <span className="block text-sm font-semibold text-ink truncate">{d.title}</span>
-                                        <span className="block text-xs text-ink-muted">
-                                            {[DOC_KINDS[d.doc_kind], d.doc_date && formatDateLong(d.doc_date), d.status === 'to_sign' && 'do podpisu'].filter(Boolean).join(' · ')}
+                {/* contracts / bills and attached files: one row, the list on tap */}
+                <Attachments
+                    key={attachmentsKey}
+                    entityType="collaboration"
+                    entityId={collab.id}
+                    extraCount={collab.documents?.length || 0}
+                    extra={
+                        collab.documents?.length > 0 && (
+                            <div className="divide-y divide-line">
+                                {collab.documents.map((d) => (
+                                    <Link key={d.id} to={`/documents?doc=${d.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-canvas transition-colors">
+                                        <FileText size={16} className="text-primary-500 shrink-0" />
+                                        <span className="flex-1 min-w-0">
+                                            <span className="block text-sm font-semibold text-ink truncate">{d.title}</span>
+                                            <span className="block text-xs text-ink-muted">
+                                                {[DOC_KINDS[d.doc_kind], d.doc_date && formatDateLong(d.doc_date), d.status === 'to_sign' && 'do podpisu'].filter(Boolean).join(' · ')}
+                                            </span>
                                         </span>
-                                    </span>
-                                    <ChevronRight size={16} className="text-ink-muted shrink-0" />
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <Attachments key={attachmentsKey} entityType="collaboration" entityId={collab.id} />
+                                        <ChevronRight size={16} className="text-ink-muted shrink-0" />
+                                    </Link>
+                                ))}
+                            </div>
+                        )
+                    }
+                />
             </div>
         </Sheet>
     );

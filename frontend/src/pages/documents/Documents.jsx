@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2, Sparkles, ChevronRight, Briefcase } from 'lucide-react';
+import { Plus, FolderLock, FileText, Image as ImageIcon, Download, Eye, Pencil, Trash2, Lock, Upload, CheckCircle2, PenLine, Loader2, AlertCircle, X, ScanLine, FolderOpen, Building2, Sparkles, ChevronRight, Briefcase, SlidersHorizontal } from 'lucide-react';
 import documentsService from '../../services/documents';
 import { documentText, ocrImage } from '../../utils/ocr';
 import { pagesToPdf } from '../../utils/scanner';
@@ -91,7 +91,8 @@ const IS_IOS = typeof navigator !== 'undefined'
 
 function UploadSheet({ open, onClose, onPick, onScan, aiAvailable }) {
     const filesRef = useRef(null);
-    const [status, setStatus] = useState('signed');
+    // no "podpisane / do podpisu" question here - most are signed, "Do podpisu" is one tap on the document
+    const status = 'signed';
     const [ai, setAi] = useState(false); // optional, off by default: the file goes to Anthropic
 
     const picked = (event) => {
@@ -104,12 +105,9 @@ function UploadSheet({ open, onClose, onPick, onScan, aiAvailable }) {
     };
 
     return (
-        <Sheet open={open} onClose={onClose} title="Dodaj dokument">
-            <Field label="Status">
-                <ChoiceChips options={STATUS_OPTIONS} value={status} onChange={setStatus} />
-            </Field>
+        <Sheet open={open} onClose={onClose} title="Dodaj dokument" description="Nazwę, kontrahenta i datę rozpoznam sama">
             {aiAvailable && (
-                <label className="mt-4 flex items-start gap-3 rounded-2xl border border-line p-3 cursor-pointer">
+                <label className="flex items-start gap-3 rounded-2xl border border-line p-3 cursor-pointer">
                     <input type="checkbox" checked={ai} onChange={(e) => setAi(e.target.checked)} className="mt-0.5 w-5 h-5 accent-primary-600 shrink-0" />
                     <span className="min-w-0">
                         <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
@@ -122,7 +120,7 @@ function UploadSheet({ open, onClose, onPick, onScan, aiAvailable }) {
                     </span>
                 </label>
             )}
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className={`grid grid-cols-2 gap-3 ${aiAvailable ? 'mt-4' : ''}`}>
                 <button
                     type="button"
                     onClick={() => {
@@ -154,10 +152,8 @@ function UploadSheet({ open, onClose, onPick, onScan, aiAvailable }) {
                     i zapisz skan. Potem tutaj <b>Wybierz pliki</b> → <b>Wybierz pliki</b> i wskaż zapisany PDF — tekst, kontrahent i data rozpoznają się same.
                 </div>
             )}
-            <p className="text-xs text-ink-muted mt-4 leading-relaxed">
-                {ai
-                    ? 'Dokument zostanie przeczytany przez Claude (Anthropic). Wszystko możesz potem poprawić ołówkiem przy dokumencie.'
-                    : 'Tekst skanów i zdjęć rozpoznaje Twój telefon (OCR), a kontrahenta, nazwę i datę — Twój serwer. Dokumenty nie trafiają do żadnych zewnętrznych usług. Poprawić możesz potem ołówkiem przy dokumencie.'}
+            <p className="text-xs text-ink-muted mt-4">
+                {ai ? 'Dokument przeczyta Claude (Anthropic).' : 'Dokumenty nie trafiają do żadnych zewnętrznych usług.'} Poprawisz ołówkiem przy dokumencie.
             </p>
         </Sheet>
     );
@@ -348,6 +344,8 @@ export default function Documents() {
     const [year, setYear] = useState('all');
     const [counterparty, setCounterparty] = useState('all');
     const [brandFilter, setBrandFilter] = useState('all');
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const activeFilters = (sort !== 'date_desc') + (year !== 'all') + (counterparty !== 'all') + (brandFilter !== 'all');
     const [uploads, setUploads] = useState([]); // files on their way to the server
     const [dragging, setDragging] = useState(false);
     const [scan, setScan] = useState(null); // { status, ai } while the scanner is open
@@ -720,23 +718,40 @@ export default function Documents() {
                 title="Dokumenty"
                 subtitle="Umowy i dokumenty poufne — widoczne tylko po zalogowaniu"
                 actions={
-                    <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)} className="hidden lg:inline-flex">
+                    <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)} className="flex-1 lg:flex-none">
                         Dodaj dokument
                     </Button>
                 }
             >
                 <div className="flex flex-col sm:flex-row gap-2.5">
                     <SearchInput value={query} onChange={setQuery} placeholder="Szukaj po nazwie, kontrahencie lub treści…" className="flex-1" />
+                    <div className="flex gap-2 min-w-0">
                     <Segmented
+                        className="flex-1 min-w-0 overflow-x-auto no-scrollbar"
                         value={filter}
                         onChange={setFilter}
                         options={[
-                            { value: 'all', label: 'Wszystkie', count: counts.all },
-                            { value: 'to_sign', label: 'Do podpisu', count: counts.to_sign, tone: 'warning' },
-                            { value: 'signed', label: 'Podpisane', count: counts.signed },
+                            { value: 'all', label: 'Wszystkie' },
+                            // only the number that asks for action
+                            { value: 'to_sign', label: 'Do podpisu', count: counts.to_sign || undefined, tone: 'warning' },
+                            { value: 'signed', label: 'Podpisane' },
                         ]}
                     />
+                    <button
+                        type="button"
+                        onClick={() => setFiltersOpen((o) => !o)}
+                        aria-expanded={filtersOpen}
+                        aria-label="Filtry"
+                        className={`h-11 min-w-11 px-3 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 shrink-0 ${
+                            filtersOpen ? 'bg-ink text-canvas' : 'bg-surface border border-line-strong text-ink'
+                        }`}
+                    >
+                        <SlidersHorizontal size={16} /> <span className="hidden sm:inline">Filtry</span>
+                        {activeFilters > 0 && <span className="text-xs">{activeFilters}</span>}
+                    </button>
+                    </div>
                 </div>
+                {filtersOpen && (
                 <div className="grid grid-cols-2 gap-2.5 sm:flex">
                     <select value={sort} onChange={(e) => setSort(e.target.value)} className="input !py-2 !rounded-xl min-w-0 sm:w-44" aria-label="Sortowanie">
                         {SORT_OPTIONS.map((o) => (
@@ -773,7 +788,22 @@ export default function Documents() {
                             </option>
                         ))}
                     </select>
+                    {activeFilters > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSort('date_desc');
+                                setYear('all');
+                                setCounterparty('all');
+                                setBrandFilter('all');
+                            }}
+                            className="text-sm font-semibold text-primary-700 px-2 col-span-2 sm:col-span-1 text-left"
+                        >
+                            Wyczyść
+                        </button>
+                    )}
                 </div>
+                )}
             </PageHeader>
 
             {suggestions.length > 0 && (
