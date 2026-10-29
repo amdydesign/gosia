@@ -45,9 +45,16 @@ export function paymentDue(c) {
     return base ? toDateInput(addDays(base, Number(c?.payment_days) || DEFAULT_PAYMENT_DAYS)) : null;
 }
 
-/** Unpaid and either marked overdue or past the payment term (30 days unless set). */
+/** Things from the brief still to make (and not marked published) - the payment is not due yet. */
+export function hasWorkLeft(c) {
+    if (c?.published_at) return false;
+    const list = Array.isArray(c?.deliverables) ? c.deliverables : [];
+    return list.some((d) => (Number(d.done) || 0) < (Number(d.count) || 0));
+}
+
+/** Unpaid and either marked overdue or past the payment term (30 days unless set). Not while work is left. */
 export function isLate(c) {
-    if (isPaid(c)) return false;
+    if (isPaid(c) || hasWorkLeft(c)) return false;
     if (c?.payment_status === 'overdue') return true;
     const due = paymentDue(c);
     return due ? (daysFromToday(due) ?? 0) < 0 : daysWaiting(c) > LATE_AFTER_DAYS;

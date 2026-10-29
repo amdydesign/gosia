@@ -163,7 +163,7 @@ class TodayAgenda
     private static function payments(PDO $conn, $userId, $today, array &$items)
     {
         $stmt = $conn->prepare("
-            SELECT id, brand, amount_gross, payment_status, date, " . COLLAB_DUE_SQL . " AS due,
+            SELECT id, brand, amount_gross, payment_status, date, published_at, deliverables, " . COLLAB_DUE_SQL . " AS due,
                    DATEDIFF(:today, " . COLLAB_DUE_SQL . ") AS days_late, DATEDIFF(:today2, date) AS days_waiting
             FROM collaborations
             WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
@@ -172,7 +172,11 @@ class TodayAgenda
             LIMIT 10
         ");
         $stmt->execute(['user_id' => $userId, 'today' => $today, 'today2' => $today, 'today3' => $today]);
+        require_once __DIR__ . '/../collaborations/helpers.php';
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (collabHasWorkLeft($row)) {
+                continue; // her part is not done yet - nothing to chase
+            }
             $late = max(0, (int) $row['days_late']);
             $items[] = [
                 'kind' => 'payment',

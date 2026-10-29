@@ -11,7 +11,7 @@ import { ListSkeleton } from '../../components/ui/Skeleton';
 import CollabDetailSheet from '../../components/collaborations/CollabDetailSheet';
 import ExportModal from './ExportModal';
 import { daysFromToday, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, getTodayDate, groupByMonth } from '../../utils/format';
-import { daysWaiting, deliverableProgress, grossOf, isBrief, isLate, isPaid, netOf, nextDeliverable, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
+import { daysWaiting, deliverableProgress, grossOf, hasWorkLeft, isBrief, isLate, isPaid, netOf, nextDeliverable, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 import { tickWithUndo } from '../../services/collaborations';
 
 const MONTHS_STEP = 6;
@@ -96,6 +96,10 @@ export default function Collaborations() {
         [filtered]
     );
     const unpaidTotal = unpaid.reduce((s, c) => s + grossOf(c), 0);
+    // "Czeka na przelew" = work done, money not in yet; with things still to make it is "do zrobienia"
+    const awaiting = unpaid.filter((c) => !hasWorkLeft(c));
+    const awaitingTotal = awaiting.reduce((s, c) => s + grossOf(c), 0);
+    const todo = unpaid.filter(hasWorkLeft);
     const history = useMemo(() => groupByMonth(filtered.filter(isPaid)), [filtered]);
 
     const yearNet = useMemo(() => {
@@ -187,10 +191,17 @@ export default function Collaborations() {
 
             {/* Summary */}
             <div className="grid grid-cols-2 gap-3">
-                <div className={`rounded-2xl p-4 border ${unpaid.length ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                    <div className={`section-label ${unpaid.length ? '!text-amber-700' : '!text-emerald-700'}`}>Czeka na przelew</div>
-                    <div className="amount text-xl sm:text-2xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(unpaidTotal)}</div>
-                    <div className="text-xs text-ink-muted mt-0.5">{unpaid.length ? `${unpaid.length} ${plural(unpaid.length)}` : 'Wszystko opłacone'}</div>
+                <div className={`rounded-2xl p-4 border ${awaiting.length ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                    <div className={`section-label ${awaiting.length ? '!text-amber-700' : '!text-emerald-700'}`}>Czeka na przelew</div>
+                    <div className="amount text-xl sm:text-2xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(awaitingTotal)}</div>
+                    <div className="text-xs text-ink-muted mt-0.5">
+                        {awaiting.length ? `${awaiting.length} ${plural(awaiting.length)}` : todo.length ? 'Nic — najpierw do zrobienia' : 'Wszystko opłacone'}
+                    </div>
+                    {todo.length > 0 && (
+                        <div className="text-xs font-semibold text-violet-700 mt-1">
+                            + do zrobienia: {todo.length} · <span className="amount">{formatCurrency(todo.reduce((s, c) => s + grossOf(c), 0))}</span>
+                        </div>
+                    )}
                 </div>
                 <div className="rounded-2xl p-4 bg-surface border border-line shadow-card">
                     <div className="section-label">Na rękę w {new Date().getFullYear()}</div>
@@ -265,7 +276,7 @@ export default function Collaborations() {
                             </div>
                             <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 divide-y divide-amber-200 overflow-hidden">
                                 {unpaid.map((c) => (
-                                    <UnpaidRow key={c.id} collab={c} busy={busyId === c.id} onOpen={() => openDetail(c)} onPaid={() => markPaid(c)} />
+                                    <UnpaidRow key={c.id} collab={c} busy={busyId === c.id} onOpen={() => openDetail(c)} onPaid={() => markPaid(c)} onTick={() => tickNext(c)} />
                                 ))}
                             </div>
                         </section>
@@ -312,9 +323,10 @@ export default function Collaborations() {
     );
 }
 
-const STATUS_ORDER = { late: 0, publish: 1, waiting: 2, progress: 3 };
+const STATUS_ORDER = { late: 0, todo: 1, publish: 1, waiting: 2, progress: 3 };
 const STATUS_STYLE = {
     late: { label: 'Po terminie', pill: 'bg-red-600 text-white' },
+    todo: { label: 'Do zrobienia', pill: 'bg-violet-600 text-white' },
     publish: { label: 'Do publikacji', pill: 'bg-violet-600 text-white' },
     waiting: { label: 'Czeka na przelew', pill: 'bg-amber-500 text-white' },
     progress: { label: 'W trakcie', pill: 'bg-sky-600 text-white' },
@@ -326,11 +338,12 @@ const STATUS_STYLE = {
  */
 function unsettledStatus(c) {
     if (isLate(c)) return 'late';
+    if (hasWorkLeft(c)) return 'todo'; // things from the brief first - no point waiting for money yet
     if (toPublish(c)) return 'publish';
     return (daysFromToday(c.date) ?? 0) > 0 ? 'progress' : 'waiting';
 }
 
-function UnpaidRow({ collab, busy, onOpen, onPaid }) {
+function UnpaidRow({ collab, busy, onOpen, onPaid, onTick }) {
     const status = unsettledStatus(collab);
     const style = STATUS_STYLE[status];
     const waiting = daysWaiting(collab);
@@ -338,8 +351,12 @@ function UnpaidRow({ collab, busy, onOpen, onPaid }) {
     const due = paymentDue(collab);
     const dueIn = daysFromToday(due) ?? 0;
     const publishIn = daysFromToday(collab.publish_by) ?? 0;
+    const next = nextDeliverable(collab);
+    const nextIn = next?.due ? daysFromToday(next.due) : null;
     const when =
-        status === 'publish'
+        status === 'todo'
+            ? `${next.label}${next.left > 1 ? ` ×${next.left}` : ''}${nextIn === null ? '' : nextIn < 0 ? ' · termin minął' : nextIn === 0 ? ' · dziś' : nextIn === 1 ? ' · jutro' : ` · do ${formatDateShort(next.due)}`}`
+            : status === 'publish'
             ? publishIn < 0 ? 'termin publikacji minął' : publishIn === 0 ? 'opublikuj dziś' : `opublikuj do ${formatDateShort(collab.publish_by)}`
             : status === 'progress'
                 ? ahead === 1 ? 'jutro' : `za ${ahead} dni`
@@ -356,24 +373,38 @@ function UnpaidRow({ collab, busy, onOpen, onPaid }) {
                     {progress.total > 0 && progress.done < progress.total && (
                         <span className="shrink-0 text-xs font-bold text-ink tabular-nums">{progress.done}/{progress.total}</span>
                     )}
-                    <span className={`text-xs truncate ${status === 'late' ? 'text-red-700 font-semibold' : 'text-ink-muted'}`}>
-                        {formatDateShort(collab.date)} · {when}
+                    <span className={`text-xs truncate ${status === 'late' || (status === 'todo' && nextIn !== null && nextIn < 0) ? 'text-red-700 font-semibold' : 'text-ink-muted'}`}>
+                        {status === 'todo' ? when : `${formatDateShort(collab.date)} · ${when}`}
                     </span>
                 </div>
             </button>
             <div className="text-right shrink-0">
                 <div className="amount font-bold text-ink tabular-nums">{formatCurrency(grossOf(collab))}</div>
             </div>
-            <button
-                type="button"
-                onClick={onPaid}
-                disabled={busy}
-                className="shrink-0 w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:opacity-50"
-                aria-label={`Oznacz ${collab.brand} jako opłacone`}
-                title="Przelew doszedł"
-            >
-                <Check size={20} strokeWidth={2.75} />
-            </button>
+            {status === 'todo' ? (
+                // her part first: ✓ = the nearest thing from the brief made
+                <button
+                    type="button"
+                    onClick={onTick}
+                    disabled={busy}
+                    className="shrink-0 w-11 h-11 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:opacity-50"
+                    aria-label={`${next.label} — zrobione`}
+                    title={`${next.label} — zrobione`}
+                >
+                    <Check size={20} strokeWidth={2.75} />
+                </button>
+            ) : (
+                <button
+                    type="button"
+                    onClick={onPaid}
+                    disabled={busy}
+                    className="shrink-0 w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:opacity-50"
+                    aria-label={`Oznacz ${collab.brand} jako opłacone`}
+                    title="Przelew doszedł"
+                >
+                    <Check size={20} strokeWidth={2.75} />
+                </button>
+            )}
         </div>
     );
 }

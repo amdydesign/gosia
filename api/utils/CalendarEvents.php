@@ -65,12 +65,16 @@ class CalendarEvents
 
         // Payments: when the money should come in
         $stmt = $conn->prepare("
-            SELECT id, brand, amount_gross, " . COLLAB_DUE_SQL . " AS due FROM collaborations
+            SELECT id, brand, amount_gross, published_at, deliverables, " . COLLAB_DUE_SQL . " AS due FROM collaborations
             WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
               AND " . COLLAB_DUE_SQL . " BETWEEN :from AND :to
         ");
         $stmt->execute($p);
+        require_once __DIR__ . '/../collaborations/helpers.php';
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            if (collabHasWorkLeft($c)) {
+                continue; // the payment term starts when the work is published
+            }
             $late = $c['due'] < $today;
             $events[] = self::event($c['due'], null, 'payment', 'Płatność: ' . $c['brand'], $late ? 'termin minął — upomnij się' : 'termin płatności', (float) $c['amount_gross'], '/collaborations/' . $c['id'], $late ? 'late' : 'money');
         }

@@ -11,7 +11,7 @@ import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate } from '../../utils/format';
-import { daysWaiting, deliverableProgress, grossOf, isBrief, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
+import { daysWaiting, deliverableProgress, grossOf, hasWorkLeft, isBrief, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 import { tickWithUndo } from '../../services/collaborations';
 import { readScreens } from '../../services/ai';
 import { uploadAttachment } from '../../services/attachments';
@@ -351,8 +351,18 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     </div>
                 )}
 
-                {/* Payment (a brief is not money yet) */}
-                {brief ? null : paid ? (
+                {/* Payment (a brief is not money yet; with work left nothing to wait for) */}
+                {brief ? null : !paid && hasWorkLeft(collab) ? (
+                    <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
+                        <div className="text-sm font-bold text-violet-900">Najpierw do zrobienia — {progress.done}/{progress.total}</div>
+                        <div className="text-xs text-ink-muted mt-0.5">
+                            Na przelew czekasz od publikacji: ostatnie „Zrobione” ją oznaczy, potem {Number(collab.payment_days) || 30} dni na płatność.
+                        </div>
+                        <button type="button" disabled={busy} onClick={() => save({ payment_status: 'paid' }, `${collab.brand} — opłacone`)} className="mt-2 text-xs font-semibold text-ink-muted hover:text-ink">
+                            Pieniądze już przyszły?
+                        </button>
+                    </div>
+                ) : paid ? (
                     <div className="flex items-center justify-between gap-3 rounded-2xl bg-emerald-50/70 border border-emerald-100 px-4 py-3">
                         <span className="flex items-center gap-2 text-sm font-bold text-emerald-800">
                             <Check size={18} /> Opłacone{collab.paid_at ? ` ${formatDateShort(collab.paid_at)}` : ''}

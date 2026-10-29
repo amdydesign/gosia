@@ -53,17 +53,25 @@ try {
     $stmt->execute($p);
     $monthStats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 2. Pending payments (all time)
+    // 2. Pending payments (all time) - "czeka na przelew" = work done, money not in yet
+    //    (with things from the brief still to make nothing is awaited or late)
     $stmt = $conn->prepare("
-        SELECT COALESCE(SUM(amount_gross), 0) AS pending_gross,
-               COALESCE(SUM(amount_net), 0)   AS pending_net,
-               COUNT(*)                        AS pending_count,
-               SUM(CASE WHEN payment_status = 'overdue' OR " . COLLAB_DUE_SQL . " < CURDATE() THEN 1 ELSE 0 END) AS overdue_count
+        SELECT amount_gross, amount_net, published_at, deliverables,
+               (payment_status = 'overdue' OR " . COLLAB_DUE_SQL . " < CURDATE()) AS is_overdue
         FROM collaborations
         WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
     ");
     $stmt->execute($p);
-    $pendingStats = $stmt->fetch(PDO::FETCH_ASSOC);
+    $pendingStats = ['pending_gross' => 0, 'pending_net' => 0, 'pending_count' => 0, 'overdue_count' => 0];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (collabHasWorkLeft($row)) {
+            continue;
+        }
+        $pendingStats['pending_gross'] += (float) $row['amount_gross'];
+        $pendingStats['pending_net'] += (float) $row['amount_net'];
+        $pendingStats['pending_count']++;
+        $pendingStats['overdue_count'] += (int) $row['is_overdue'];
+    }
 
     // 2b. Unpaid collaborations list (oldest first)
     $stmt = $conn->prepare("
@@ -329,12 +337,15 @@ try {
             }
         }
         $stmt = $conn->prepare("
-            SELECT id, brand, " . COLLAB_DUE_SQL . " AS due FROM collaborations
+            SELECT id, brand, published_at, deliverables, " . COLLAB_DUE_SQL . " AS due FROM collaborations
             WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
               AND " . COLLAB_DUE_SQL . " BETWEEN CURDATE() AND :sunday
         ");
         $stmt->execute(['user_id' => $userId, 'sunday' => $sunday]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (collabHasWorkLeft($row)) {
+                continue;
+            }
             $due[] = ['kind' => 'payment_due', 'title' => $row['brand'] . ' — termin płatności', 'date' => $row['due'], 'url' => '/collaborations/' . $row['id']];
         }
         usort($due, function ($a, $b) {

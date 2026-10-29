@@ -213,3 +213,17 @@ function collabAgreeFromDocuments(PDO $conn, $userId, $collabId, array $document
     }
     $conn->prepare("UPDATE collaborations SET " . implode(', ', $set) . " WHERE id = :id AND user_id = :user_id")->execute($params);
 }
+
+/** Things from the brief still to make (not marked published) - no payment is due yet, nothing to chase. */
+function collabHasWorkLeft(array $row)
+{
+    if (!empty($row['published_at'])) {
+        return false;
+    }
+    foreach (collabDecodeDeliverables($row['deliverables'] ?? null) as $d) {
+        if ((int) ($d['done'] ?? 0) < (int) ($d['count'] ?? 0)) {
+            return true;
+        }
+    }
+    return false;
+}
