@@ -10,7 +10,7 @@ import { useToast } from '../../context/ToastContext';
 import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
-import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate } from '../../utils/format';
+import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate, openPicker } from '../../utils/format';
 import { daysWaiting, deliverableProgress, grossOf, hasWorkLeft, isBrief, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 import { tickWithUndo } from '../../services/collaborations';
 import { readScreens } from '../../services/ai';
@@ -122,6 +122,12 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
         } finally {
             setReadingBrief(false);
         }
+    };
+
+    // Published on another day than today: the payment term counts from that day
+    const setPublishedOn = (date) => {
+        if (!date || date === collab.published_at) return;
+        save({ published_at: date }, `Opublikowane ${formatDateShort(date)} — termin płatności liczy się od tego dnia`);
     };
 
     const toggleTeamPaid = (index) => {
@@ -330,21 +336,30 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                         <div className="flex items-center gap-2 text-sm font-bold text-ink">
                             <CalendarClock size={17} /> Opublikuj do {formatDateLong(collab.publish_by)}
                         </div>
-                        <Button
-                            variant="secondary"
-                            block
-                            icon={Send}
-                            loading={busy}
-                            className="mt-3"
-                            onClick={() => save({ published_at: getTodayDate() }, 'Opublikowane — termin płatności liczy się od dziś')}
-                        >
-                            Opublikowane
-                        </Button>
+                        <div className="mt-3 flex gap-2">
+                            <Button
+                                variant="secondary"
+                                icon={Send}
+                                loading={busy}
+                                className="flex-1"
+                                onClick={() => save({ published_at: getTodayDate() }, 'Opublikowane — termin płatności liczy się od dziś')}
+                            >
+                                Opublikowane dziś
+                            </Button>
+                            <PublishedDate disabled={busy} onPick={setPublishedOn} className="btn btn-secondary shrink-0">
+                                Inna data
+                            </PublishedDate>
+                        </div>
                     </div>
                 )}
                 {collab.published_at && (
                     <div className="flex items-center justify-between gap-3 text-sm text-ink-soft px-1">
-                        <span className="inline-flex items-center gap-2"><Send size={15} /> Opublikowane {formatDateShort(collab.published_at)}</span>
+                        <span className="inline-flex items-center gap-2">
+                            <Send size={15} /> Opublikowane
+                            <PublishedDate value={collab.published_at} disabled={busy} onPick={setPublishedOn} className="font-semibold text-ink underline decoration-dotted underline-offset-4">
+                                {formatDateShort(collab.published_at)}
+                            </PublishedDate>
+                        </span>
                         <button type="button" disabled={busy} onClick={() => save({ published_at: null }, 'Cofnięto publikację')} className="text-xs font-semibold text-ink-muted hover:text-ink">
                             Cofnij
                         </button>
@@ -455,6 +470,24 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                 <Attachments key={attachmentsKey} entityType="collaboration" entityId={collab.id} />
             </div>
         </Sheet>
+    );
+}
+
+/** A label that opens the date picker (no later than today). */
+function PublishedDate({ value, onPick, disabled, className, children }) {
+    return (
+        <label className={`relative cursor-pointer ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}>
+            {children}
+            <input
+                type="date"
+                onClick={openPicker}
+                value={value || ''}
+                max={getTodayDate()}
+                onChange={(e) => onPick(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                aria-label="Data publikacji"
+            />
+        </label>
     );
 }
 
