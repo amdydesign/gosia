@@ -50,6 +50,13 @@ export function ToastProvider({ children }) {
     );
 }
 
+// "Ukryj kwoty" covers toasts too: "Dodano: Zara · 3 000 zł" -> "Dodano: Zara · ••• zł"
+const MONEY = /[+−-]?\d[\d\s\u00a0.,]*\s?zł/g;
+function maskAmounts(text) {
+    if (typeof text !== 'string' || document.documentElement.dataset.hideAmounts !== 'true') return text;
+    return text.replace(MONEY, '••• zł');
+}
+
 function ToastItem({ toast, onClose }) {
     const styles = {
         success: { icon: CheckCircle2, cls: 'bg-ink text-canvas', iconCls: 'text-emerald-400' },
@@ -64,7 +71,7 @@ function ToastItem({ toast, onClose }) {
             role="status"
         >
             <Icon size={18} className={`shrink-0 ${styles.iconCls}`} />
-            <span className="text-sm font-medium flex-1">{toast.message}</span>
+            <span className="text-sm font-medium flex-1">{maskAmounts(toast.message)}</span>
             {toast.action && (
                 <button
                     type="button"

@@ -337,7 +337,7 @@ function HistoryCard({ group, returnedView, open, onToggle, onOpen, onRefunded }
                             <div className="text-right shrink-0">
                                 <div className="amount font-bold text-ink tabular-nums">{formatCurrency(p.amount)}</div>
                                 {returnedView && p.status === 'partial' && (
-                                    <div className="text-[11px] font-semibold text-emerald-700">wróciło {formatCurrency(p.returned_amount)}</div>
+                                    <div className="text-[11px] font-semibold text-emerald-700">wróciło <span className="amount">{formatCurrency(p.returned_amount)}</span></div>
                                 )}
                             </div>
                         </button>
@@ -450,7 +450,7 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                                     <button type="button" onClick={() => onOpen(p)} className="flex-1 min-w-0 text-left">
                                         <div className={`text-[15px] font-semibold truncate ${stays ? 'text-ink-soft' : 'text-ink'}`}>{p.items}</div>
                                         <div className="text-xs text-ink-muted tabular-nums">
-                                            {formatCurrency(p.amount)}
+                                            <span className="amount">{formatCurrency(p.amount)}</span>
                                             {group.orders > 1 ? ` · kupione ${formatDateShort(p.purchase_date)}` : ''}
                                             {stays ? ' · zostaje' : ' · do zwrotu'}
                                         </div>
@@ -497,7 +497,7 @@ function ReturnCard({ group, open, onToggleOpen, kept, onToggleKeep, onOpen, onS
                         >
                             {toReturn.length ? (
                                 <>
-                                    <RotateCcw size={16} /> Zrobiłam zwrot · {toReturn.length} {toReturn.length === 1 ? 'rzecz' : 'rzeczy'} · {formatCurrency(returnSum)}
+                                    <RotateCcw size={16} /> Zrobiłam zwrot · {toReturn.length} {toReturn.length === 1 ? 'rzecz' : 'rzeczy'} · <span className="amount">{formatCurrency(returnSum)}</span>
                                 </>
                             ) : (
                                 <>

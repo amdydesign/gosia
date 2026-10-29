@@ -208,7 +208,7 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                     <Row icon={CalendarDays} label="Data dokumentu">{formatDay(doc.doc_date) || '—'}</Row>
                     <Row icon={Building2} label="Kontrahent">{doc.counterparty || '—'}</Row>
                     <Row icon={Tag} label="Marka">{doc.brand || '—'}</Row>
-                    <Row icon={Banknote} label="Kwota brutto">{doc.amount ? formatCurrency(doc.amount) : '—'}</Row>
+                    <Row icon={Banknote} label="Kwota brutto">{doc.amount ? <span className="amount">{formatCurrency(doc.amount)}</span> : '—'}</Row>
                     <Row icon={FileIcon} label="Plik">
                         {doc.original_name} · {formatSize(doc.size)}
                     </Row>

@@ -379,8 +379,8 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                         </div>
                         {amount > 0 && form.collab_type !== 'gotowka' && (
                             <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-700">
-                                <Wallet size={15} /> Na rękę ok. <strong className="tabular-nums">{formatCurrency(breakdown.net)}</strong>
-                                {teamTotal > 0 && <span className="text-ink-muted">· po zespole {formatCurrency(breakdown.net - teamTotal)}</span>}
+                                <Wallet size={15} /> Na rękę ok. <strong className="amount tabular-nums">{formatCurrency(breakdown.net)}</strong>
+                                {teamTotal > 0 && <span className="text-ink-muted">· po zespole <span className="amount">{formatCurrency(breakdown.net - teamTotal)}</span></span>}
                             </p>
                         )}
                     </div>

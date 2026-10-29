@@ -42,7 +42,7 @@ export default function CollabSuggestionsSheet({ open, suggestions, onClose, onC
                                     <div className="min-w-0">
                                         <div className="font-bold text-ink truncate">{link ? s.collaboration.brand : s.prefill.brand}</div>
                                         <div className="text-sm text-ink-soft">
-                                            {formatCurrency(s.amount)} brutto · {formatDay(s.date)}
+                                            <span className="amount">{formatCurrency(s.amount)}</span> brutto · {formatDay(s.date)}
                                         </div>
                                         {s.brand && <div className="text-xs text-ink-muted truncate">przez {s.counterparty}</div>}
                                     </div>
@@ -61,7 +61,7 @@ export default function CollabSuggestionsSheet({ open, suggestions, onClose, onC
                                     <p className="text-xs text-ink-soft mt-2">
                                         {s.collaboration.brief
                                             ? `To umowa do briefu z ${formatDay(s.collaboration.date)} — podepnę ją i brief stanie się zwykłą współpracą z kwotą.`
-                                            : `Pasuje do współpracy z ${formatDay(s.collaboration.date)} (${formatCurrency(s.collaboration.amount_gross)}) — dokumenty zostaną do niej podpięte, bez dublowania.`}
+                                            : <>Pasuje do współpracy z {formatDay(s.collaboration.date)} (<span className="amount">{formatCurrency(s.collaboration.amount_gross)}</span>) — dokumenty zostaną do niej podpięte, bez dublowania.</>}
                                     </p>
                                 )}
                                 <div className="flex gap-2 mt-3">

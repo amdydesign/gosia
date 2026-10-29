@@ -158,7 +158,7 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
                     <div>
                         <div className="text-xs font-semibold text-ink-muted">{purchase.store} · {formatDateLong(purchase.purchase_date)}</div>
                         <h2 className="text-2xl font-display font-semibold tracking-tight text-ink mt-1 break-words">{purchase.items}</h2>
-                        <div className="text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(purchase.amount)}</div>
+                        <div className="amount text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(purchase.amount)}</div>
                     </div>
 
                     {state === 'active' && (
@@ -216,11 +216,11 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
                             <div className="flex items-center justify-between gap-3">
                                 <div>
                                     <div className="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
-                                        <Check size={16} /> {purchase.status === 'partial' ? 'Częściowo zwrócone' : 'Zwrócone'} · {formatCurrency(recoveredOf(purchase))}
+                                        <Check size={16} /> {purchase.status === 'partial' ? 'Częściowo zwrócone' : 'Zwrócone'} · <span className="amount">{formatCurrency(recoveredOf(purchase))}</span>
                                     </div>
                                     <div className="text-xs text-emerald-700/80 mt-0.5">
                                         {purchase.returned_at ? `odesłane ${formatDateLong(purchase.returned_at.slice(0, 10))}` : ''}
-                                        {Number(purchase.return_cost) > 0 ? ` · odesłanie ${formatCurrency(purchase.return_cost)}` : ''}
+                                        {Number(purchase.return_cost) > 0 && <> · odesłanie <span className="amount">{formatCurrency(purchase.return_cost)}</span></>}
                                     </div>
                                 </div>
                                 <Button size="sm" variant="ghost" icon={Undo2} loading={busy} onClick={() => update(purchase, { status: 'kept', returned_amount: 0, return_cost: null })}>Cofnij</Button>

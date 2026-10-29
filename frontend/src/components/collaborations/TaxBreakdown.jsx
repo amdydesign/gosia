@@ -50,7 +50,7 @@ export default function TaxBreakdown({ breakdown, collabType, date, compact = fa
                     <Wallet size={16} />
                     {isCash ? 'Otrzymujesz' : isUoP ? 'Na rękę (szacunkowo)' : 'Na rękę'}
                 </span>
-                <span className="text-xl font-display font-semibold text-emerald-800 tracking-tight">{formatCurrency(breakdown.net)}</span>
+                <span className="amount text-xl font-display font-semibold text-emerald-800 tracking-tight">{formatCurrency(breakdown.net)}</span>
             </div>
             {isCash && <p className="px-4 py-2 text-[11px] text-ink-muted">Bez potrąceń. Transakcja prywatna, nie wchodzi do rozliczeń PIT.</p>}
         </div>
@@ -61,7 +61,7 @@ function Line({ label, value, strong = false, muted = false }) {
     return (
         <div className={`flex justify-between gap-3 ${strong ? 'text-ink font-semibold' : muted ? 'text-ink-muted' : 'text-ink-soft'}`}>
             <span>{label}</span>
-            <span className="tabular-nums">{value}</span>
+            <span className="amount tabular-nums">{value}</span>
         </div>
     );
 }

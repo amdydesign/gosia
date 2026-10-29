@@ -313,11 +313,11 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                 <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-canvas border border-line p-3.5">
                         <div className="section-label">{isPrivate ? 'Kwota' : 'Brutto'}</div>
-                        <div className="text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(grossOf(collab))}</div>
+                        <div className="amount text-xl font-display font-semibold text-ink mt-1 tabular-nums">{formatCurrency(grossOf(collab))}</div>
                     </div>
                     <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3.5">
                         <div className="section-label !text-emerald-700">Na rękę</div>
-                        <div className="text-xl font-display font-semibold text-emerald-800 mt-1 tabular-nums">{formatCurrency(netOf(collab))}</div>
+                        <div className="amount text-xl font-display font-semibold text-emerald-800 mt-1 tabular-nums">{formatCurrency(netOf(collab))}</div>
                     </div>
                 </div>
                 )}
@@ -409,7 +409,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                         <div className="flex items-center justify-between px-4 py-2.5 bg-canvas border-b border-line">
                             <span className="section-label">Zespół</span>
                             <span className="text-xs text-ink-muted">
-                                {formatCurrency(teamTotal)} · zostaje Ci {formatCurrency(netOf(collab) - teamTotal)}
+                                <span className="amount">{formatCurrency(teamTotal)}</span> · zostaje Ci <span className="amount">{formatCurrency(netOf(collab) - teamTotal)}</span>
                             </span>
                         </div>
                         <div className="divide-y divide-line">
@@ -418,7 +418,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                                 return (
                                     <div key={i} className="flex items-center gap-3 px-4 py-2.5">
                                         <span className="flex-1 min-w-0 text-sm font-semibold text-ink truncate">{m.name}</span>
-                                        <span className="text-sm font-bold tabular-nums">{formatCurrency(m.amount)}</span>
+                                        <span className="amount text-sm font-bold tabular-nums">{formatCurrency(m.amount)}</span>
                                         <button
                                             type="button"
                                             onClick={() => toggleTeamPaid(i)}

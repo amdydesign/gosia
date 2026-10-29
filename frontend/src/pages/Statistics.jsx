@@ -306,7 +306,7 @@ function Finances() {
                                 ? 'Próg przekroczony — nadwyżka liczona jest według 32%.'
                                 : <>Do progu 120 tys. zostało <strong className="amount text-ink">{formatCurrency(Math.max(0, tax.threshold - tax.income))}</strong> dochodu.</>}
                         </p>
-                        {data?.cash > 0 && <p className="text-xs text-ink-muted mt-1">Gotówka poza PIT: {formatCurrency(data.cash)}</p>}
+                        {data?.cash > 0 && <p className="text-xs text-ink-muted mt-1">Gotówka poza PIT: <span className="amount">{formatCurrency(data.cash)}</span></p>}
                     </section>
 
                     <section className="card card-pad">

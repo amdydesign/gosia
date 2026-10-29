@@ -268,8 +268,8 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
                             <span className="section-label">Rzeczy</span>
                             {included.length > 0 && (
                                 <span className="text-xs text-ink-muted">
-                                    Razem <strong className="text-ink tabular-nums">{formatCurrency(sum)}</strong>
-                                    {totalOnScreen > 0 && Math.abs(totalOnScreen - sum) > 1 && <> · na screenie {formatCurrency(totalOnScreen)}</>}
+                                    Razem <strong className="amount text-ink tabular-nums">{formatCurrency(sum)}</strong>
+                                    {totalOnScreen > 0 && Math.abs(totalOnScreen - sum) > 1 && <> · na screenie <span className="amount">{formatCurrency(totalOnScreen)}</span></>}
                                 </span>
                             )}
                         </div>
