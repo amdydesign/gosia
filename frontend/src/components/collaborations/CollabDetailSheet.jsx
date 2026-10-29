@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, Check, ChevronRight, ClipboardList, Copy, FileText, Lock, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
+import { CalendarClock, Check, ChevronRight, ClipboardList, Copy, FilePlus2, FileText, Lock, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Attachments from '../common/Attachments';
@@ -13,6 +13,8 @@ import { useQuickActions } from '../../context/QuickActionsContext';
 import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate } from '../../utils/format';
 import { daysWaiting, deliverableProgress, grossOf, isBrief, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 import { tickWithUndo } from '../../services/collaborations';
+import { readScreens } from '../../services/ai';
+import { uploadAttachment } from '../../services/attachments';
 
 const DOC_KINDS = { umowa: 'Umowa', rachunek: 'Rachunek', faktura: 'Faktura', inne: 'Dokument' };
 
@@ -22,7 +24,11 @@ const DOC_KINDS = { umowa: 'Umowa', rachunek: 'Rachunek', faktura: 'Faktura', in
  */
 export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     const toast = useToast();
-    const { refresh } = useDashboard();
+    const { data: dashboard, refresh } = useDashboard();
+    const aiEnabled = !!dashboard?.ai?.enabled;
+    const briefRef = useRef(null);
+    const [readingBrief, setReadingBrief] = useState(false);
+    const [attachmentsKey, setAttachmentsKey] = useState(0);
     const { openCollab, versions } = useQuickActions();
     const [collab, setCollab] = useState(null);
     const [error, setError] = useState('');
@@ -72,6 +78,49 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
             toast.error(err.message || 'Nie udało się zapisać');
         } finally {
             setBusy(false);
+        }
+    };
+
+    /**
+     * A brief for a collaboration that already exists: AI reads the list of things to make
+     * (added to what is there, nothing done is lost), fills an empty publish deadline,
+     * the file is attached. The stage does not change. "Cofnij" restores the list.
+     */
+    const addBrief = async (e) => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = '';
+        if (!files.length) return;
+        setReadingBrief(true);
+        const before = { deliverables: collab.deliverables || [], publish_by: collab.publish_by || null };
+        try {
+            await Promise.all(files.map((file) => uploadAttachment('collaboration', collab.id, file)));
+            setAttachmentsKey((k) => k + 1);
+            if (!aiEnabled) {
+                toast.success('Brief przypięty — listę dopisz w „Edytuj”');
+                return;
+            }
+            const r = await readScreens('collaboration', files);
+            const known = new Set(before.deliverables.map((d) => d.label.trim().toLowerCase()));
+            const added = (r.deliverables || [])
+                .filter((d) => !known.has(d.label.trim().toLowerCase()))
+                .map((d) => ({ label: d.label, count: d.count, done: 0, due: d.due || null }));
+            const patch = { deliverables: [...before.deliverables, ...added] };
+            if (!before.publish_by && r.publish_by) patch.publish_by = r.publish_by;
+            if (!added.length && !patch.publish_by) {
+                toast.success('Brief przypięty — nie znalazłam w nim nowych rzeczy do zrobienia');
+                return;
+            }
+            if (await save(patch)) {
+                const count = added.reduce((n, d) => n + d.count, 0);
+                toast.success(added.length ? `Z briefu: ${count} ${count === 1 ? 'rzecz' : 'rzeczy'} do zrobienia` : 'Z briefu: termin publikacji', {
+                    duration: 6000,
+                    action: { label: 'Cofnij', onClick: () => save(before) },
+                });
+            }
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się odczytać briefu');
+        } finally {
+            setReadingBrief(false);
         }
     };
 
@@ -225,6 +274,35 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     </div>
                 )}
 
+                {collab.type !== WAGE_TYPE && (
+                    <>
+                        <input ref={briefRef} type="file" accept="image/*,application/pdf,.pdf" multiple className="hidden" onChange={addBrief} />
+                        {deliverables.length === 0 && !paid ? (
+                            <button
+                                type="button"
+                                onClick={() => briefRef.current?.click()}
+                                disabled={readingBrief}
+                                className="w-full flex items-center gap-3 rounded-2xl border border-dashed border-sky-300 bg-sky-50/60 px-4 py-3 text-left hover:bg-sky-50 transition-colors disabled:opacity-60"
+                            >
+                                <span className="w-9 h-9 rounded-xl bg-surface text-sky-700 flex items-center justify-center shrink-0 shadow-sm">
+                                    {readingBrief ? <Loader2 size={18} className="animate-spin" /> : <FilePlus2 size={18} />}
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-bold text-sky-900">{readingBrief ? 'Czytam brief…' : 'Dodaj brief'}</span>
+                                    <span className="block text-xs text-sky-800/80">
+                                        {aiEnabled ? 'PDF albo screen — wypiszę, co trzeba zrobić, i przypnę plik' : 'PDF albo screen — przypnę go do współpracy'}
+                                    </span>
+                                </span>
+                            </button>
+                        ) : (
+                            <button type="button" onClick={() => briefRef.current?.click()} disabled={readingBrief} className="-mt-2 text-xs font-semibold text-sky-700 inline-flex items-center gap-1.5 px-1">
+                                {readingBrief ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
+                                {readingBrief ? 'Czytam brief…' : deliverables.length ? 'Dorzuć z kolejnego briefu' : 'Dodaj brief'}
+                            </button>
+                        )}
+                    </>
+                )}
+
                 {(!brief || grossOf(collab) > 0) && (
                 <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-canvas border border-line p-3.5">
@@ -364,7 +442,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     </div>
                 )}
 
-                <Attachments entityType="collaboration" entityId={collab.id} />
+                <Attachments key={attachmentsKey} entityType="collaboration" entityId={collab.id} />
             </div>
         </Sheet>
     );
