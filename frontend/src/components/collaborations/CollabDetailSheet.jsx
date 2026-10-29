@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, Check, ChevronRight, Copy, FileText, Lock, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
+import { CalendarClock, Check, ChevronRight, ClipboardList, Copy, FileText, Lock, Pencil, RotateCcw, Send, Trash2, Loader2 } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Attachments from '../common/Attachments';
@@ -11,7 +11,8 @@ import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate } from '../../utils/format';
-import { daysWaiting, grossOf, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
+import { daysWaiting, deliverableProgress, grossOf, isBrief, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
+import { tickWithUndo } from '../../services/collaborations';
 
 const DOC_KINDS = { umowa: 'Umowa', rachunek: 'Rachunek', faktura: 'Faktura', inne: 'Dokument' };
 
@@ -59,6 +60,21 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
         }
     };
 
+    const tick = async (index) => {
+        setBusy(true);
+        try {
+            await tickWithUndo(toast, collab, index, ({ deliverables, published }) => {
+                setCollab((c) => ({ ...c, deliverables, ...(published === true ? { published_at: getTodayDate() } : published === false ? { published_at: null } : {}) }));
+                refresh();
+                onChanged?.();
+            });
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się zapisać');
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const toggleTeamPaid = (index) => {
         const team = collab.team.map((m, i) => ({ name: m.name, amount: m.amount, is_paid: i === index ? !isTrue(m.is_paid) : isTrue(m.is_paid) }));
         save({ team });
@@ -87,6 +103,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                 collab_type: collab.collab_type,
                 amount_gross: grossOf(collab),
                 team: collab.team || [],
+                deliverables: collab.deliverables || [],
             },
         });
     };
@@ -108,6 +125,9 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
     }
 
     const paid = isPaid(collab);
+    const brief = isBrief(collab);
+    const deliverables = collab.deliverables || [];
+    const progress = deliverableProgress(collab);
     const late = isLate(collab);
     const waiting = daysWaiting(collab);
     const due = paymentDue(collab);
@@ -145,6 +165,67 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     <h2 className="text-2xl font-display font-semibold tracking-tight text-ink mt-1 break-words">{collab.brand}</h2>
                 </div>
 
+                {brief && (
+                    <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+                        <div className="flex items-center gap-2 text-sm font-bold text-sky-900">
+                            <ClipboardList size={17} /> Brief — jeszcze bez umowy
+                        </div>
+                        <p className="text-xs text-ink-soft mt-1">
+                            Gdy wrzucisz umowę do Dokumentów, podepnę ją tutaj i uzupełnię kwotę. Nie liczę tego do pieniędzy, dopóki nie jest ustalone.
+                        </p>
+                        <Button variant="secondary" size="sm" icon={Check} loading={busy} className="mt-2.5" onClick={() => save({ stage: null }, 'Ustalone — przeniesione do współprac')}>
+                            Ustalone
+                        </Button>
+                    </div>
+                )}
+
+                {deliverables.length > 0 && (
+                    <div className="rounded-2xl border border-line overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-canvas border-b border-line">
+                            <span className="section-label">
+                                Do zrobienia{toPublish(collab) && <span className="normal-case tracking-normal font-semibold"> · publikacja do {formatDateShort(collab.publish_by)}</span>}
+                            </span>
+                            <span className={`text-xs font-bold tabular-nums ${progress.done >= progress.total ? 'text-emerald-700' : 'text-ink'}`}>
+                                {progress.done >= progress.total ? 'Wszystko zrobione' : `${progress.done}/${progress.total} zrobione`}
+                            </span>
+                        </div>
+                        <div className="divide-y divide-line">
+                            {deliverables.map((d, i) => {
+                                const left = Number(d.count) - Number(d.done);
+                                const days = d.due && left > 0 ? daysFromToday(d.due) : null;
+                                const dueTone = days === null ? 'text-ink-muted' : days < 0 ? 'text-red-700 font-semibold' : days <= 2 ? 'text-amber-700 font-semibold' : 'text-ink-muted';
+                                return (
+                                    <div key={i} className={`flex items-center gap-3 px-4 py-2.5 ${left <= 0 ? 'bg-emerald-50/40' : ''}`}>
+                                        <span className="flex-1 min-w-0">
+                                            <span className={`block text-sm font-semibold truncate ${left <= 0 ? 'text-ink-muted line-through' : 'text-ink'}`}>{d.label}</span>
+                                            <span className="flex items-center gap-1 mt-1">
+                                                {Array.from({ length: Math.min(Number(d.count), 12) }, (_, n) => (
+                                                    <span key={n} className={`w-2 h-2 rounded-full ${n < Number(d.done) ? 'bg-emerald-500' : 'bg-line-strong'}`} />
+                                                ))}
+                                                <span className="text-xs text-ink-muted tabular-nums ml-1">{d.done}/{d.count}</span>
+                                                {d.due && left > 0 && <span className={`text-xs ${dueTone}`}>· do {formatDateShort(d.due)}</span>}
+                                            </span>
+                                        </span>
+                                        {left > 0 ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => tick(i)}
+                                                disabled={busy}
+                                                className="shrink-0 h-9 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 transition disabled:opacity-50"
+                                            >
+                                                <Check size={15} strokeWidth={2.75} /> Zrobione
+                                            </button>
+                                        ) : (
+                                            <Check size={18} className="shrink-0 text-emerald-600" />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {(!brief || grossOf(collab) > 0) && (
                 <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-canvas border border-line p-3.5">
                         <div className="section-label">{isPrivate ? 'Kwota' : 'Brutto'}</div>
@@ -155,6 +236,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                         <div className="text-xl font-display font-semibold text-emerald-800 mt-1 tabular-nums">{formatCurrency(netOf(collab))}</div>
                     </div>
                 </div>
+                )}
                 {!isPrivate && breakdown?.gross > 0 && (
                     <div>
                         <button type="button" onClick={() => setShowMath((v) => !v)} className="text-xs font-semibold text-primary-700">
@@ -164,8 +246,8 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     </div>
                 )}
 
-                {/* Publish deadline */}
-                {toPublish(collab) && (
+                {/* Publish deadline (with a list from the brief the last "Zrobione" marks it published) */}
+                {toPublish(collab) && deliverables.length === 0 && (
                     <div className={`rounded-2xl border px-4 py-3 ${(daysFromToday(collab.publish_by) ?? 0) < 0 ? 'bg-red-50 border-red-100' : 'bg-violet-50 border-violet-100'}`}>
                         <div className="flex items-center gap-2 text-sm font-bold text-ink">
                             <CalendarClock size={17} /> Opublikuj do {formatDateLong(collab.publish_by)}
@@ -191,8 +273,8 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                     </div>
                 )}
 
-                {/* Payment */}
-                {paid ? (
+                {/* Payment (a brief is not money yet) */}
+                {brief ? null : paid ? (
                     <div className="flex items-center justify-between gap-3 rounded-2xl bg-emerald-50/70 border border-emerald-100 px-4 py-3">
                         <span className="flex items-center gap-2 text-sm font-bold text-emerald-800">
                             <Check size={18} /> Opłacone{collab.paid_at ? ` ${formatDateShort(collab.paid_at)}` : ''}

@@ -290,6 +290,10 @@ class Schema
         'collaborations.publish_by' => "ALTER TABLE collaborations ADD COLUMN publish_by DATE NULL DEFAULT NULL",
         'collaborations.published_at' => "ALTER TABLE collaborations ADD COLUMN published_at DATE NULL DEFAULT NULL",
         'collaborations.payment_days' => "ALTER TABLE collaborations ADD COLUMN payment_days SMALLINT NULL DEFAULT NULL",
+        // "Brief": agreed on nothing yet (no contract / money) - shown as "W przygotowaniu", not counted as money to come
+        'collaborations.stage' => "ALTER TABLE collaborations ADD COLUMN stage VARCHAR(10) NULL DEFAULT NULL",
+        // What to make for the brand: JSON [{label: "Reels IG", count: 2, done: 1, due: "2026-11-05"}]
+        'collaborations.deliverables' => "ALTER TABLE collaborations ADD COLUMN deliverables TEXT NULL",
     ];
 
     /**

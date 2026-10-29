@@ -37,7 +37,7 @@ try {
             amount_gross, amount_net, 
             payment_status, fiscal_tracking, paid_at 
         FROM collaborations 
-        WHERE user_id = :user_id
+        WHERE user_id = :user_id AND (stage IS NULL OR stage <> 'brief')
     ";
     $params = ['user_id' => $userId];
 

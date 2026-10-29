@@ -55,6 +55,7 @@ import {
     undismissAgenda,
 } from '../services/agenda';
 import { inboxFile, markInboxDone, reopenInbox, uploadToInbox } from '../services/inbox';
+import { tickWithUndo } from '../services/collaborations';
 import { setAppBadge } from '../services/push';
 
 const FOCUS_KEY = 'gonia.focus';
@@ -361,6 +362,11 @@ function useAgendaActions() {
                     });
                     return;
                 case 'publish':
+                    if (item.deliverable_index !== null && item.deliverable_index !== undefined) {
+                        // one thing from the brief made (the last one marks the job published)
+                        run(item, () => tickWithUndo(toast, { id: item.collab_id, brand: item.brand }, item.deliverable_index, () => refresh()));
+                        return;
+                    }
                     run(item, async () => {
                         await setPublished(item.collab_id, true);
                         undoToast('Opublikowane — termin płatności liczy się od dziś', () => setPublished(item.collab_id, false));
@@ -382,7 +388,7 @@ function useAgendaActions() {
                     navigate(item.url);
             }
         },
-        [markPaid, navigate, openInboxAs, run, undoToast]
+        [markPaid, navigate, openInboxAs, refresh, run, toast, undoToast]
     );
 
     const snoozeWith = useCallback(
@@ -538,6 +544,7 @@ const PRIMARY_LABEL = {
 
 function primaryLabel(item) {
     if (item.kind === 'term' && item.term_type === 'publish') return 'Zrobione';
+    if (item.kind === 'publish' && item.deliverable_index !== null && item.deliverable_index !== undefined) return 'Zrobione';
     return PRIMARY_LABEL[item.kind] || 'Zrobione';
 }
 

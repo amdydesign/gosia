@@ -166,7 +166,7 @@ class TodayAgenda
             SELECT id, brand, amount_gross, payment_status, date, " . COLLAB_DUE_SQL . " AS due,
                    DATEDIFF(:today, " . COLLAB_DUE_SQL . ") AS days_late, DATEDIFF(:today2, date) AS days_waiting
             FROM collaborations
-            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
               AND (payment_status = 'overdue' OR " . COLLAB_DUE_SQL . " < :today3)
             ORDER BY due ASC
             LIMIT 10
@@ -192,31 +192,64 @@ class TodayAgenda
         }
     }
 
-    /** "Opublikuj do ...": deadline of the content, from the form or the contract. */
+    /**
+     * "Opublikuj do ..." - deadline of the content (form, contract or brief). One line per collaboration:
+     * with a list from a brief it names the nearest thing to make ("Zara: Reels IG · 1/3"), never each item.
+     */
     private static function publishing(PDO $conn, $userId, $today, array &$items)
     {
+        require_once __DIR__ . '/../collaborations/helpers.php';
         $stmt = $conn->prepare("
-            SELECT id, brand, publish_by, DATEDIFF(publish_by, :today) AS days
+            SELECT id, brand, publish_by, deliverables
             FROM collaborations
-            WHERE user_id = :user_id AND publish_by IS NOT NULL AND published_at IS NULL
-              AND publish_by <= DATE_ADD(:today2, INTERVAL 7 DAY)
-            ORDER BY publish_by ASC
-            LIMIT 10
+            WHERE user_id = :user_id AND published_at IS NULL AND (publish_by IS NOT NULL OR deliverables IS NOT NULL)
+            ORDER BY COALESCE(publish_by, date) ASC
+            LIMIT 50
         ");
-        $stmt->execute(['user_id' => $userId, 'today' => $today, 'today2' => $today]);
+        $stmt->execute(['user_id' => $userId]);
+        $soon = date('Y-m-d', strtotime($today . ' +7 days'));
+        $found = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $days = (int) $row['days'];
+            $list = collabDecodeDeliverables($row['deliverables']);
+            $next = $list ? collabNextDeliverable($list, $row['publish_by']) : null;
+            if ($list && !$next) {
+                continue; // everything made - waiting only for "Opublikowane"
+            }
+            $deadline = $next ? $next['due'] : $row['publish_by'];
+            if (!$deadline || $deadline > $soon) {
+                continue; // no date yet / not this week: stays in the collaboration, not on Start
+            }
+            $found[] = ['row' => $row, 'list' => $list, 'next' => $next, 'deadline' => $deadline];
+        }
+        usort($found, function ($a, $b) {
+            return strcmp($a['deadline'], $b['deadline']);
+        });
+
+        foreach (array_slice($found, 0, 10) as $f) {
+            $row = $f['row'];
+            $days = (int) round((strtotime($f['deadline']) - strtotime($today)) / 86400);
+            $when = $days < 0 ? 'termin minął' : ($days === 0 ? 'termin dziś' : ($days === 1 ? 'termin jutro' : 'za ' . $days . ' dni'));
+            $title = 'Opublikuj dla ' . $row['brand'];
+            $meta = $when;
+            if ($f['next']) {
+                $title = $row['brand'] . ': ' . $f['next']['label'] . ($f['next']['left'] > 1 ? ' ×' . $f['next']['left'] : '');
+                $total = array_sum(array_column($f['list'], 'count'));
+                $done = array_sum(array_column($f['list'], 'done'));
+                $meta = $done . '/' . $total . ' zrobione · ' . $when;
+            }
             $items[] = [
                 'kind' => 'publish',
                 'ref_key' => 'publish:' . $row['id'],
-                'title' => 'Opublikuj dla ' . $row['brand'],
+                'title' => $title,
                 'brand' => $row['brand'],
-                'meta' => $days < 0 ? 'termin minął' : ($days === 0 ? 'termin dziś' : ($days === 1 ? 'termin jutro' : 'za ' . $days . ' dni')),
+                'meta' => $meta,
                 'amount' => null,
-                'deadline' => $row['publish_by'],
+                'deadline' => $f['deadline'],
                 'days' => $days,
                 'late' => $days < 0,
                 'collab_id' => (int) $row['id'],
+                // "Zrobione" ticks this one thing (not the whole collaboration)
+                'deliverable_index' => $f['next'] ? (int) $f['next']['index'] : null,
                 'url' => '/collaborations/' . $row['id'],
                 'bucket' => $days <= 2 ? 'today' : 'week',
                 'urgency' => $days < 0 ? 85 : ([82, 72, 62][$days] ?? 22),

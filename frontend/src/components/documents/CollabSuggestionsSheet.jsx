@@ -46,7 +46,7 @@ export default function CollabSuggestionsSheet({ open, suggestions, onClose, onC
                                         </div>
                                         {s.brand && <div className="text-xs text-ink-muted truncate">przez {s.counterparty}</div>}
                                     </div>
-                                    <span className={`badge shrink-0 ${link ? 'badge-info' : 'badge-brand'}`}>{link ? 'Już jest' : 'Nowa'}</span>
+                                    <span className={`badge shrink-0 ${link ? 'badge-info' : 'badge-brand'}`}>{link ? (s.collaboration.brief ? 'Z briefu' : 'Już jest') : 'Nowa'}</span>
                                 </div>
                                 <ul className="mt-2 space-y-1">
                                     {s.documents.map((d) => (
@@ -59,7 +59,9 @@ export default function CollabSuggestionsSheet({ open, suggestions, onClose, onC
                                 </ul>
                                 {link && (
                                     <p className="text-xs text-ink-soft mt-2">
-                                        Pasuje do współpracy z {formatDay(s.collaboration.date)} ({formatCurrency(s.collaboration.amount_gross)}) — dokumenty zostaną do niej podpięte, bez dublowania.
+                                        {s.collaboration.brief
+                                            ? `To umowa do briefu z ${formatDay(s.collaboration.date)} — podepnę ją i brief stanie się zwykłą współpracą z kwotą.`
+                                            : `Pasuje do współpracy z ${formatDay(s.collaboration.date)} (${formatCurrency(s.collaboration.amount_gross)}) — dokumenty zostaną do niej podpięte, bez dublowania.`}
                                     </p>
                                 )}
                                 <div className="flex gap-2 mt-3">

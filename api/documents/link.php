@@ -62,6 +62,9 @@ try {
         collabApplyTerms($conn, $userId, $collabId, documentsTerms($json));
     }
 
+    // A contract / bill for a brief: the job is agreed - out of "W przygotowaniu", the amount from the document
+    collabAgreeFromDocuments($conn, $userId, $collabId, $ids);
+
     Response::success(['collaboration_id' => $collabId, 'document_ids' => $ids], 'Połączono ze współpracą');
 
 } catch (Exception $e) {

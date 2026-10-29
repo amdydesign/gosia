@@ -66,7 +66,7 @@ class CalendarEvents
         // Payments: when the money should come in
         $stmt = $conn->prepare("
             SELECT id, brand, amount_gross, " . COLLAB_DUE_SQL . " AS due FROM collaborations
-            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
               AND " . COLLAB_DUE_SQL . " BETWEEN :from AND :to
         ");
         $stmt->execute($p);
@@ -84,6 +84,20 @@ class CalendarEvents
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
             $late = $c['publish_by'] < $today;
             $events[] = self::event($c['publish_by'], null, 'publish', 'Opublikuj dla ' . $c['brand'], $late ? 'termin minął' : 'termin publikacji', null, '/collaborations/' . $c['id'], $late ? 'late' : 'deadline');
+        }
+
+        // From a brief: each thing to make that has its own date ("Reels IG 1/2")
+        $stmt = $conn->prepare("SELECT id, brand, deliverables FROM collaborations WHERE user_id = :user_id AND deliverables IS NOT NULL AND published_at IS NULL");
+        $stmt->execute(['user_id' => $userId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            foreach (json_decode((string) $c['deliverables'], true) ?: [] as $d) {
+                $due = $d['due'] ?? null;
+                if (!$due || $due < $from || $due > $to || (int) $d['done'] >= (int) $d['count']) {
+                    continue;
+                }
+                $late = $due < $today;
+                $events[] = self::event($due, null, 'publish', $c['brand'] . ': ' . $d['label'], ((int) $d['done']) . '/' . ((int) $d['count']) . ($late ? ' · termin minął' : ''), null, '/collaborations/' . $c['id'], $late ? 'late' : 'deadline');
+            }
         }
 
         // Jobs planned ahead (the collaboration's date)

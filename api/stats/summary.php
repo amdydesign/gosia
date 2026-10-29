@@ -59,7 +59,7 @@ try {
         FROM collaborations
         WHERE user_id = :user_id
           AND ((payment_status = 'paid' AND YEAR(" . COLLAB_PAID_DAY_SQL . ") = :year)
-               OR (payment_status <> 'paid' AND YEAR(date) = :year2))
+               OR (payment_status <> 'paid' AND YEAR(date) = :year2 AND (stage IS NULL OR stage <> 'brief')))
     ");
     $stmt->execute($p);
 

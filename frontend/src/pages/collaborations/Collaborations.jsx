@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Check, Plus, Search, X, Lock, Download, FileText, ChevronRight } from 'lucide-react';
+import { Briefcase, Check, Plus, Search, X, Lock, Download, FileText, ChevronRight, ClipboardList } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -10,8 +10,9 @@ import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 import CollabDetailSheet from '../../components/collaborations/CollabDetailSheet';
 import ExportModal from './ExportModal';
-import { daysFromToday, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, groupByMonth } from '../../utils/format';
-import { daysWaiting, grossOf, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
+import { daysFromToday, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, getTodayDate, groupByMonth } from '../../utils/format';
+import { daysWaiting, deliverableProgress, grossOf, isBrief, isLate, isPaid, netOf, nextDeliverable, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
+import { tickWithUndo } from '../../services/collaborations';
 
 const MONTHS_STEP = 6;
 
@@ -77,11 +78,20 @@ export default function Collaborations() {
         );
     }, [collabs, query]);
 
+    // Briefs (no contract / money yet): nearest thing to make first
+    const prep = useMemo(
+        () =>
+            filtered
+                .filter(isBrief)
+                .sort((a, b) => (nextDeliverable(a)?.due || a.publish_by || '9999').localeCompare(nextDeliverable(b)?.due || b.publish_by || '9999')),
+        [filtered]
+    );
+
     // Not settled yet: late first, then waiting for the transfer, then still in progress (future date)
     const unpaid = useMemo(
         () =>
             filtered
-                .filter((c) => !isPaid(c))
+                .filter((c) => !isPaid(c) && !isBrief(c))
                 .sort((a, b) => STATUS_ORDER[unsettledStatus(a)] - STATUS_ORDER[unsettledStatus(b)] || (a.date < b.date ? -1 : 1)),
         [filtered]
     );
@@ -107,6 +117,29 @@ export default function Collaborations() {
             setCollabs((list) => list.map((c) => (c.id === collab.id ? { ...c, payment_status: collab.payment_status } : c)));
             toast.error(err.message || 'Nie udało się zapisać');
             return false;
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    // "Zrobione" on the nearest thing from the brief, right from the list
+    const tickNext = async (collab) => {
+        const next = nextDeliverable(collab);
+        if (!next) return;
+        setBusyId(collab.id);
+        try {
+            await tickWithUndo(toast, collab, next.index, ({ deliverables, published }) => {
+                setCollabs((list) =>
+                    list.map((c) =>
+                        c.id === collab.id
+                            ? { ...c, deliverables, ...(published === true ? { published_at: getTodayDate() } : published === false ? { published_at: null } : {}) }
+                            : c
+                    )
+                );
+                refresh();
+            });
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się zapisać');
         } finally {
             setBusyId(null);
         }
@@ -206,6 +239,22 @@ export default function Collaborations() {
                 </div>
             ) : (
                 <>
+                    {prep.length > 0 && (
+                        <section>
+                            <div className="flex items-baseline justify-between px-1 mb-2">
+                                <h2 className="text-base font-semibold text-ink">
+                                    W przygotowaniu <span className="text-ink-muted font-medium">· {prep.length}</span>
+                                </h2>
+                                <span className="text-xs text-ink-muted">briefy bez umowy</span>
+                            </div>
+                            <div className="rounded-3xl border-2 border-sky-200 bg-sky-50 divide-y divide-sky-100 overflow-hidden">
+                                {prep.map((c) => (
+                                    <PrepRow key={c.id} collab={c} busy={busyId === c.id} onOpen={() => openDetail(c)} onTick={() => tickNext(c)} />
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
                     {unpaid.length > 0 && (
                         <section>
                             <div className="flex items-baseline justify-between px-1 mb-2">
@@ -246,7 +295,7 @@ export default function Collaborations() {
                             )}
                         </section>
                     ) : (
-                        query && unpaid.length === 0 && <p className="text-center text-sm text-ink-muted py-8">Nic nie pasuje do „{query}”.</p>
+                        query && unpaid.length === 0 && prep.length === 0 && <p className="text-center text-sm text-ink-muted py-8">Nic nie pasuje do „{query}”.</p>
                     )}
                 </>
             )}
@@ -297,12 +346,16 @@ function UnpaidRow({ collab, busy, onOpen, onPaid }) {
                 : status === 'late'
                     ? `termin minął ${-dueIn} dni temu`
                     : dueIn >= 0 ? `przelew do ${formatDateShort(due)}` : waiting > 0 ? `czeka ${waiting} dni` : 'od dziś';
+    const progress = deliverableProgress(collab);
     return (
         <div className="flex items-center gap-3 pl-4 pr-3 py-3">
             <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
                 <div className="font-semibold text-ink text-[15px] truncate">{collab.brand}</div>
                 <div className="flex items-center gap-1.5 mt-1 min-w-0">
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${style.pill}`}>{style.label}</span>
+                    {progress.total > 0 && progress.done < progress.total && (
+                        <span className="shrink-0 text-xs font-bold text-ink tabular-nums">{progress.done}/{progress.total}</span>
+                    )}
                     <span className={`text-xs truncate ${status === 'late' ? 'text-red-700 font-semibold' : 'text-ink-muted'}`}>
                         {formatDateShort(collab.date)} · {when}
                     </span>
@@ -321,6 +374,44 @@ function UnpaidRow({ collab, busy, onOpen, onPaid }) {
             >
                 <Check size={20} strokeWidth={2.75} />
             </button>
+        </div>
+    );
+}
+
+/** A brief: what is next and how far along; ✓ = the nearest thing made. */
+function PrepRow({ collab, busy, onOpen, onTick }) {
+    const next = nextDeliverable(collab);
+    const progress = deliverableProgress(collab);
+    const days = next?.due ? daysFromToday(next.due) : null;
+    const tone = days === null ? 'text-ink-muted' : days < 0 ? 'text-red-700 font-semibold' : days <= 2 ? 'text-amber-700 font-semibold' : 'text-ink-muted';
+    const when = days === null ? '' : days < 0 ? ' · termin minął' : days === 0 ? ' · dziś' : days === 1 ? ' · jutro' : ` · do ${formatDateShort(next.due)}`;
+    return (
+        <div className="flex items-center gap-3 pl-4 pr-3 py-3">
+            <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
+                <div className="font-semibold text-ink text-[15px] truncate">{collab.brand}</div>
+                <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                    <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold bg-sky-600 text-white">Brief</span>
+                    {progress.total > 0 && <span className="shrink-0 text-xs font-bold text-ink tabular-nums">{progress.done}/{progress.total}</span>}
+                    <span className={`text-xs truncate ${tone}`}>
+                        {next ? `${next.label}${next.left > 1 ? ` ×${next.left}` : ''}${when}` : progress.total ? 'wszystko zrobione' : 'czeka na umowę'}
+                    </span>
+                </div>
+            </button>
+            {grossOf(collab) > 0 && <div className="amount font-bold text-ink-soft tabular-nums shrink-0">{formatCurrency(grossOf(collab))}</div>}
+            {next ? (
+                <button
+                    type="button"
+                    onClick={onTick}
+                    disabled={busy}
+                    className="shrink-0 w-11 h-11 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:opacity-50"
+                    aria-label={`${next.label} — zrobione`}
+                    title={`${next.label} — zrobione`}
+                >
+                    <Check size={20} strokeWidth={2.75} />
+                </button>
+            ) : (
+                <ClipboardList size={18} className="shrink-0 text-sky-600" />
+            )}
         </div>
     );
 }

@@ -42,7 +42,7 @@ try {
 
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);
-    $collaborations = $stmt->fetchAll();
+    $collaborations = array_map('collabForApp', $stmt->fetchAll());
 
     Response::success($collaborations);
 

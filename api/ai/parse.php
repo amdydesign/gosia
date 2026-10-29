@@ -6,7 +6,7 @@
  * body: { mode: "purchase" | "collaboration", images: [{ media_type: "image/jpeg", data: "<base64>" }] }
  *
  * purchase      -> { store, purchase_date, order_number, return_days, items: [{ name, amount }], total }
- * collaboration -> { brand, amount_gross, collab_type, type, date, notes, publish_by, payment_days }
+ * collaboration -> { brand, amount_gross, collab_type, type, date, notes, publish_by, payment_days, is_brief, deliverables: [{ label, count, due }] }
  * insights      -> { views, likes, comments, shares, saves, reach, published_date }  (reel statistics screen)
  */
 
@@ -194,6 +194,8 @@ Wypełnij pola:
 - notes: 1-2 krótkie zdania po polsku: co trzeba zrobić i terminy.
 - publish_by: do kiedy trzeba opublikować / oddać materiał (RRRR-MM-DD), pusty tekst gdy nie podano.
 - payment_days: w ilu dniach marka zapłaci (np. 14, 30), 0 gdy nie podano.
+- is_brief: true, jeśli to brief / propozycja / zapytanie, a współpraca nie jest jeszcze potwierdzona (brak umowy, zlecenia, faktury ani potwierdzonej stawki). false dla umowy, zlecenia, faktury albo wiadomości potwierdzającej warunki.
+- deliverables: lista rzeczy do zrobienia dla marki, każda osobno z liczbą sztuk. label: krótko, po polsku, z platformą, np. "Reels IG", "Stories IG", "Post IG", "Karuzela IG", "TikTok", "YouTube", "Sesja zdjęciowa", "Zdjęcia do e-commerce". count: ile sztuk (np. "3 relacje" -> 3, "set stories" bez liczby -> 1). due: termin tej pozycji (RRRR-MM-DD) albo pusty tekst. Nie dubluj pozycji; pusta lista, gdy nic nie wymieniono.
 TXT;
 }
 
@@ -210,8 +212,22 @@ function collaborationSchema()
             'notes' => ['type' => 'string'],
             'publish_by' => ['type' => 'string'],
             'payment_days' => ['type' => 'integer'],
+            'is_brief' => ['type' => 'boolean'],
+            'deliverables' => [
+                'type' => 'array',
+                'items' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'label' => ['type' => 'string'],
+                        'count' => ['type' => 'integer'],
+                        'due' => ['type' => 'string'],
+                    ],
+                    'required' => ['label', 'count', 'due'],
+                    'additionalProperties' => false,
+                ],
+            ],
         ],
-        'required' => ['brand', 'amount_gross', 'collab_type', 'type', 'date', 'notes', 'publish_by', 'payment_days'],
+        'required' => ['brand', 'amount_gross', 'collab_type', 'type', 'date', 'notes', 'publish_by', 'payment_days', 'is_brief', 'deliverables'],
         'additionalProperties' => false,
     ];
 }
@@ -234,7 +250,30 @@ function normalizeCollaboration(array $r)
         'notes' => mb_substr(trim((string) ($r['notes'] ?? '')), 0, 1000),
         'publish_by' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($r['publish_by'] ?? '')) ? $r['publish_by'] : '',
         'payment_days' => ((int) ($r['payment_days'] ?? 0)) > 0 && ((int) $r['payment_days']) <= 365 ? (int) $r['payment_days'] : null,
+        'is_brief' => !empty($r['is_brief']),
+        'deliverables' => normalizeDeliverables($r['deliverables'] ?? []),
     ];
+}
+
+/** [{label, count, due}] - cleaned, same label merged, max 20. */
+function normalizeDeliverables($list)
+{
+    $out = [];
+    foreach (is_array($list) ? $list : [] as $d) {
+        $label = mb_substr(trim((string) ($d['label'] ?? '')), 0, 60);
+        if ($label === '') {
+            continue;
+        }
+        $due = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($d['due'] ?? '')) ? $d['due'] : '';
+        $key = mb_strtolower($label) . '|' . $due;
+        $count = max(1, min(50, (int) ($d['count'] ?? 1)));
+        if (isset($out[$key])) {
+            $out[$key]['count'] = min(50, $out[$key]['count'] + $count);
+        } else {
+            $out[$key] = ['label' => $label, 'count' => $count, 'due' => $due];
+        }
+    }
+    return array_slice(array_values($out), 0, 20);
 }
 
 function insightsPrompt($today)

@@ -60,7 +60,7 @@ try {
                COUNT(*)                        AS pending_count,
                SUM(CASE WHEN payment_status = 'overdue' OR " . COLLAB_DUE_SQL . " < CURDATE() THEN 1 ELSE 0 END) AS overdue_count
         FROM collaborations
-        WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+        WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
     ");
     $stmt->execute($p);
     $pendingStats = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -70,7 +70,7 @@ try {
         SELECT id, brand, type, collab_type, fiscal_tracking, amount_gross, amount_net, date, payment_status,
                DATEDIFF(CURDATE(), date) AS days_waiting, " . COLLAB_DUE_SQL . " AS payment_due
         FROM collaborations
-        WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+        WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
         ORDER BY date ASC
         LIMIT 10
     ");
@@ -126,7 +126,7 @@ try {
     $stmt = $conn->prepare("
         SELECT id, brand, type, amount_net AS amount, amount_gross, date, payment_status, fiscal_tracking
         FROM collaborations
-        WHERE user_id = :user_id AND payment_status != 'paid'
+        WHERE user_id = :user_id AND payment_status != 'paid' AND (stage IS NULL OR stage <> 'brief')
           AND DATEDIFF(date, CURDATE()) BETWEEN 0 AND 7
         ORDER BY date ASC
         LIMIT 5
@@ -330,7 +330,7 @@ try {
         }
         $stmt = $conn->prepare("
             SELECT id, brand, " . COLLAB_DUE_SQL . " AS due FROM collaborations
-            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue')
+            WHERE user_id = :user_id AND payment_status IN ('pending', 'overdue') AND (stage IS NULL OR stage <> 'brief')
               AND " . COLLAB_DUE_SQL . " BETWEEN CURDATE() AND :sunday
         ");
         $stmt->execute(['user_id' => $userId, 'sunday' => $sunday]);

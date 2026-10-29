@@ -92,3 +92,124 @@ function collabApplyTerms(PDO $conn, $userId, $collabId, array $terms)
         $conn->prepare("UPDATE collaborations SET " . implode(', ', $set) . " WHERE id = :id AND user_id = :user_id")->execute($params);
     }
 }
+
+// ---------------------------------------------------------------- brief: what to make
+
+const COLLAB_STAGES = ['brief'];
+const COLLAB_MAX_DELIVERABLES = 20;
+
+/** 'brief' or null (agreed / normal collaboration). */
+function collabParseStage($value)
+{
+    return in_array($value, COLLAB_STAGES, true) ? $value : null;
+}
+
+/**
+ * Clean list of things to make: [{label, count, done, due}] (max 20), JSON for the column.
+ * Empty list -> null.
+ */
+function collabEncodeDeliverables($value)
+{
+    if (!is_array($value)) {
+        return null;
+    }
+    $out = [];
+    foreach (array_slice($value, 0, COLLAB_MAX_DELIVERABLES) as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $label = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($item['label'] ?? ''))), 0, 60);
+        if ($label === '') {
+            continue;
+        }
+        $count = max(1, min(50, (int) ($item['count'] ?? 1)));
+        $out[] = [
+            'label' => $label,
+            'count' => $count,
+            'done' => max(0, min($count, (int) ($item['done'] ?? 0))),
+            'due' => collabParseDate($item['due'] ?? ''),
+        ];
+    }
+    return $out ? json_encode($out, JSON_UNESCAPED_UNICODE) : null;
+}
+
+/** Column -> list (always an array). */
+function collabDecodeDeliverables($json)
+{
+    $list = json_decode((string) $json, true);
+    return is_array($list) ? $list : [];
+}
+
+/** Row ready for the app: deliverables as a list. */
+function collabForApp(array $row)
+{
+    if (array_key_exists('deliverables', $row)) {
+        $row['deliverables'] = collabDecodeDeliverables($row['deliverables']);
+    }
+    return $row;
+}
+
+/**
+ * The nearest thing still to make: ['index', 'label', 'left', 'due'] or null.
+ * Things with a date come first (earliest), then the rest (with the publish deadline as their date).
+ */
+function collabNextDeliverable(array $deliverables, $publishBy = null)
+{
+    $best = null;
+    foreach ($deliverables as $index => $d) {
+        $left = (int) $d['count'] - (int) $d['done'];
+        if ($left <= 0) {
+            continue;
+        }
+        $due = ($d['due'] ?? null) ?: $publishBy;
+        if ($best === null || ($due && (!$best['due'] || $due < $best['due']))) {
+            $best = ['index' => $index, 'label' => $d['label'], 'left' => $left, 'due' => $due];
+        }
+    }
+    return $best;
+}
+
+/**
+ * Documents linked to a brief: a contract / bill / invoice means the job is agreed -
+ * the brief leaves "W przygotowaniu" and takes the amount and billing it did not have yet.
+ */
+function collabAgreeFromDocuments(PDO $conn, $userId, $collabId, array $documentIds)
+{
+    Schema::ensureCollaborations($conn);
+    $stmt = $conn->prepare("SELECT stage, amount_gross, collab_type, date FROM collaborations WHERE id = :id AND user_id = :user_id");
+    $stmt->execute(['id' => $collabId, 'user_id' => $userId]);
+    $collab = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$collab || $collab['stage'] !== 'brief' || !$documentIds) {
+        return;
+    }
+    $placeholders = implode(',', array_fill(0, count($documentIds), '?'));
+    $stmt = $conn->prepare("
+        SELECT doc_kind, amount, billing FROM documents
+        WHERE user_id = ? AND id IN ($placeholders) AND (doc_kind IS NULL OR doc_kind IN ('umowa', 'rachunek', 'faktura', 'zlecenie'))
+        ORDER BY (doc_kind = 'umowa') DESC, id ASC
+    ");
+    $stmt->execute(array_merge([$userId], array_map('intval', $documentIds)));
+    $docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$docs) {
+        return; // e.g. only the brief itself was attached
+    }
+
+    $set = ['stage = NULL'];
+    $params = ['id' => $collabId, 'user_id' => $userId];
+    if ((float) $collab['amount_gross'] <= 0) {
+        foreach ($docs as $doc) {
+            if ((float) $doc['amount'] > 0) {
+                require_once __DIR__ . '/../utils/TaxCalculator.php';
+                $billing = $doc['billing'] && $doc['billing'] !== 'umowa_praca' ? $doc['billing'] : $collab['collab_type'];
+                $set[] = 'amount_gross = :gross';
+                $set[] = 'amount_net = :net';
+                $set[] = 'collab_type = :collab_type';
+                $params['gross'] = round((float) $doc['amount'], 2);
+                $params['net'] = round(TaxCalculator::calculateNet((float) $doc['amount'], $billing, $collab['date']), 2);
+                $params['collab_type'] = $billing;
+                break;
+            }
+        }
+    }
+    $conn->prepare("UPDATE collaborations SET " . implode(', ', $set) . " WHERE id = :id AND user_id = :user_id")->execute($params);
+}

@@ -28,7 +28,7 @@ try {
     // Get Collab
     $stmt = $conn->prepare("
         SELECT id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes, created_at,
-               paid_at, publish_by, published_at, payment_days, " . COLLAB_DUE_SQL . " AS payment_due
+               paid_at, publish_by, published_at, payment_days, stage, deliverables, " . COLLAB_DUE_SQL . " AS payment_due
         FROM collaborations 
         WHERE id = :id AND user_id = :user_id
     ");
@@ -37,6 +37,7 @@ try {
 
     if (!$collab)
         Response::error('Collaboration not found', 404);
+    $collab = collabForApp($collab);
 
     // Get Team
     $stmtTeam = $conn->prepare("

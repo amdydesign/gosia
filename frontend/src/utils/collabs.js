@@ -118,3 +118,46 @@ export function buildBrandMemory(collabs = []) {
         lastWage: sorted.find((c) => c.type === WAGE_TYPE) || null,
     };
 }
+
+// ---------------------------------------------------------------- brief: what to make
+
+/** Not agreed yet (no contract / money): "W przygotowaniu", not counted as money to come. */
+export function isBrief(c) {
+    return c?.stage === 'brief' && !isPaid(c);
+}
+
+/** One tap adds (or adds one more of) the usual things. */
+export const DELIVERABLE_PRESETS = ['Reels IG', 'Stories IG', 'Post IG', 'Karuzela IG', 'TikTok', 'YouTube'];
+
+/** { done, total } over the whole list. */
+export function deliverableProgress(c) {
+    const list = Array.isArray(c?.deliverables) ? c.deliverables : [];
+    return list.reduce((acc, d) => ({ done: acc.done + (Number(d.done) || 0), total: acc.total + (Number(d.count) || 0) }), { done: 0, total: 0 });
+}
+
+/** The nearest thing still to make: { index, label, left, due } (dated first, else the publish deadline) or null. */
+export function nextDeliverable(c) {
+    const list = Array.isArray(c?.deliverables) ? c.deliverables : [];
+    let best = null;
+    list.forEach((d, index) => {
+        const left = (Number(d.count) || 0) - (Number(d.done) || 0);
+        if (left <= 0) return;
+        const due = d.due || c.publish_by || null;
+        if (!best || (due && (!best.due || due < best.due))) best = { index, label: d.label, left, due };
+    });
+    return best;
+}
+
+/** "Co to było" guessed from the list (the most common kind of work). */
+export function typeFromDeliverables(list) {
+    const guess = (label) => {
+        const l = (label || '').toLowerCase();
+        if (/reel|rolk|tiktok|youtube|video|film/.test(l)) return 'reel';
+        if (/stor|relac/.test(l)) return 'story';
+        if (/post|karuzel|zdj[eę]ci|foto/.test(l)) return 'post-instagram';
+        if (/sesj/.test(l)) return 'sesja';
+        if (/event|wydarzen/.test(l)) return 'event';
+        return null;
+    };
+    return mostCommon((list || []).flatMap((d) => Array(Number(d.count) || 1).fill(guess(d.label))).filter(Boolean), null);
+}

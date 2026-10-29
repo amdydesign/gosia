@@ -55,9 +55,9 @@ try {
     // Insert collaboration
     $stmt = $conn->prepare("
         INSERT INTO collaborations (user_id, brand, type, collab_type, fiscal_tracking, amount_net, amount_gross, date, payment_status, notes,
-                                    paid_at, publish_by, published_at, payment_days)
+                                    paid_at, publish_by, published_at, payment_days, stage, deliverables)
         VALUES (:user_id, :brand, :type, :collab_type, :fiscal_tracking, :amount_net, :amount_gross, :date, :payment_status, :notes,
-                :paid_at, :publish_by, :published_at, :payment_days)
+                :paid_at, :publish_by, :published_at, :payment_days, :stage, :deliverables)
     ");
 
     $stmt->execute([
@@ -75,6 +75,9 @@ try {
         'publish_by' => $deadlines['publish_by'] ?? null,
         'published_at' => $deadlines['published_at'] ?? null,
         'payment_days' => $deadlines['payment_days'] ?? null,
+        // a brief is never "paid" yet - it waits in "W przygotowaniu"
+        'stage' => $paymentStatus === 'paid' ? null : collabParseStage($input['stage'] ?? null),
+        'deliverables' => collabEncodeDeliverables($input['deliverables'] ?? null),
     ]);
 
     $collabId = $conn->lastInsertId();

@@ -9,7 +9,8 @@
  *  - a later bill / invoice (up to 120 days) joins a contract that has no bill yet, and vice versa;
  *  - another contract weeks later is a NEW job with the same company, not a duplicate.
  * Each group either matches an existing collaboration (same brand, amount and a close
- * date) -> action "link", or becomes a prefilled new one -> action "create".
+ * date; a brief without an amount needs only the brand) -> action "link", or becomes a
+ * prefilled new one -> action "create".
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -160,9 +161,13 @@ try {
                     $busy = $busy || suggestDays($linkedDay, $day) > SUGGEST_SAME_JOB_DAYS;
                 }
             }
-            if (!$busy && abs((float) $collab['amount_gross'] - $group['amount']) <= SUGGEST_AMOUNT_TOLERANCE
-                && suggestDays($collab['date'], $day) <= SUGGEST_MAX_DAYS
-                && (!$match || suggestDays($collab['date'], $day) < suggestDays($match['date'], $day))) {
+            // a brief (no contract yet) waits for its contract: same brand is enough while it has no amount
+            $brief = ($collab['stage'] ?? null) === 'brief';
+            $sameAmount = abs((float) $collab['amount_gross'] - $group['amount']) <= SUGGEST_AMOUNT_TOLERANCE
+                || ($brief && (float) $collab['amount_gross'] <= 0);
+            $closer = !$match || ($brief && ($match['stage'] ?? null) !== 'brief')
+                || suggestDays($collab['date'], $day) < suggestDays($match['date'], $day);
+            if (!$busy && $sameAmount && suggestDays($collab['date'], $day) <= SUGGEST_MAX_DAYS && $closer) {
                 $match = $collab;
             }
         }
@@ -194,6 +199,7 @@ try {
                 'brand' => $match['brand'],
                 'amount_gross' => (float) $match['amount_gross'],
                 'date' => $match['date'],
+                'brief' => ($match['stage'] ?? null) === 'brief',
             ] : null,
             'prefill' => $match ? null : [
                 // reuse the brand spelling already used in collaborations ("reszta jak ostatnio")

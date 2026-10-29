@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Briefcase, CalendarClock, Camera, Check, ChevronDown, Loader2, Plus, Trash2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Briefcase, CalendarClock, Camera, Check, ChevronDown, FileText, Loader2, Plus, Trash2, Wallet, X } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import ChoiceChips from '../ui/ChoiceChips';
@@ -8,13 +8,22 @@ import { readScreens } from '../../services/ai';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { addDays, formatCurrency, getTaxBreakdown, getTodayDate, openPicker, parseAmount, yesterdayDate, formatDateShort } from '../../utils/format';
-import { BILLING_OPTIONS, PAYMENT_DAY_PRESETS, TYPE_OPTIONS, WAGE_TYPE, buildBrandMemory, grossOf, wageLabel } from '../../utils/collabs';
+import { BILLING_OPTIONS, PAYMENT_DAY_PRESETS, TYPE_OPTIONS, WAGE_TYPE, buildBrandMemory, grossOf, typeFromDeliverables, wageLabel } from '../../utils/collabs';
+import { uploadAttachment } from '../../services/attachments';
+import DeliverablesEditor from './DeliverablesEditor';
 
 const today = getTodayDate();
+
+const STAGE_OPTIONS = [
+    { value: 'brief', label: 'Brief — jeszcze bez umowy' },
+    { value: 'agreed', label: 'Ustalona' },
+];
 
 /**
  * Quick add / edit collaboration. Minimum input: brand + amount - everything
  * else is pre-filled from the last collaboration with that brand (payment term too).
+ * A brief (PDF / screen) fills it too: "Brief" stage, the list of things to make,
+ * and the file gets attached to the collaboration.
  * initialFiles: a screen handed over from the inbox - read right away.
  */
 export default function CollabFormSheet({ collabId, prefill, initialFiles, onClose, onSaved }) {
@@ -35,8 +44,11 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
         payment_days: null, // null = 30 days (default)
         publish_by: '',
         paid_at: '',
+        brief: false, // not agreed yet - "W przygotowaniu"
+        deliverables: [], // [{ label, count, done, due }]
         ...normalizePrefill(prefill),
     }));
+    const [sourceFiles, setSourceFiles] = useState([]); // the brief / screen read by AI - attached after saving
     const [originalStatus, setOriginalStatus] = useState('pending');
     const [memory, setMemory] = useState(null);
     const [loading, setLoading] = useState(isEdit);
@@ -92,6 +104,8 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                     payment_days: c.payment_days ? Number(c.payment_days) : null,
                     publish_by: c.publish_by || '',
                     paid_at: c.paid_at || '',
+                    brief: c.stage === 'brief' && c.payment_status !== 'paid',
+                    deliverables: (c.deliverables || []).map((d) => ({ ...d, due: d.due || '' })),
                 });
                 if (c.notes || c.team?.length) setMoreOpen(true);
             })
@@ -160,20 +174,26 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
         try {
             const r = await readScreens('collaboration', files);
             touched.current.add('amount');
+            const deliverables = (r.deliverables || []).map((d) => ({ label: d.label, count: d.count, done: 0, due: d.due || '' }));
             setForm((f) => ({
                 ...f,
                 brand: r.brand || f.brand,
                 amount: r.amount_gross > 0 ? String(r.amount_gross) : f.amount,
                 collab_type: r.collab_type || memory?.last(r.brand)?.collab_type || f.collab_type,
-                type: r.type && r.type !== 'inne' ? r.type : f.type,
+                type: r.type && r.type !== 'inne' ? r.type : typeFromDeliverables(deliverables) || f.type,
                 date: r.date || f.date,
                 notes: r.notes || f.notes,
                 publish_by: r.publish_by || f.publish_by,
                 payment_days: r.payment_days || f.payment_days,
+                deliverables: deliverables.length ? deliverables : f.deliverables,
+                // a brief without a fee is not money yet; with a confirmed rate it is a normal collaboration
+                brief: isEdit ? f.brief : !!r.is_brief,
+                paid: r.is_brief ? false : f.paid,
             }));
+            if (!isEdit) setSourceFiles((prev) => [...prev, ...files]);
             if (r.payment_days) touched.current.add('payment_days');
             if (r.notes) setMoreOpen(true);
-            toast.success('Uzupełnione ze screena — sprawdź i zapisz');
+            toast.success(r.is_brief ? 'Brief odczytany — sprawdź i zapisz' : 'Uzupełnione — sprawdź i zapisz');
         } catch (err) {
             setError(err.message || 'Nie udało się odczytać screena');
         } finally {
@@ -217,6 +237,8 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
             payment_days: form.payment_days || null,
             publish_by: form.publish_by || null,
             ...(form.paid && form.paid_at ? { paid_at: form.paid_at } : {}),
+            stage: !isWage && form.brief && !form.paid ? 'brief' : null,
+            deliverables: isWage ? [] : form.deliverables.filter((d) => d.label.trim()).map((d) => ({ ...d, label: d.label.trim(), due: d.due || null })),
         };
         try {
             let savedId = collabId;
@@ -226,7 +248,13 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
             } else {
                 const created = await apiRequest('/collaborations/create.php', 'POST', payload);
                 savedId = created?.id;
-                toast.success(`Dodano: ${payload.brand} · ${formatCurrency(amount)}`);
+                toast.success(payload.stage === 'brief' ? `Dodano brief: ${payload.brand} — w przygotowaniu` : `Dodano: ${payload.brand} · ${formatCurrency(amount)}`);
+                // the brief / screen it was read from stays with the collaboration
+                if (savedId && sourceFiles.length) {
+                    Promise.all(sourceFiles.map((file) => uploadAttachment('collaboration', savedId, file))).catch(() =>
+                        toast.error('Współpraca zapisana, ale nie udało się przypiąć pliku briefu')
+                    );
+                }
             }
             refresh();
             onSaved?.(savedId);
@@ -270,11 +298,16 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                                     {reading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
                                 </span>
                                 <span className="min-w-0">
-                                    <span className="block text-sm font-bold text-primary-800">{reading ? 'Czytam screena…' : 'Uzupełnij ze screena'}</span>
-                                    <span className="block text-xs text-primary-700/80">Mail od marki, zlecenie Use.me, umowa</span>
+                                    <span className="block text-sm font-bold text-primary-800">{reading ? 'Czytam…' : 'Wrzuć brief albo screena'}</span>
+                                    <span className="block text-xs text-primary-700/80">Brief (PDF), mail od marki, zlecenie Use.me, umowa</span>
                                 </span>
                             </button>
-                            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleScreen} />
+                            <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf" multiple className="hidden" onChange={handleScreen} />
+                            {sourceFiles.length > 0 && (
+                                <p className="-mt-3 flex items-center gap-1.5 text-xs text-ink-muted px-1">
+                                    <FileText size={13} /> {sourceFiles.length === 1 ? sourceFiles[0].name : `${sourceFiles.length} pliki`} — przypnę do współpracy
+                                </p>
+                            )}
                         </>
                     )}
 
@@ -314,9 +347,24 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                         )}
                     </div>
 
+                    {!isWage && (
+                        <div>
+                            <div className="section-label mb-2">Etap</div>
+                            <ChoiceChips
+                                options={STAGE_OPTIONS}
+                                value={form.brief ? 'brief' : 'agreed'}
+                                onChange={(v) => setForm((f) => ({ ...f, brief: v === 'brief', paid: v === 'brief' ? false : f.paid }))}
+                            />
+                            {form.brief && <p className="hint">Czeka w „W przygotowaniu” — nie liczę jej do pieniędzy, aż przyjdzie umowa.</p>}
+                        </div>
+                    )}
+
                     {/* Amount */}
                     <div>
-                        <label className="label" htmlFor="collab-amount">{form.collab_type === 'gotowka' ? 'Kwota' : 'Kwota brutto'}</label>
+                        <label className="label" htmlFor="collab-amount">
+                            {form.collab_type === 'gotowka' ? 'Kwota' : 'Kwota brutto'}
+                            {form.brief && <span className="font-normal text-ink-muted"> (jeśli już znana)</span>}
+                        </label>
                         <div className="relative">
                             <input
                                 id="collab-amount"
@@ -347,6 +395,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                                 <div className="section-label mb-2">Co to było</div>
                                 <ChoiceChips options={TYPE_OPTIONS} value={form.type} onChange={(v) => set('type', v)} />
                             </div>
+                            <DeliverablesEditor list={form.deliverables} onChange={(deliverables) => setForm((f) => ({ ...f, deliverables }))} />
                         </>
                     )}
 
@@ -382,6 +431,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                     <ExclusivityNote brand={form.brand} exclusivities={dashboard?.exclusivities} />
 
                     {/* Paid */}
+                    {!form.brief && (
                     <button
                         type="button"
                         onClick={() => set('paid', !form.paid)}
@@ -398,6 +448,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                             <span className="block text-xs text-ink-muted">{form.paid ? 'Opłacone' : 'Przypomnę, jeśli przelew się spóźni'}</span>
                         </span>
                     </button>
+                    )}
 
                     {/* More */}
                     <div className="rounded-2xl border border-line">
@@ -598,6 +649,8 @@ function normalizePrefill(prefill) {
         ...(prefill.date ? { date: prefill.date } : {}),
         ...(prefill.publish_by ? { publish_by: prefill.publish_by } : {}),
         ...(prefill.payment_days ? { payment_days: Number(prefill.payment_days) } : {}),
+        ...(prefill.stage === 'brief' ? { brief: true } : {}),
+        ...(prefill.deliverables?.length ? { deliverables: prefill.deliverables.map((d) => ({ ...d, done: 0, due: d.due || '' })) } : {}),
         team: (prefill.team || []).map((m) => ({ name: m.name, amount: m.amount ? String(Number(m.amount)) : '', is_paid: false })),
     };
 }

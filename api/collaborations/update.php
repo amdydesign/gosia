@@ -28,11 +28,32 @@ try {
     Schema::ensureCollaborations($conn);
 
     // Verify ownership
-    $stmt = $conn->prepare("SELECT id, payment_status, paid_at FROM collaborations WHERE id = :id AND user_id = :user_id");
+    $stmt = $conn->prepare("SELECT id, brand, payment_status, paid_at, published_at, deliverables FROM collaborations WHERE id = :id AND user_id = :user_id");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
     $current = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$current)
         Response::error('Not found', 404);
+
+    // "Zrobione" on one thing from the brief: { tick: { index, delta: 1 | -1 } }.
+    // The last one made marks the collaboration published (payment term starts) - unless it already is.
+    $autoPublished = false;
+    if (isset($input['tick']) && is_array($input['tick'])) {
+        $list = collabDecodeDeliverables($current['deliverables']);
+        $index = (int) ($input['tick']['index'] ?? -1);
+        if (!isset($list[$index])) {
+            Response::notFound('Tej pozycji już nie ma');
+        }
+        $delta = ((int) ($input['tick']['delta'] ?? 1)) < 0 ? -1 : 1;
+        $list[$index]['done'] = max(0, min((int) $list[$index]['count'], (int) $list[$index]['done'] + $delta));
+        $input['deliverables'] = $list;
+        $allDone = !array_filter($list, function ($d) {
+            return (int) $d['done'] < (int) $d['count'];
+        });
+        if ($allDone && !$current['published_at'] && !array_key_exists('published_at', $input)) {
+            $input['published_at'] = date('Y-m-d');
+            $autoPublished = true;
+        }
+    }
 
     $conn->beginTransaction();
 
@@ -75,6 +96,17 @@ try {
     if (isset($input['fiscal_tracking'])) {
         $fields[] = "fiscal_tracking = :fiscal_tracking";
         $params['fiscal_tracking'] = $input['fiscal_tracking'] ? 1 : 0;
+    }
+
+    if (array_key_exists('stage', $input)) {
+        $fields[] = "stage = :stage";
+        $params['stage'] = collabParseStage($input['stage']);
+    } elseif (($input['payment_status'] ?? '') === 'paid') {
+        $fields[] = "stage = NULL"; // paid = agreed, no longer a brief
+    }
+    if (array_key_exists('deliverables', $input)) {
+        $fields[] = "deliverables = :deliverables";
+        $params['deliverables'] = collabEncodeDeliverables($input['deliverables']);
     }
 
     $deadlines = collabDeadlineInput($input);
@@ -144,7 +176,12 @@ try {
         }
     }
 
-    Response::success(['message' => 'Updated successfully']);
+    $result = ['message' => 'Updated successfully'];
+    if (isset($input['tick'])) {
+        $result['deliverables'] = $input['deliverables'];
+        $result['auto_published'] = $autoPublished;
+    }
+    Response::success($result);
 
 } catch (Exception $e) {
     if (isset($conn))
