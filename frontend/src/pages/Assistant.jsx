@@ -85,6 +85,7 @@ export default function Assistant() {
     const [status, setStatus] = useState('');
     const [historyOpen, setHistoryOpen] = useState(false);
     const [modelOpen, setModelOpen] = useState(false);
+    const [barHidden, setBarHidden] = useState(false);
     const [usdPln, setUsdPln] = useState(3.7);
     const [monthCost, setMonthCost] = useState(0);
 
@@ -148,6 +149,20 @@ export default function Assistant() {
         if (!loading && messages.length) scrollToBottom();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loading]);
+
+    // The model / history row slides away while scrolling down and comes back on the first move up
+    useEffect(() => {
+        let last = window.scrollY;
+        const onScroll = () => {
+            const y = window.scrollY;
+            if (y < 40) setBarHidden(false);
+            else if (y > last + 6) setBarHidden(true);
+            else if (y < last - 4) setBarHidden(false);
+            if (Math.abs(y - last) > 4) last = y;
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     // Grow the text box with what she writes (up to a few lines)
     useLayoutEffect(() => {
@@ -323,8 +338,10 @@ export default function Assistant() {
 
     return (
         <div className="max-w-3xl mx-auto">
-            {/* Model + history + new chat - one quiet row */}
-            <div className="flex items-center gap-2 pb-3">
+            {/* Model + history + new chat - one quiet row, stays under the top bar while the chat scrolls */}
+            <div className={`sticky z-20 top-[calc(env(safe-area-inset-top,0px)+4rem)] lg:top-[calc(env(safe-area-inset-top,0px)+76px)] -mx-4 px-4 sm:-mx-6 sm:px-6 py-2 -mt-2 mb-1 bg-canvas/90 backdrop-blur-md flex items-center gap-2 transition-[transform,opacity] duration-200 ${
+                    barHidden ? '-translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+                }`}>
                 <button
                     type="button"
                     onClick={() => setModelOpen(true)}
