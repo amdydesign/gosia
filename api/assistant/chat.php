@@ -11,6 +11,7 @@
  *   text   { text }            next piece of the answer
  *   source { url, title }      a web page the answer cites
  *   task   { id, title, due_date, remind_at }   a task was added (the app offers "Cofnij")
+ *   idea   { id, title, planned_for }            an idea was saved to Pomysły (the app offers "Cofnij")
  *   done   { chat_id, title, model, model_label, cost_usd (this reply), chat_cost_usd, usd_pln }
  *   error  { message }         nothing was saved - her message can be sent again
  *

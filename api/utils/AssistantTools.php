@@ -2,7 +2,7 @@
 /**
  * "Asystent": tools Claude calls to read her panel (and add a task).
  *
- * Everything is read-only except dodaj_zadanie - a task can be undone from the toast.
+ * Everything is read-only except dodaj_zadanie / dodaj_pomysl - both can be undone from the toast.
  * Results are small JSON documents in Polish field names, so the model can quote them.
  */
 
@@ -98,6 +98,19 @@ class AssistantTools
                     'required' => ['tytul'],
                 ],
             ],
+            [
+                'name' => 'dodaj_pomysl',
+                'description' => 'Zapisuje pomysł / scenariusz rolki w Pomysłach Gosi (status "do nagrania"). Używaj, gdy prosi "dodaj do pomysłów", "zapisz ten scenariusz", "wrzuć to do pomysłów". Wpisz pełną treść scenariusza dokładnie tak, jak ma się znaleźć w prompterze - bez komentarzy od siebie. Jeden pomysł na wywołanie.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'tytul' => ['type' => 'string', 'description' => 'Krótki tytuł rolki'],
+                        'tresc' => ['type' => 'string', 'description' => 'Pełny scenariusz / treść pomysłu'],
+                        'nagrac_dnia' => ['type' => 'string', 'description' => 'RRRR-MM-DD - tylko gdy poda, kiedy chce nagrać'],
+                    ],
+                    'required' => ['tytul', 'tresc'],
+                ],
+            ],
         ];
         // stream tool arguments as they are written; run() checks them before use
         foreach ($tools as &$tool) {
@@ -117,6 +130,7 @@ class AssistantTools
             'pomysly' => 'Przeglądam pomysły…',
             'dokumenty' => 'Czytam dokumenty…',
             'dodaj_zadanie' => 'Dodaję zadanie…',
+            'dodaj_pomysl' => 'Zapisuję w Pomysłach…',
             'web_search' => 'Szukam w internecie…',
             'web_fetch' => 'Czytam stronę…',
         ];
@@ -149,6 +163,8 @@ class AssistantTools
                     return [self::json(self::documents($conn, $userId, $input)), false];
                 case 'dodaj_zadanie':
                     return [self::json(self::addTask($conn, $userId, $input, $events)), false];
+                case 'dodaj_pomysl':
+                    return [self::json(self::addIdea($conn, $userId, $input, $events)), false];
             }
             return [self::json(['blad' => 'Nie ma takiego narzędzia.']), true];
         } catch (InvalidArgumentException $e) {
@@ -496,6 +512,25 @@ class AssistantTools
 
         $events[] = ['type' => 'task', 'id' => $id, 'title' => $title, 'due_date' => $due, 'remind_at' => $remindAt];
         return ['dodano' => true, 'tytul' => $title, 'termin' => $due, 'przypomnienie' => $remindAt];
+    }
+
+    private static function addIdea(PDO $conn, $userId, array $input, array &$events)
+    {
+        $title = trim((string) ($input['tytul'] ?? ''));
+        $content = trim((string) ($input['tresc'] ?? ''));
+        if ($title === '') {
+            throw new InvalidArgumentException('Brak tytułu pomysłu.');
+        }
+        $title = mb_substr($title, 0, 255);
+        $planned = self::date($input['nagrac_dnia'] ?? null);
+
+        Schema::ensureColumns($conn, 'ideas');
+        $conn->prepare("INSERT INTO ideas (user_id, title, content, status, planned_for) VALUES (:user_id, :title, :content, 'draft', :planned)")
+            ->execute(['user_id' => $userId, 'title' => $title, 'content' => mb_substr($content, 0, 60000), 'planned' => $planned]);
+        $id = (int) $conn->lastInsertId();
+
+        $events[] = ['type' => 'idea', 'id' => $id, 'title' => $title, 'planned_for' => $planned];
+        return ['dodano' => true, 'id' => $id, 'tytul' => $title, 'nagrac_dnia' => $planned];
     }
 
     // ---------------------------------------------------------------- helpers

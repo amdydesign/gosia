@@ -269,6 +269,11 @@ export default function Assistant() {
                             duration: 7000,
                             action: { label: 'Cofnij', onClick: () => apiRequest(`/tasks/delete.php?id=${data.id}`, 'DELETE').catch(() => {}) },
                         });
+                    } else if (name === 'idea') {
+                        toast.success(`Dodano do Pomysłów: ${data.title}`, {
+                            duration: 7000,
+                            action: { label: 'Cofnij', onClick: () => apiRequest(`/ideas/delete.php?id=${data.id}`, 'DELETE').catch(() => {}) },
+                        });
                     } else if (name === 'done') {
                         update((m) => ({ ...m, pending: false, model: data.model, modelLabel: data.model_label, cost_usd: data.cost_usd }));
                         if (data.usd_pln) setUsdPln(data.usd_pln);
