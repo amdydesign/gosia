@@ -62,16 +62,21 @@ try {
     }
     Schema::ensure($conn, 'assistant_chats');
     Schema::ensure($conn, 'assistant_messages');
+    Schema::ensureColumn($conn, 'assistant_chats', 'prompt_version');
 
     // History of this chat - replayed exactly as stored
     $chatId = (int) ($input['chat_id'] ?? 0);
     $history = [];
+    $version = Assistant::PROMPT_VERSION;
     if ($chatId > 0) {
-        $stmt = $conn->prepare("SELECT id FROM assistant_chats WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL");
+        $stmt = $conn->prepare("SELECT id, prompt_version FROM assistant_chats WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL");
         $stmt->execute(['id' => $chatId, 'user_id' => $userId]);
-        if (!$stmt->fetch()) {
+        $chat = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$chat) {
             Response::notFound('Tej rozmowy już nie ma - zacznij nową.');
         }
+        // an older chat keeps the prompt and tools it started with
+        $version = Assistant::promptVersion($chat['prompt_version']);
         $stmt = $conn->prepare("SELECT kind, content FROM assistant_messages WHERE chat_id = :chat_id ORDER BY id");
         $stmt->execute(['chat_id' => $chatId]);
         $bytes = 0;
@@ -133,15 +138,15 @@ echo ':' . str_repeat(' ', 2048) . "\n\n";
 $emit('status', ['text' => 'Myślę…']);
 
 try {
-    $result = Assistant::reply($conn, $userId, $history, $model, $emit);
+    $result = Assistant::reply($conn, $userId, $history, $model, $emit, $version);
 
     $conn->beginTransaction();
     $title = '';
     if ($chatId === 0) {
         $firstLine = trim(strtok($text, "\n") ?: '');
         $title = $firstLine !== '' ? mb_substr($firstLine, 0, 80) : 'Zdjęcie';
-        $conn->prepare("INSERT INTO assistant_chats (user_id, title, model) VALUES (:user_id, :title, :model)")
-            ->execute(['user_id' => $userId, 'title' => $title, 'model' => $model]);
+        $conn->prepare("INSERT INTO assistant_chats (user_id, title, model, prompt_version) VALUES (:user_id, :title, :model, :version)")
+            ->execute(['user_id' => $userId, 'title' => $title, 'model' => $model, 'version' => $version]);
         $chatId = (int) $conn->lastInsertId();
     }
     $insert = $conn->prepare("INSERT INTO assistant_messages (chat_id, user_id, kind, content, model) VALUES (:chat_id, :user_id, :kind, :content, :model)");

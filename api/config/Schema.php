@@ -255,6 +255,7 @@ class Schema
                 user_id INT NOT NULL,
                 title VARCHAR(120) NOT NULL DEFAULT '',
                 model VARCHAR(40) NOT NULL DEFAULT '',
+                prompt_version SMALLINT NOT NULL DEFAULT 1,
                 deleted_at DATETIME NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -323,6 +324,8 @@ class Schema
         // "Brief": agreed on nothing yet (no contract / money) - shown as "W przygotowaniu", not counted as money to come
         'collaborations.stage' => "ALTER TABLE collaborations ADD COLUMN stage VARCHAR(10) NULL DEFAULT NULL",
         // What to make for the brand: JSON [{label: "Reels IG", count: 2, done: 1, due: "2026-11-05"}]
+        // the system prompt + tools a chat started with - kept for good (newer models bind thinking to it)
+        'assistant_chats.prompt_version' => "ALTER TABLE assistant_chats ADD COLUMN prompt_version SMALLINT NOT NULL DEFAULT 1",
         'collaborations.deliverables' => "ALTER TABLE collaborations ADD COLUMN deliverables TEXT NULL",
     ];
 

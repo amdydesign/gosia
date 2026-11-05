@@ -18,8 +18,8 @@ const MAX_IMAGES = 4;
 const SUGGESTIONS = [
     'Co mam dziś do zrobienia?',
     'Ile zarobiłam w tym miesiącu?',
-    'Jakie zwroty muszę wysłać?',
     'Które marki jeszcze mi nie zapłaciły?',
+    'Zrób research: trendy na tę zimę, ze źródłami',
 ];
 
 function read(key) {
@@ -350,7 +350,7 @@ export default function Assistant() {
             ) : messages.length === 0 ? (
                 <div className="pt-8 pb-6">
                     <h2 className="text-xl font-semibold tracking-tight text-ink">{name ? `Cześć ${name}!` : 'Cześć!'} W czym pomóc?</h2>
-                    <p className="mt-1 text-sm text-ink-soft">Znam Twoje współprace, zakupy, pomysły i umowy. Mogę też napisać maila do marki albo coś zapamiętać.</p>
+                    <p className="mt-1 text-sm text-ink-soft">Znam Twoje współprace, zakupy, pomysły i umowy. Szukam też w internecie i podaję źródła, piszę maile do marek i zapisuję zadania.</p>
                     <div className="mt-5 flex flex-wrap gap-2">
                         {SUGGESTIONS.map((s) => (
                             <button
@@ -394,7 +394,8 @@ export default function Assistant() {
                                     </p>
                                 )}
                                 {m.sources?.length > 0 && (
-                                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                                        <span className="text-xs font-medium text-ink-muted mr-0.5">Źródła:</span>
                                         {m.sources.map((s) => (
                                             <a
                                                 key={s.url}

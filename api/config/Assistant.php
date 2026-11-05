@@ -24,7 +24,14 @@ class Assistant
     const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     const DEFAULT_MODEL = 'claude-opus-5-5';
     const MAX_TOKENS = 64000;
-    const MAX_STEPS = 10;
+    const MAX_STEPS = 16;
+
+    /**
+     * Version of the system prompt + tool set a chat was started with. Newer models bind their
+     * thinking to that prefix, so a chat keeps its version for good; only new chats get the latest.
+     * 1: first release. 2: research - web pages read in full, more searches, sources required.
+     */
+    const PROMPT_VERSION = 2;
     const MAX_HISTORY_BYTES = 6000000;
 
     /**
@@ -37,6 +44,7 @@ class Assistant
             'hint' => 'Najszybszy i najtańszy — proste pytania',
             'effort' => 'low',
             'web' => 'web_search_20250305',
+            'fetch' => 'web_fetch_20250910',
             'fallbacks' => false,
         ],
         'claude-sonnet-5-5' => [
@@ -44,6 +52,7 @@ class Assistant
             'hint' => 'Szybki i bystry — na co dzień',
             'effort' => 'low',
             'web' => 'web_search_20260209',
+            'fetch' => 'web_fetch_20260209',
             'fallbacks' => true,
         ],
         'claude-opus-5-5' => [
@@ -51,6 +60,7 @@ class Assistant
             'hint' => 'Najlepszy do pisania i trudniejszych spraw',
             'effort' => 'medium',
             'web' => 'web_search_20260209',
+            'fetch' => 'web_fetch_20260209',
             'fallbacks' => true,
         ],
         'claude-fable-5-1' => [
@@ -58,6 +68,7 @@ class Assistant
             'hint' => 'Najmocniejszy, najdroższy i wolniejszy',
             'effort' => 'medium',
             'web' => 'web_search_20260209',
+            'fetch' => 'web_fetch_20260209',
             'fallbacks' => true,
         ],
     ];
@@ -81,8 +92,33 @@ class Assistant
         return self::MODELS[$id]['label'] ?? $id;
     }
 
-    /** Frozen system prompt - the same for every chat, so it stays cached. */
-    public static function systemPrompt()
+    public static function promptVersion($value)
+    {
+        $value = (int) $value;
+        return $value >= 1 && $value <= self::PROMPT_VERSION ? $value : 1;
+    }
+
+    /** Frozen system prompt of a version - never edit a released one, add a new version instead. */
+    public static function systemPrompt($version = self::PROMPT_VERSION)
+    {
+        return $version >= 2 ? self::basePrompt() . "\n\n" . self::researchPrompt() : self::basePrompt();
+    }
+
+    private static function researchPrompt()
+    {
+        return <<<PROMPT
+Research w internecie (trendy, marki, ceny, rynek, statystyki, konkurencja, wydarzenia, przepisy, regulaminy sklepów):
+- Szukaj w internecie zawsze, gdy odpowiedź zależy od faktów ze świata - nie odpowiadaj z pamięci. Twoja wiedza może być nieaktualna.
+- Sprawdź kilka niezależnych źródeł. Ważne strony otwieraj narzędziem web_fetch i czytaj w całości, a nie tylko fragment z wyszukiwarki. Linki, które Gosia wkleja, też otwieraj.
+- Wybieraj źródła pierwotne i wiarygodne: strona marki lub sklepu, oficjalny raport, dane GUS/Eurostatu, urzędy, renomowane media branżowe. Fora i blogi traktuj jako opinie i tak je nazywaj.
+- Każda liczba, data, cena i cytat z internetu musi mieć źródło. Przy liczbach podaj, z kiedy są dane.
+- Jeśli źródła mówią co innego albo czegoś nie da się znaleźć - napisz to wprost. Nigdy nie zmyślaj faktów, liczb ani linków.
+- Research kończ krótką listą "Źródła:" - tytuł strony jako link w formacie [tytuł](adres), tylko strony, z których naprawdę korzystałeś.
+- Przy dłuższym researchu zacznij od 2-3 zdań z najważniejszymi wnioskami, potem szczegóły.
+PROMPT;
+    }
+
+    private static function basePrompt()
     {
         return <<<PROMPT
 Jesteś osobistym asystentem Gosi (Małgorzata Mordarska) - stylistki i influencerki modowej. Działasz w jej panelu "Gonia", w którym prowadzi swoją pracę.
@@ -145,14 +181,15 @@ PROMPT;
      * @return array ['messages' => [['kind' => ..., 'message' => object]], 'model' => served model]
      * @throws RuntimeException with a Polish message
      */
-    public static function reply(PDO $conn, $userId, array $history, $model, callable $emit)
+    public static function reply(PDO $conn, $userId, array $history, $model, callable $emit, $version = self::PROMPT_VERSION)
     {
         $key = AiClient::key('claude');
         if ($key === '') {
             throw new RuntimeException('Asystent wymaga klucza Claude (Ustawienia → Czytanie screenów).');
         }
         $model = self::modelId($model);
-        $options = ['web' => true, 'fallbacks' => self::MODELS[$model]['fallbacks'], 'eager' => true, 'autocache' => true];
+        $version = self::promptVersion($version);
+        $options = ['version' => $version, 'web' => true, 'fetch' => $version >= 2, 'fallbacks' => self::MODELS[$model]['fallbacks'], 'eager' => true, 'autocache' => true];
 
         $messages = $history;
         $new = [];
@@ -270,17 +307,22 @@ PROMPT;
             }
             unset($tool);
         }
+        $version = self::promptVersion($options['version'] ?? 1);
         if (!empty($options['web'])) {
-            $tools[] = ['type' => $config['web'], 'name' => 'web_search', 'max_uses' => 5, 'user_location' => [
+            $tools[] = ['type' => $config['web'], 'name' => 'web_search', 'max_uses' => $version >= 2 ? 10 : 5, 'user_location' => [
                 'type' => 'approximate', 'country' => 'PL', 'timezone' => 'Europe/Warsaw',
             ]];
+            // read whole pages (search results, links she pastes) - research needs more than snippets
+            if (!empty($options['fetch'])) {
+                $tools[] = ['type' => $config['fetch'], 'name' => 'web_fetch', 'max_uses' => 8, 'max_content_tokens' => 40000, 'citations' => ['enabled' => true]];
+            }
         }
         // the frozen prefix (tools + system) gets its own cache point; the growing chat is cached automatically
         $body = [
             'model' => $model,
             'max_tokens' => self::MAX_TOKENS,
             'stream' => true,
-            'system' => [['type' => 'text', 'text' => self::systemPrompt(), 'cache_control' => ['type' => 'ephemeral']]],
+            'system' => [['type' => 'text', 'text' => self::systemPrompt($version), 'cache_control' => ['type' => 'ephemeral']]],
             'tools' => $tools,
             'thinking' => ['type' => 'adaptive'],
             'output_config' => ['effort' => $config['effort']],
@@ -373,6 +415,10 @@ PROMPT;
                 }
                 if (!empty($options['autocache']) && strpos($lower, 'cache_control') !== false) {
                     $options['autocache'] = false;
+                    continue;
+                }
+                if (!empty($options['fetch']) && strpos($lower, 'web_fetch') !== false) {
+                    $options['fetch'] = false;
                     continue;
                 }
                 if (!empty($options['web']) && (strpos($lower, 'web_search') !== false || strpos($lower, 'user_location') !== false)) {
@@ -476,6 +522,8 @@ PROMPT;
                     }
                 } elseif ($type === 'tool_use' || $type === 'server_tool_use') {
                     $needBreak = true;
+                } elseif ($type === 'web_fetch_tool_result') {
+                    self::addFetchedSource($current['sources'], $block);
                 }
             }
         }
@@ -485,10 +533,21 @@ PROMPT;
         return $out;
     }
 
+    /** A page the model opened with web_fetch (result block, object). */
+    public static function addFetchedSource(array &$sources, $block)
+    {
+        $result = $block->content ?? null;
+        if (!is_object($result) || empty($result->url)) {
+            return;
+        }
+        $title = $result->content->title ?? ($result->title ?? '');
+        self::addSource($sources, ['url' => $result->url, 'title' => $title]);
+    }
+
     public static function addSource(array &$sources, $citation)
     {
         $url = is_object($citation) ? ($citation->url ?? '') : ($citation['url'] ?? '');
-        if ($url === '' || count($sources) >= 8) {
+        if ($url === '' || count($sources) >= 15) {
             return;
         }
         foreach ($sources as $s) {
@@ -562,6 +621,12 @@ class AssistantStreamParser
                     $emit('status', ['text' => 'Myślę…']);
                 } elseif ($type === 'text' && ($block->text ?? '') !== '') {
                     $emit('text', ['text' => $block->text]);
+                } elseif ($type === 'web_fetch_tool_result') {
+                    $sources = [];
+                    Assistant::addFetchedSource($sources, $block);
+                    if ($sources) {
+                        $emit('source', $sources[0]);
+                    }
                 }
                 $this->blocks[$i] = $block;
                 break;
@@ -613,6 +678,16 @@ class AssistantStreamParser
                     }
                     $this->blocks[$i]->input = $input;
                     unset($this->json[$i]);
+                    // say what is being searched / read, so she sees where the facts come from
+                    $block = $this->blocks[$i];
+                    if (($block->type ?? '') === 'server_tool_use') {
+                        if (($block->name ?? '') === 'web_search' && !empty($input->query)) {
+                            ($this->emit)('tool', ['name' => 'web_search', 'text' => 'Szukam: ' . mb_substr((string) $input->query, 0, 80) . '…']);
+                        } elseif (($block->name ?? '') === 'web_fetch' && !empty($input->url)) {
+                            $host = parse_url((string) $input->url, PHP_URL_HOST) ?: 'stronę';
+                            ($this->emit)('tool', ['name' => 'web_fetch', 'text' => 'Czytam: ' . preg_replace('/^www\./', '', $host) . '…']);
+                        }
+                    }
                 }
                 break;
             case 'message_delta':
