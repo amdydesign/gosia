@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUp, Check, ChevronDown, Copy, History, ImagePlus, Loader2, Plus, Sparkles, Trash2, X, ExternalLink } from 'lucide-react';
+import { ArrowUp, Check, ChevronDown, Copy, History, ImagePlus, Loader2, Mic, Plus, Sparkles, Square, Trash2, X, ExternalLink } from 'lucide-react';
 import Sheet from '../components/ui/Sheet';
 import Markdown from '../components/assistant/Markdown';
 import { useToast } from '../context/ToastContext';
@@ -14,6 +14,9 @@ const CHAT_KEY = 'gonia.assistant.chat';
 const MODEL_KEY = 'gonia.assistant.model';
 const DRAFT_KEY = 'gonia.assistant.draft';
 const MAX_IMAGES = 4;
+
+// Dictation: the browser's own speech recognition (Safari on iPhone, Chrome); no button where it is missing
+const SpeechRecognition = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 
 const SUGGESTIONS = [
     'Co mam dziś do zrobienia?',
@@ -86,6 +89,8 @@ export default function Assistant() {
     const [historyOpen, setHistoryOpen] = useState(false);
     const [modelOpen, setModelOpen] = useState(false);
     const [barHidden, setBarHidden] = useState(false);
+    const [listening, setListening] = useState(false);
+    const recognitionRef = useRef(null);
     const [usdPln, setUsdPln] = useState(3.7);
     const [monthCost, setMonthCost] = useState(0);
 
@@ -232,9 +237,54 @@ export default function Assistant() {
         }
     };
 
+    const stopDictation = () => {
+        recognitionRef.current?.stop();
+    };
+
+    // Tap to talk, tap again to stop - words appear in the box as they are recognised
+    const toggleDictation = () => {
+        if (listening) {
+            stopDictation();
+            return;
+        }
+        if (!SpeechRecognition) return;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'pl-PL';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        const base = draft.trim() ? `${draft.trim()} ` : '';
+        recognition.onresult = (e) => {
+            let text = '';
+            for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+            setDraft(base + text.replace(/^\s+/, ''));
+        };
+        recognition.onerror = (e) => {
+            if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                toast.error('Zezwól na mikrofon w ustawieniach przeglądarki albo użyj mikrofonu na klawiaturze.');
+            } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+                toast.error('Dyktowanie się przerwało. Spróbuj jeszcze raz.');
+            }
+        };
+        recognition.onend = () => {
+            setListening(false);
+            recognitionRef.current = null;
+            inputRef.current?.focus();
+        };
+        try {
+            recognition.start();
+            recognitionRef.current = recognition;
+            setListening(true);
+        } catch {
+            toast.error('Nie udało się włączyć mikrofonu.');
+        }
+    };
+
+    useEffect(() => () => recognitionRef.current?.abort(), []);
+
     const send = async (textArg) => {
         const text = (textArg ?? draft).trim();
         if ((!text && !images.length) || streaming || preparing) return;
+        if (listening) stopDictation();
 
         const sentImages = images;
         const userBubble = { id: `u${Date.now()}`, role: 'user', text, images: sentImages.length, previews: sentImages };
@@ -530,9 +580,24 @@ export default function Assistant() {
                             onKeyDown={onKeyDown}
                             onPaste={onPaste}
                             rows={1}
-                            placeholder="Napisz do asystenta…"
+                            placeholder={listening ? 'Słucham… mów śmiało' : 'Napisz albo podyktuj…'}
                             className="flex-1 min-w-0 resize-none bg-transparent px-1 py-2.5 text-[16px] leading-snug text-ink placeholder:text-ink-muted focus:outline-none"
                         />
+                        {SpeechRecognition && (
+                            <button
+                                type="button"
+                                onClick={toggleDictation}
+                                disabled={streaming}
+                                className={`h-10 w-10 shrink-0 rounded-full inline-flex items-center justify-center transition disabled:opacity-40 ${
+                                    listening ? 'bg-red-600 text-white animate-pulse' : 'text-ink-muted hover:text-ink hover:bg-ink/5'
+                                }`}
+                                aria-label={listening ? 'Zatrzymaj dyktowanie' : 'Dyktuj'}
+                                aria-pressed={listening}
+                                title={listening ? 'Zatrzymaj dyktowanie' : 'Dyktuj głosem'}
+                            >
+                                {listening ? <Square size={16} fill="currentColor" /> : <Mic size={20} />}
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => send()}
