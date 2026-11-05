@@ -39,6 +39,13 @@ function write(key, value) {
     }
 }
 
+/** "0,04 zł" from dollars - small amounts keep two decimals, below a grosz says so */
+function formatCost(usd, rate) {
+    const pln = (Number(usd) || 0) * (rate || 3.7);
+    if (pln > 0 && pln < 0.01) return '< 0,01 zł';
+    return `${pln.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
+}
+
 function nearBottom() {
     return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
 }
@@ -78,6 +85,8 @@ export default function Assistant() {
     const [status, setStatus] = useState('');
     const [historyOpen, setHistoryOpen] = useState(false);
     const [modelOpen, setModelOpen] = useState(false);
+    const [usdPln, setUsdPln] = useState(3.7);
+    const [monthCost, setMonthCost] = useState(0);
 
     const inputRef = useRef(null);
     const fileRef = useRef(null);
@@ -100,6 +109,8 @@ export default function Assistant() {
         setEnabled(!!data.enabled);
         setModels(data.models || []);
         setChats(data.chats || []);
+        if (data.usd_pln) setUsdPln(data.usd_pln);
+        setMonthCost(data.month_cost_usd || 0);
         return data;
     }, []);
 
@@ -244,7 +255,8 @@ export default function Assistant() {
                             action: { label: 'Cofnij', onClick: () => apiRequest(`/tasks/delete.php?id=${data.id}`, 'DELETE').catch(() => {}) },
                         });
                     } else if (name === 'done') {
-                        update((m) => ({ ...m, pending: false, model: data.model, modelLabel: data.model_label }));
+                        update((m) => ({ ...m, pending: false, model: data.model, modelLabel: data.model_label, cost_usd: data.cost_usd }));
+                        if (data.usd_pln) setUsdPln(data.usd_pln);
                         if (data.chat_id) setChatId(data.chat_id);
                         refreshChats().catch(() => {});
                     } else if (name === 'error') {
@@ -424,6 +436,11 @@ export default function Assistant() {
                                         {(m.modelLabel || m.model) && (
                                             <span className="text-[11px]">{m.modelLabel || models.find((x) => x.id === m.model)?.label || m.model}</span>
                                         )}
+                                        {m.cost_usd > 0 && (
+                                            <span className="text-[11px]">
+                                                · <span className="amount">{formatCost(m.cost_usd, usdPln)}</span>
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -535,6 +552,9 @@ export default function Assistant() {
             </Sheet>
 
             <Sheet open={historyOpen} onClose={() => setHistoryOpen(false)} title="Historia rozmów" description="Wybierz, żeby pisać dalej w starym wątku.">
+                <p className="text-sm text-ink-soft -mt-1 mb-3">
+                    Asystent w tym miesiącu: <strong className="amount text-ink">{formatCost(monthCost, usdPln)}</strong>
+                </p>
                 {chats.length === 0 ? (
                     <p className="text-sm text-ink-soft py-4">Jeszcze nie ma zapisanych rozmów.</p>
                 ) : (
@@ -547,7 +567,15 @@ export default function Assistant() {
                                     className={`flex-1 min-w-0 text-left rounded-xl px-3 py-2.5 hover:bg-ink/5 ${c.id === chatId ? 'bg-ink/5' : ''}`}
                                 >
                                     <p className="text-sm font-medium text-ink truncate">{c.title || 'Rozmowa'}</p>
-                                    <p className="text-xs text-ink-muted">{relativeDay(c.updated_at)}</p>
+                                    <p className="text-xs text-ink-muted">
+                                        {relativeDay(c.updated_at)}
+                                        {c.cost_usd > 0 && (
+                                            <>
+                                                {' · '}
+                                                <span className="amount">{formatCost(c.cost_usd, usdPln)}</span>
+                                            </>
+                                        )}
+                                    </p>
                                 </button>
                                 <button
                                     type="button"

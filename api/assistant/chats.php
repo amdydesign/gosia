@@ -2,8 +2,10 @@
 /**
  * "Asystent" - conversations.
  *
- * GET    /api/assistant/chats.php          -> { enabled, models: [{ id, label, hint }], default_model, chats: [{ id, title, model, updated_at }] }
- * GET    /api/assistant/chats.php?id=12    -> { chat: { id, title, model }, messages: [{ id, role, text, images, sources, model, created_at }] }
+ * GET    /api/assistant/chats.php          -> { enabled, models: [{ id, label, hint }], default_model, chats: [{ id, title, model, updated_at, cost_usd }],
+ *                                              month_cost_usd, usd_pln }
+ * GET    /api/assistant/chats.php?id=12    -> { chat: { id, title, model, cost_usd }, messages: [{ id, role, text, images, sources, model, cost_usd, created_at }], usd_pln }
+ * Costs: USD from the API's token counts (with cache and web searches); usd_pln converts for the app.
  * DELETE /api/assistant/chats.php?id=12    -> to the bin for 30 days (the app offers "Cofnij")
  * POST   /api/assistant/chats.php          { restore: 12 } -> back from the bin
  */
@@ -21,6 +23,7 @@ try {
     $conn = $db->getConnection();
     Schema::ensure($conn, 'assistant_chats');
     Schema::ensure($conn, 'assistant_messages');
+    Schema::ensureColumns($conn, 'assistant_messages');
     $method = $_SERVER['REQUEST_METHOD'];
     $id = (int) ($_GET['id'] ?? 0);
 
@@ -31,11 +34,18 @@ try {
         if (!$chat) {
             Response::notFound('Tej rozmowy już nie ma');
         }
-        $stmt = $conn->prepare("SELECT id, kind, content, model, created_at FROM assistant_messages WHERE chat_id = :chat_id ORDER BY id");
+        $stmt = $conn->prepare("SELECT id, kind, content, model, cost_usd, created_at FROM assistant_messages WHERE chat_id = :chat_id ORDER BY id");
         $stmt->execute(['chat_id' => $id]);
+        $messages = Assistant::bubbles($stmt->fetchAll(PDO::FETCH_ASSOC));
         Response::success([
-            'chat' => ['id' => (int) $chat['id'], 'title' => $chat['title'], 'model' => Assistant::modelId($chat['model'])],
-            'messages' => Assistant::bubbles($stmt->fetchAll(PDO::FETCH_ASSOC)),
+            'chat' => [
+                'id' => (int) $chat['id'],
+                'title' => $chat['title'],
+                'model' => Assistant::modelId($chat['model']),
+                'cost_usd' => round(array_sum(array_column($messages, 'cost_usd')), 6),
+            ],
+            'messages' => $messages,
+            'usd_pln' => Assistant::usdToPln(),
         ]);
     }
 
@@ -43,11 +53,24 @@ try {
         // the bin keeps deleted chats for 30 days
         $conn->prepare("DELETE FROM assistant_chats WHERE user_id = :user_id AND deleted_at IS NOT NULL AND deleted_at < DATE_SUB(NOW(), INTERVAL 30 DAY)")
             ->execute(['user_id' => $userId]);
-        $stmt = $conn->prepare("SELECT id, title, model, updated_at FROM assistant_chats WHERE user_id = :user_id AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 40");
+        $stmt = $conn->prepare("
+            SELECT c.id, c.title, c.model, c.updated_at, COALESCE(SUM(m.cost_usd), 0) AS cost_usd
+            FROM assistant_chats c
+            LEFT JOIN assistant_messages m ON m.chat_id = c.id
+            WHERE c.user_id = :user_id AND c.deleted_at IS NULL
+            GROUP BY c.id, c.title, c.model, c.updated_at
+            ORDER BY c.updated_at DESC, c.id DESC
+            LIMIT 40
+        ");
         $stmt->execute(['user_id' => $userId]);
         $chats = array_map(function ($row) {
-            return ['id' => (int) $row['id'], 'title' => $row['title'], 'model' => $row['model'], 'updated_at' => $row['updated_at']];
+            return ['id' => (int) $row['id'], 'title' => $row['title'], 'model' => $row['model'], 'updated_at' => $row['updated_at'], 'cost_usd' => round((float) $row['cost_usd'], 6)];
         }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+        // spent this month - deleted chats too (the money is gone either way)
+        $stmt = $conn->prepare("SELECT COALESCE(SUM(cost_usd), 0) FROM assistant_messages WHERE user_id = :user_id AND created_at >= :month");
+        $stmt->execute(['user_id' => $userId, 'month' => date('Y-m-01 00:00:00')]);
+        $monthCost = round((float) $stmt->fetchColumn(), 6);
 
         AiSettings::apply($conn, $userId);
         Response::success([
@@ -55,6 +78,8 @@ try {
             'models' => Assistant::models(),
             'default_model' => Assistant::DEFAULT_MODEL,
             'chats' => $chats,
+            'month_cost_usd' => $monthCost,
+            'usd_pln' => Assistant::usdToPln(),
         ]);
     }
 

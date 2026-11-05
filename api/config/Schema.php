@@ -273,6 +273,8 @@ class Schema
                 kind VARCHAR(10) NOT NULL,
                 content MEDIUMTEXT NOT NULL,
                 model VARCHAR(40) NULL,
+                cost_usd DECIMAL(10, 6) NULL,
+                usage_json TEXT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (chat_id) REFERENCES assistant_chats(id) ON DELETE CASCADE,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -326,6 +328,9 @@ class Schema
         // What to make for the brand: JSON [{label: "Reels IG", count: 2, done: 1, due: "2026-11-05"}]
         // the system prompt + tools a chat started with - kept for good (newer models bind thinking to it)
         'assistant_chats.prompt_version' => "ALTER TABLE assistant_chats ADD COLUMN prompt_version SMALLINT NOT NULL DEFAULT 1",
+        // what each reply cost (USD, from the API's token counts) - totals per chat and per month
+        'assistant_messages.cost_usd' => "ALTER TABLE assistant_messages ADD COLUMN cost_usd DECIMAL(10, 6) NULL",
+        'assistant_messages.usage_json' => "ALTER TABLE assistant_messages ADD COLUMN usage_json TEXT NULL",
         'collaborations.deliverables' => "ALTER TABLE collaborations ADD COLUMN deliverables TEXT NULL",
     ];
 

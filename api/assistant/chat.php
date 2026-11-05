@@ -11,7 +11,7 @@
  *   text   { text }            next piece of the answer
  *   source { url, title }      a web page the answer cites
  *   task   { id, title, due_date, remind_at }   a task was added (the app offers "Cofnij")
- *   done   { chat_id, title, model, model_label }
+ *   done   { chat_id, title, model, model_label, cost_usd (this reply), chat_cost_usd, usd_pln }
  *   error  { message }         nothing was saved - her message can be sent again
  *
  * The reply is saved only when it is complete; closing the app mid-answer does not stop it.
@@ -63,6 +63,7 @@ try {
     Schema::ensure($conn, 'assistant_chats');
     Schema::ensure($conn, 'assistant_messages');
     Schema::ensureColumn($conn, 'assistant_chats', 'prompt_version');
+    Schema::ensureColumns($conn, 'assistant_messages');
 
     // History of this chat - replayed exactly as stored
     $chatId = (int) ($input['chat_id'] ?? 0);
@@ -149,7 +150,7 @@ try {
             ->execute(['user_id' => $userId, 'title' => $title, 'model' => $model, 'version' => $version]);
         $chatId = (int) $conn->lastInsertId();
     }
-    $insert = $conn->prepare("INSERT INTO assistant_messages (chat_id, user_id, kind, content, model) VALUES (:chat_id, :user_id, :kind, :content, :model)");
+    $insert = $conn->prepare("INSERT INTO assistant_messages (chat_id, user_id, kind, content, model, cost_usd, usage_json) VALUES (:chat_id, :user_id, :kind, :content, :model, :cost, :usage)");
     $rows = array_merge([['kind' => 'user', 'message' => $userMessage, 'model' => null]], $result['messages']);
     foreach ($rows as $row) {
         $insert->execute([
@@ -158,6 +159,8 @@ try {
             'kind' => $row['kind'],
             'content' => json_encode($row['message']->content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'model' => $row['model'],
+            'cost' => isset($row['cost']) ? $row['cost'] : null,
+            'usage' => isset($row['usage']) ? json_encode($row['usage']) : null,
         ]);
     }
     $conn->prepare("UPDATE assistant_chats SET model = :model, updated_at = NOW() WHERE id = :id")
@@ -169,8 +172,13 @@ try {
         $stmt->execute(['id' => $chatId]);
         $title = (string) $stmt->fetchColumn();
     }
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(cost_usd), 0) FROM assistant_messages WHERE chat_id = :id");
+    $stmt->execute(['id' => $chatId]);
     $emit('done', [
         'chat_id' => $chatId,
+        'cost_usd' => $result['cost'],
+        'chat_cost_usd' => round((float) $stmt->fetchColumn(), 6),
+        'usd_pln' => Assistant::usdToPln(),
         'title' => $title,
         'model' => $result['model'],
         'model_label' => Assistant::modelLabel($result['model']),

@@ -22,6 +22,8 @@ class Assistant
 {
     const URL = 'https://api.anthropic.com/v1/messages';
     const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+    // lets a thinking block that no longer matches its conversation be dropped instead of failing the request
+    const BINDING_BETA = 'thinking-binding-controls-2026-08-01';
     const DEFAULT_MODEL = 'claude-opus-5-5';
     const MAX_TOKENS = 64000;
     const MAX_STEPS = 16;
@@ -64,6 +66,59 @@ class Assistant
             'fallbacks' => true,
         ],
     ];
+
+    /**
+     * USD per million tokens: input, output, cache read (5-minute cache writes cost 1.25x input).
+     * Includes the models a refusal may fall back to. 'long' = price above 100K prompt tokens.
+     */
+    const PRICES = [
+        'claude-haiku-5-5' => ['in' => 0.10, 'out' => 0.50, 'read' => 0.01, 'long' => ['in' => 0.50, 'out' => 2.50, 'read' => 0.05]],
+        'claude-sonnet-5-5' => ['in' => 2.00, 'out' => 10.00, 'read' => 0.20],
+        'claude-opus-5-5' => ['in' => 4.00, 'out' => 20.00, 'read' => 0.20],
+        'claude-sonnet-5' => ['in' => 2.00, 'out' => 10.00, 'read' => 0.20],
+        'claude-opus-5' => ['in' => 5.00, 'out' => 25.00, 'read' => 0.50],
+        'claude-opus-4-8' => ['in' => 5.00, 'out' => 25.00, 'read' => 0.50],
+        'claude-fable-5-1' => ['in' => 10.00, 'out' => 50.00, 'read' => 0.25],
+    ];
+    const WEB_SEARCH_USD = 0.01; // $10 per 1000 searches
+
+    /** Dollars to złoty for the app (approximate; ASSISTANT_USD_PLN in api/.env overrides). */
+    public static function usdToPln()
+    {
+        $rate = (float) str_replace(',', '.', (string) ($_ENV['ASSISTANT_USD_PLN'] ?? ''));
+        return $rate > 0 ? $rate : 3.70;
+    }
+
+    /**
+     * Cost in USD of one API response from its usage. After a refusal fallback usage.iterations
+     * lists every attempt (each billed at its own model's price) - those are summed instead.
+     */
+    public static function cost($model, $usage)
+    {
+        $usage = json_decode(json_encode($usage), true);
+        if (!is_array($usage)) {
+            return 0.0;
+        }
+        $iterations = isset($usage['iterations']) && is_array($usage['iterations']) ? $usage['iterations'] : [];
+        $parts = count($iterations) > 1 ? $iterations : [$usage];
+        $total = 0.0;
+        foreach ($parts as $part) {
+            if (!is_array($part)) {
+                continue;
+            }
+            $price = self::PRICES[$part['model'] ?? $model] ?? (self::PRICES[$model] ?? self::PRICES[self::DEFAULT_MODEL]);
+            $in = (int) ($part['input_tokens'] ?? 0);
+            $write = (int) ($part['cache_creation_input_tokens'] ?? 0);
+            $read = (int) ($part['cache_read_input_tokens'] ?? 0);
+            $out = (int) ($part['output_tokens'] ?? 0);
+            if (isset($price['long']) && $in + $write + $read > 100000) {
+                $price = $price['long'];
+            }
+            $total += ($in * $price['in'] + $write * $price['in'] * 1.25 + $read * $price['read'] + $out * $price['out']) / 1000000;
+        }
+        $searches = (int) ($usage['server_tool_use']['web_search_requests'] ?? 0);
+        return round($total + $searches * self::WEB_SEARCH_USD, 6);
+    }
 
     public static function models()
     {
@@ -181,13 +236,14 @@ PROMPT;
         }
         $model = self::modelId($model);
         $version = self::promptVersion($version);
-        $options = ['version' => $version, 'web' => true, 'fetch' => $version >= 2, 'fallbacks' => self::MODELS[$model]['fallbacks'], 'eager' => true, 'autocache' => true];
+        $options = ['version' => $version, 'web' => true, 'fetch' => $version >= 2, 'fallbacks' => self::MODELS[$model]['fallbacks'], 'eager' => true, 'autocache' => true, 'binding' => true];
 
         $messages = $history;
         $new = [];
         $served = $model;
         $needBreak = false;
         $hasText = false;
+        $totalCost = 0.0;
 
         for ($step = 0; $step < self::MAX_STEPS; $step++) {
             $last = $step === self::MAX_STEPS - 1;
@@ -212,8 +268,10 @@ PROMPT;
                 throw new RuntimeException('Model nie odpowie na to pytanie. Spróbuj sformułować je inaczej albo przełącz model.');
             }
 
+            $cost = self::cost($served, $result['usage']);
+            $totalCost += $cost;
             $messages[] = $message;
-            $new[] = ['kind' => 'assistant', 'message' => $message, 'model' => $served];
+            $new[] = ['kind' => 'assistant', 'message' => $message, 'model' => $served, 'cost' => $cost, 'usage' => $result['usage']];
 
             if ($stop === 'pause_turn') {
                 // a long web search paused - send it back as is and let it carry on
@@ -245,7 +303,7 @@ PROMPT;
             $new[] = ['kind' => 'tool', 'message' => $toolMessage, 'model' => null];
         }
 
-        return ['messages' => $new, 'model' => $served];
+        return ['messages' => $new, 'model' => $served, 'cost' => round($totalCost, 6)];
     }
 
     /**
@@ -320,8 +378,22 @@ PROMPT;
             'output_config' => ['effort' => $config['effort']],
             'messages' => $messages,
         ];
+        if (!empty($options['strip_empty'])) {
+            // only after the API refused them: empty text blocks out of earlier replies
+            foreach ($body['messages'] as $k => $message) {
+                if (($message->role ?? '') === 'assistant' && is_array($message->content)) {
+                    $body['messages'][$k] = (object) ['role' => 'assistant', 'content' => array_values(array_filter($message->content, function ($b) {
+                        return ($b->type ?? '') !== 'text' || (string) ($b->text ?? '') !== '';
+                    }))];
+                }
+            }
+        }
         if (!empty($options['autocache'])) {
             $body['cache_control'] = ['type' => 'ephemeral'];
+        }
+        if (!empty($options['binding'])) {
+            // safety net: a mismatched old thinking block is skipped, the chat keeps working
+            $body['thinking']['block_binding'] = ['prefix_mismatch_behavior' => 'drop_block'];
         }
         if ($noTools) {
             // last step of a long loop: answer with what is known
@@ -341,10 +413,17 @@ PROMPT;
      */
     private static function stream($key, $model, array $messages, array &$options, $noTools, callable $emit)
     {
-        for ($attempt = 0; $attempt < 5; $attempt++) {
+        for ($attempt = 0; $attempt < 9; $attempt++) {
             $headers = ['Content-Type: application/json', 'x-api-key: ' . $key, 'anthropic-version: 2023-06-01'];
+            $betas = [];
             if (!empty($options['fallbacks'])) {
-                $headers[] = 'anthropic-beta: ' . self::FALLBACK_BETA;
+                $betas[] = self::FALLBACK_BETA;
+            }
+            if (!empty($options['binding'])) {
+                $betas[] = self::BINDING_BETA;
+            }
+            if ($betas) {
+                $headers[] = 'anthropic-beta: ' . implode(',', $betas);
             }
             $body = json_encode(self::buildBody($model, $messages, $options, $noTools), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($body === false) {
@@ -399,6 +478,14 @@ PROMPT;
                 $lower = strtolower($detail);
                 if (!empty($options['fallbacks']) && strpos($lower, 'fallback') !== false) {
                     $options['fallbacks'] = false;
+                    continue;
+                }
+                if (empty($options['strip_empty']) && strpos($lower, 'non-empty') !== false) {
+                    $options['strip_empty'] = true;
+                    continue;
+                }
+                if (!empty($options['binding']) && (strpos($lower, 'block_binding') !== false || strpos($lower, 'thinking-binding') !== false)) {
+                    $options['binding'] = false;
                     continue;
                 }
                 if (!empty($options['eager']) && strpos($lower, 'eager') !== false) {
@@ -493,10 +580,11 @@ PROMPT;
                 continue;
             }
             if (!$current) {
-                $current = ['id' => (int) $row['id'], 'role' => 'assistant', 'text' => '', 'sources' => [], 'model' => $row['model'], 'created_at' => $row['created_at']];
+                $current = ['id' => (int) $row['id'], 'role' => 'assistant', 'text' => '', 'sources' => [], 'model' => $row['model'], 'cost_usd' => 0.0, 'created_at' => $row['created_at']];
                 $needBreak = false;
             }
             $current['model'] = $row['model'] ?: $current['model'];
+            $current['cost_usd'] = round($current['cost_usd'] + (float) ($row['cost_usd'] ?? 0), 6);
             foreach ($content as $block) {
                 $type = $block->type ?? '';
                 if ($type === 'text') {
@@ -568,6 +656,7 @@ class AssistantStreamParser
     private $stopReason = null;
     private $model = null;
     private $invalid = [];
+    private $usage = [];
 
     public function __construct(callable $emit)
     {
@@ -601,6 +690,13 @@ class AssistantStreamParser
         switch ($event->type ?? '') {
             case 'message_start':
                 $this->model = $event->message->model ?? null;
+                if (isset($event->message->usage)) {
+                    $this->usage = (array) json_decode(json_encode($event->message->usage), true);
+                }
+                // dropped thinking blocks (drop_block) - kept with the usage so a broken history can be traced
+                if (!empty($event->message->input_transformations)) {
+                    $this->usage['input_transformations'] = json_decode(json_encode($event->message->input_transformations), true);
+                }
                 break;
             case 'content_block_start':
                 $block = $event->content_block;
@@ -645,6 +741,10 @@ class AssistantStreamParser
                     case 'input_json_delta':
                         $this->json[$i] = ($this->json[$i] ?? '') . $delta->partial_json;
                         break;
+                    default:
+                        // a delta this parser does not know - noted, so a changed history can be traced
+                        $this->usage['unknown_deltas'][$delta->type ?? '?'] = true;
+                        break;
                     case 'citations_delta':
                         if (!isset($block->citations) || !is_array($block->citations)) {
                             $block->citations = [];
@@ -662,7 +762,9 @@ class AssistantStreamParser
                 $i = $event->index;
                 if (isset($this->json[$i], $this->blocks[$i])) {
                     $raw = trim($this->json[$i]);
-                    $input = $raw === '' ? new stdClass() : json_decode($raw);
+                    // server tools may send the whole input at block start and no deltas - keep it as sent
+                    $given = $this->blocks[$i]->input ?? null;
+                    $input = $raw === '' ? (is_object($given) ? $given : new stdClass()) : json_decode($raw);
                     if (!is_object($input)) {
                         // cut off or broken arguments: replay a valid empty input, tell the model it failed
                         $input = new stdClass();
@@ -686,6 +788,14 @@ class AssistantStreamParser
                 if (isset($event->delta->stop_reason)) {
                     $this->stopReason = $event->delta->stop_reason;
                 }
+                // final counts (output tokens, searches) - they replace the opening estimate
+                if (isset($event->usage)) {
+                    foreach ((array) json_decode(json_encode($event->usage), true) as $k => $v) {
+                        if ($v !== null) {
+                            $this->usage[$k] = $v;
+                        }
+                    }
+                }
                 break;
             case 'message_stop':
                 $this->finished = true;
@@ -699,16 +809,14 @@ class AssistantStreamParser
     public function result()
     {
         ksort($this->blocks);
-        // an empty text block cannot be sent back
-        $content = array_values(array_filter($this->blocks, function ($b) {
-            return ($b->type ?? '') !== 'text' || (string) ($b->text ?? '') !== '';
-        }));
+        // exactly what came back - any change to it breaks the thinking binding on the next request
+        $content = array_values($this->blocks);
         // cut off at max_tokens: an unfinished tool call cannot be replayed
         if ($this->stopReason === 'max_tokens') {
             $content = array_values(array_filter($content, function ($b) {
                 return !in_array($b->type ?? '', ['tool_use', 'server_tool_use'], true) || isset($b->input);
             }));
         }
-        return ['content' => $content, 'stop_reason' => $this->stopReason, 'model' => $this->model, 'invalid' => $this->invalid];
+        return ['content' => $content, 'stop_reason' => $this->stopReason, 'model' => $this->model, 'invalid' => $this->invalid, 'usage' => $this->usage];
     }
 }
