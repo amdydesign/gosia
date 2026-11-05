@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, Eye, EyeOff, Menu, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Eye, EyeOff, Menu, Plus, Sparkles } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 import { usePreferences } from '../../context/PreferencesContext';
 import Logo from '../ui/Logo';
@@ -13,7 +13,9 @@ import { NAV_ITEMS, activeMoreItem } from './navItems';
  */
 export default function TopBar({ meta, onOpenProfile, onAdd, onOpenMenu }) {
     const navigate = useNavigate();
-    const more = activeMoreItem(useLocation().pathname);
+    const { pathname } = useLocation();
+    const more = activeMoreItem(pathname);
+    const onAssistant = pathname === '/assistant';
     const { badges } = useDashboard();
     const { amountsHidden, toggleAmounts } = usePreferences();
     const { user } = useAuth();
@@ -32,6 +34,21 @@ export default function TopBar({ meta, onOpenProfile, onAdd, onOpenMenu }) {
         >
             {amountsHidden ? <Eye size={19} /> : <EyeOff size={19} />}
         </button>
+    );
+
+    // Quiet way into "Asystent" - no border, muted until used
+    const assistantButton = (
+        <Link
+            to="/assistant"
+            aria-label="Asystent"
+            title="Asystent"
+            aria-current={onAssistant ? 'page' : undefined}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+                onAssistant ? 'bg-ink/5 text-primary-600' : 'text-ink-muted hover:text-ink hover:bg-ink/5'
+            }`}
+        >
+            <Sparkles size={18} />
+        </Link>
     );
 
     const avatar = (
@@ -92,6 +109,7 @@ export default function TopBar({ meta, onOpenProfile, onAdd, onOpenMenu }) {
                     </button>
                 </nav>
                 <div className="flex-1" />
+                {assistantButton}
                 {privacyButton}
                 <button type="button" onClick={onAdd} className="btn btn-primary !rounded-full !h-11 !px-5">
                     <Plus size={17} strokeWidth={2.5} /> Dodaj
@@ -120,6 +138,7 @@ export default function TopBar({ meta, onOpenProfile, onAdd, onOpenMenu }) {
                 ) : (
                     <h1 className="flex-1 min-w-0 font-display text-xl font-semibold tracking-tight text-ink truncate">{meta.title}</h1>
                 )}
+                {assistantButton}
                 {privacyButton}
                 {avatar}
             </div>

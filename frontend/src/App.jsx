@@ -15,6 +15,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Statistics from './pages/Statistics';
 import Calendar from './pages/Calendar';
+import Assistant from './pages/Assistant';
 import SocialCallback from './pages/SocialCallback';
 import Collaborations from './pages/collaborations/Collaborations';
 import Purchases from './pages/purchases/Purchases';
@@ -81,6 +82,7 @@ function App() {
 
                                             <Route path="/statistics" element={<Statistics />} />
                                             <Route path="/calendar" element={<Calendar />} />
+                                            <Route path="/assistant" element={<Assistant />} />
                                         </Route>
 
                                         <Route path="*" element={<Navigate to="/" replace />} />

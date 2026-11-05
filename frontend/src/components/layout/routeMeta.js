@@ -13,6 +13,7 @@ const ROUTES = [
     { pattern: '/documents', title: 'Dokumenty', subtitle: 'Umowy i dokumenty poufne', root: true, section: 'documents' },
     { pattern: '/share', title: 'Udostępnij', subtitle: 'Rolki dla marek — wyślij link', root: true, section: 'share' },
     { pattern: '/calendar', title: 'Kalendarz', subtitle: 'Zadania, płatności i terminy', root: true, section: 'calendar' },
+    { pattern: '/assistant', title: 'Asystent', subtitle: 'Czat z Claude o Twojej pracy', root: true, section: 'assistant' },
     { pattern: '/statistics', title: 'Statystyki', root: true, section: 'statistics' },
     { pattern: '/dashboard', title: 'Start', root: true, section: 'dashboard' },
     { pattern: '/', title: 'Start', root: true, section: 'dashboard' },

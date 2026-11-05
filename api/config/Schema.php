@@ -248,6 +248,36 @@ class Schema
                 INDEX idx_user_created (user_id, created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ",
+        // "Asystent": chat with Claude. deleted_at = in the bin for 30 days ("Cofnij")
+        'assistant_chats' => "
+            CREATE TABLE IF NOT EXISTS assistant_chats (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                title VARCHAR(120) NOT NULL DEFAULT '',
+                model VARCHAR(40) NOT NULL DEFAULT '',
+                deleted_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_updated (user_id, deleted_at, updated_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
+        // Every API message exactly as sent / received (content = JSON blocks), replayed unchanged.
+        // kind: user (her message) | assistant (model reply) | tool (tool results sent back)
+        'assistant_messages' => "
+            CREATE TABLE IF NOT EXISTS assistant_messages (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                chat_id INT NOT NULL,
+                user_id INT NOT NULL,
+                kind VARCHAR(10) NOT NULL,
+                content MEDIUMTEXT NOT NULL,
+                model VARCHAR(40) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (chat_id) REFERENCES assistant_chats(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_chat (chat_id, id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ",
         'social_refresh_log' => "
             CREATE TABLE IF NOT EXISTS social_refresh_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,
