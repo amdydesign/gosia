@@ -283,6 +283,7 @@ PROMPT;
             }
 
             $results = [];
+            $toolCost = 0.0;
             foreach ($message->content as $block) {
                 if (($block->type ?? '') !== 'tool_use') {
                     continue;
@@ -291,6 +292,11 @@ PROMPT;
                 $input = isset($result['invalid'][$block->id]) ? null : json_decode(json_encode($block->input ?? new stdClass()), true);
                 [$output, $isError] = AssistantTools::run($conn, $userId, $block->name, $input, $events);
                 foreach ($events as $event) {
+                    if ($event['type'] === 'cost') {
+                        // a tool that called the API itself (style profile) - its price counts for this reply
+                        $toolCost += self::cost($event['model'], $event['usage']);
+                        continue;
+                    }
                     $emit($event['type'], $event);
                 }
                 $item = (object) ['type' => 'tool_result', 'tool_use_id' => $block->id, 'content' => $output];
@@ -301,7 +307,8 @@ PROMPT;
             }
             $toolMessage = (object) ['role' => 'user', 'content' => $results];
             $messages[] = $toolMessage;
-            $new[] = ['kind' => 'tool', 'message' => $toolMessage, 'model' => null];
+            $new[] = ['kind' => 'tool', 'message' => $toolMessage, 'model' => null, 'cost' => $toolCost > 0 ? round($toolCost, 6) : null];
+            $totalCost += $toolCost;
         }
 
         return ['messages' => $new, 'model' => $served, 'cost' => round($totalCost, 6)];
@@ -575,6 +582,12 @@ PROMPT;
                     }
                 }
                 $out[] = ['id' => (int) $row['id'], 'role' => 'user', 'text' => $text, 'images' => $images, 'created_at' => $row['created_at']];
+                continue;
+            }
+            if ($row['kind'] === 'tool') {
+                if ($current) {
+                    $current['cost_usd'] = round($current['cost_usd'] + (float) ($row['cost_usd'] ?? 0), 6);
+                }
                 continue;
             }
             if ($row['kind'] !== 'assistant') {

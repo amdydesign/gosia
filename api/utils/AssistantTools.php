@@ -135,6 +135,7 @@ class AssistantTools
                     'type' => 'object',
                     'properties' => [
                         'rodzaj' => ['type' => 'string', 'enum' => ['scenariusz', 'opis_posta', 'wiadomosc', 'inne'], 'description' => 'Co będziesz pisać'],
+                        'odswiez' => ['type' => 'boolean', 'description' => 'true tylko gdy Gosia prosi o odświeżenie / ponowne nauczenie się jej stylu'],
                     ],
                 ],
             ],
@@ -207,7 +208,7 @@ class AssistantTools
                 case 'edytuj_pomysl':
                     return [self::json(self::editIdea($conn, $userId, $input, $events)), false];
                 case 'moj_styl':
-                    return [self::styleGuide($conn, $userId, $input), false];
+                    return [self::styleGuide($conn, $userId, $input, $events), false];
                 case 'zapamietaj_styl':
                     return [self::json(self::rememberStyle($conn, $userId, $input, $events)), false];
             }
@@ -624,14 +625,27 @@ class AssistantTools
     }
 
     /** Plain text, not JSON - the scripts read better as they are. */
-    private static function styleGuide(PDO $conn, $userId, array $input)
+    private static function styleGuide(PDO $conn, $userId, array $input, array &$events)
     {
-        [$examples] = reelExamples($conn, $userId);
+        // the saved profile + her best few scripts, instead of every script each time
+        [$profile, $examples, $made, $usage] = styleProfile($conn, $userId, !empty($input['odswiez']));
+        if ($usage) {
+            $events[] = ['type' => 'cost', 'model' => $usage['model'] ?? STYLE_PROFILE_MODEL, 'usage' => $usage];
+        }
         $kind = $input['rodzaj'] ?? 'scenariusz';
         $parts = [];
-        $parts[] = $examples !== ''
-            ? $examples . "Tak Gosia mówi i pisze. Weź z tego słownictwo, długość zdań, sposób zaczynania i kończenia. Nie kopiuj całych zdań."
-            : 'Gosia nie ma jeszcze zapisanych scenariuszy - pisz potocznie, w pierwszej osobie, forma żeńska, jak do koleżanki.';
+        if ($profile) {
+            $parts[] = styleProfileText($profile);
+            $parts[] = "Jej najlepsze rolki w całości:\n\n" . $examples
+                . "Tak Gosia mówi i pisze. Weź z tego słownictwo, długość zdań, sposób zaczynania i kończenia. Nie kopiuj całych zdań.";
+            if ($made) {
+                $parts[] = '(Profil stylu został właśnie odświeżony na podstawie jej scenariuszy.)';
+            }
+        } else {
+            $parts[] = $examples !== ''
+                ? $examples . "Tak Gosia mówi i pisze. Weź z tego słownictwo, długość zdań, sposób zaczynania i kończenia. Nie kopiuj całych zdań."
+                : 'Gosia nie ma jeszcze zapisanych scenariuszy - pisz potocznie, w pierwszej osobie, forma żeńska, jak do koleżanki.';
+        }
         if ($kind === 'scenariusz') {
             $parts[] = "Scenariusz rolki: sam tekst do powiedzenia do kamery, mocne pierwsze zdanie w pierwszych 2 sekundach, zwykłe akapity, bez nagłówków, emoji, hashtagów, opisów ujęć i wskazówek w nawiasach. Zwykle 60-150 słów, chyba że jej scenariusze są krótsze albo prosi o inną długość.";
         } elseif ($kind === 'wiadomosc') {
