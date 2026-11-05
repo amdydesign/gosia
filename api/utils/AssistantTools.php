@@ -13,6 +13,8 @@ require_once __DIR__ . '/../documents/helpers.php';
 require_once __DIR__ . '/TodayAgenda.php';
 require_once __DIR__ . '/CapturePrompts.php';
 require_once __DIR__ . '/TaskReminder.php';
+require_once __DIR__ . '/ReelPrompts.php';
+require_once __DIR__ . '/WritingStyle.php';
 
 class AssistantTools
 {
@@ -126,6 +128,25 @@ class AssistantTools
                     'required' => ['id'],
                 ],
             ],
+            [
+                'name' => 'moj_styl',
+                'description' => 'Styl Gosi: jej najlepsze scenariusze rolek (najpierw te z największą liczbą wyświetleń), jej uwagi do stylu i zasady, żeby tekst nie brzmiał jak AI. ZAWSZE wywołaj przed napisaniem lub poprawieniem scenariusza rolki, opisu posta, captionu, maila, wiadomości do marki albo innego tekstu w jej imieniu - i pisz potem dokładnie jej głosem.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'rodzaj' => ['type' => 'string', 'enum' => ['scenariusz', 'opis_posta', 'wiadomosc', 'inne'], 'description' => 'Co będziesz pisać'],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'zapamietaj_styl',
+                'description' => 'Zapamiętuje na stałe uwagę Gosi o jej stylu pisania (np. "nie używam słowa stylówka", "zawsze kończę pytaniem do widzów", "piszę krócej"). Używaj, gdy poprawia Twój tekst albo mówi, jak pisze - jedna krótka uwaga na wywołanie, jej słowami.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => ['uwaga' => ['type' => 'string', 'description' => 'Krótka, konkretna uwaga']],
+                    'required' => ['uwaga'],
+                ],
+            ],
         ];
         // stream tool arguments as they are written; run() checks them before use
         foreach ($tools as &$tool) {
@@ -147,6 +168,8 @@ class AssistantTools
             'dodaj_zadanie' => 'Dodaję zadanie…',
             'dodaj_pomysl' => 'Zapisuję w Pomysłach…',
             'edytuj_pomysl' => 'Poprawiam pomysł…',
+            'moj_styl' => 'Czytam Twoje scenariusze…',
+            'zapamietaj_styl' => 'Zapamiętuję…',
             'web_search' => 'Szukam w internecie…',
             'web_fetch' => 'Czytam stronę…',
         ];
@@ -183,6 +206,10 @@ class AssistantTools
                     return [self::json(self::addIdea($conn, $userId, $input, $events)), false];
                 case 'edytuj_pomysl':
                     return [self::json(self::editIdea($conn, $userId, $input, $events)), false];
+                case 'moj_styl':
+                    return [self::styleGuide($conn, $userId, $input), false];
+                case 'zapamietaj_styl':
+                    return [self::json(self::rememberStyle($conn, $userId, $input, $events)), false];
             }
             return [self::json(['blad' => 'Nie ma takiego narzędzia.']), true];
         } catch (InvalidArgumentException $e) {
@@ -594,6 +621,42 @@ class AssistantTools
             'planned_for' => $before['planned_for'],
         ]];
         return ['zmieniono' => true, 'id' => $id, 'tytul' => $title];
+    }
+
+    /** Plain text, not JSON - the scripts read better as they are. */
+    private static function styleGuide(PDO $conn, $userId, array $input)
+    {
+        [$examples] = reelExamples($conn, $userId);
+        $kind = $input['rodzaj'] ?? 'scenariusz';
+        $parts = [];
+        $parts[] = $examples !== ''
+            ? $examples . "Tak Gosia mówi i pisze. Weź z tego słownictwo, długość zdań, sposób zaczynania i kończenia. Nie kopiuj całych zdań."
+            : 'Gosia nie ma jeszcze zapisanych scenariuszy - pisz potocznie, w pierwszej osobie, forma żeńska, jak do koleżanki.';
+        if ($kind === 'scenariusz') {
+            $parts[] = "Scenariusz rolki: sam tekst do powiedzenia do kamery, mocne pierwsze zdanie w pierwszych 2 sekundach, zwykłe akapity, bez nagłówków, emoji, hashtagów, opisów ujęć i wskazówek w nawiasach. Zwykle 60-150 słów, chyba że jej scenariusze są krótsze albo prosi o inną długość.";
+        } elseif ($kind === 'wiadomosc') {
+            $parts[] = "Wiadomość lub mail: jej głosem, ale do marki - uprzejmie, konkretnie, krótko, bez korpo-języka i bez przesadnej słodyczy.";
+        }
+        $notes = styleNotesText($conn, $userId);
+        if ($notes !== '') {
+            $parts[] = $notes;
+        }
+        $parts[] = humanStyleRules();
+        return implode("\n\n", $parts);
+    }
+
+    private static function rememberStyle(PDO $conn, $userId, array $input, array &$events)
+    {
+        $note = trim(preg_replace('/\s+/u', ' ', (string) ($input['uwaga'] ?? '')));
+        if ($note === '') {
+            throw new InvalidArgumentException('Pusta uwaga.');
+        }
+        $note = mb_substr($note, 0, 300);
+        $notes = styleNotes($conn, $userId);
+        $notes[] = $note;
+        saveStyleNotes($conn, $userId, $notes);
+        $events[] = ['type' => 'style_note', 'note' => $note];
+        return ['zapamietano' => $note];
     }
 
     // ---------------------------------------------------------------- helpers

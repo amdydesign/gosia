@@ -44,7 +44,7 @@ try {
         if ($content === '' || !$notes) {
             Response::validationError(['notes' => 'Napisz, co zmienić']);
         }
-        $parts = [['text' => "Temat: {$title}\n\nAktualny scenariusz:\n{$content}"], ['text' => reelNotesText($notes)]];
+        $parts = [['text' => "Temat: {$title}\n\nAktualny scenariusz:\n{$content}"], ['text' => trim(styleNotesText($conn, $userId) . "\n\n" . reelNotesText($notes))]];
         $result = AiClient::writeIdeas(revisePrompt(date('Y-m-d')), $parts, scriptSchema(), REELS_REVISE_OPTIONS);
         $revised = trim((string) ($result['content'] ?? ''));
         if ($revised === '') {
@@ -68,6 +68,10 @@ try {
         // "Napisz inaczej" after notes: the new version keeps her direction
         if ($notes) {
             $topic .= "\n\n" . reelNotesText($notes);
+        }
+        // what she told the assistant about her style ("nie używam słowa X") counts here too
+        if (($styleNotes = styleNotesText($conn, $userId)) !== '') {
+            $topic .= "\n\n" . $styleNotes;
         }
 
         // her scripts first and cached: "Napisz jeszcze raz" reuses them at a tenth of the price

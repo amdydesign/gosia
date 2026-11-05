@@ -12,6 +12,7 @@
  *   source { url, title }      a web page the answer cites
  *   task   { id, title, due_date, remind_at }   a task was added (the app offers "Cofnij")
  *   idea   { id, title, planned_for }            an idea was saved to Pomysły (the app offers "Cofnij")
+ *   style_note { note }                         a note about her writing style was remembered ("Cofnij" forgets it)
  *   idea_updated { id, title, previous: { title, content, status, planned_for } }   an idea was changed ("Cofnij" restores previous)
  *   done   { chat_id, title, model, model_label, cost_usd (this reply), chat_cost_usd, usd_pln }
  *   error  { message }         nothing was saved - her message can be sent again

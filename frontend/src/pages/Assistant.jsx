@@ -11,7 +11,8 @@ import { apiRequest } from '../utils/api';
 import { deleteChat, getChat, listChats, restoreChat, sendMessage } from '../services/assistant';
 
 const CHAT_KEY = 'gonia.assistant.chat';
-const MODEL_KEY = 'gonia.assistant.model';
+// .v2: only a model she picked herself is remembered (the old key held the former default, Opus)
+const MODEL_KEY = 'gonia.assistant.model.v2';
 const DRAFT_KEY = 'gonia.assistant.draft';
 const MAX_IMAGES = 4;
 
@@ -76,7 +77,7 @@ export default function Assistant() {
 
     const [enabled, setEnabled] = useState(true);
     const [models, setModels] = useState([]);
-    const [model, setModelState] = useState(() => read(MODEL_KEY) || 'claude-opus-5-5');
+    const [model, setModelState] = useState(() => read(MODEL_KEY) || 'claude-sonnet-5-5');
     const [chats, setChats] = useState([]);
     const [chatId, setChatIdState] = useState(() => Number(read(CHAT_KEY)) || null);
     const [messages, setMessages] = useState([]);
@@ -128,7 +129,7 @@ export default function Assistant() {
                 const data = await refreshChats();
                 if (cancelled) return;
                 const known = (data.models || []).some((m) => m.id === read(MODEL_KEY));
-                if (!known && data.default_model) setModel(data.default_model);
+                if (!known && data.default_model) setModelState(data.default_model);
                 const open = Number(read(CHAT_KEY)) || null;
                 if (open) {
                     try {
@@ -184,7 +185,6 @@ export default function Assistant() {
             const chat = await getChat(id);
             setChatId(id);
             setMessages(chat.messages || []);
-            if (chat.chat?.model && models.some((m) => m.id === chat.chat.model)) setModel(chat.chat.model);
             requestAnimationFrame(() => scrollToBottom());
         } catch (err) {
             toast.error(err.message || 'Nie udało się otworzyć rozmowy');
@@ -323,6 +323,11 @@ export default function Assistant() {
                         toast.success(`Dodano do Pomysłów: ${data.title}`, {
                             duration: 7000,
                             action: { label: 'Cofnij', onClick: () => apiRequest(`/ideas/delete.php?id=${data.id}`, 'DELETE').catch(() => {}) },
+                        });
+                    } else if (name === 'style_note') {
+                        toast.success(`Zapamiętane: ${data.note}`, {
+                            duration: 7000,
+                            action: { label: 'Cofnij', onClick: () => apiRequest('/assistant/style.php', 'POST', { remove: data.note }).catch(() => {}) },
                         });
                     } else if (name === 'idea_updated') {
                         toast.success(`Zmieniono pomysł: ${data.title}`, {

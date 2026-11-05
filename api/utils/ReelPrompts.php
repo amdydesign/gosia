@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../config/Schema.php';
+require_once __DIR__ . '/WritingStyle.php';
 
 const REELS_TOPICS = 3;
 // AI proposes more than it shows: the ones too close to her ideas, recorded reels
@@ -196,6 +197,7 @@ function scriptPrompt($today, $hasExamples)
     $voice = $hasExamples
         ? 'Pisz jej głosem: ta sama osoba (forma żeńska, "ja"), podobna długość, rytm i słownictwo co w jej scenariuszach powyżej. Nie przepisuj ich.'
         : 'Pisz w pierwszej osobie, forma żeńska, lekko i naturalnie, jak do koleżanki.';
+    $rules = humanStyleRules();
     return <<<PROMPT
 Jesteś autorem scenariuszy rolek (Instagram Reels / TikTok) dla stylistki i influencerki modowej. Dzisiaj jest {$today}.
 Napisz scenariusz do przeczytania z promptera na podany na końcu temat.
@@ -207,11 +209,14 @@ Zasady:
 - Długość: 60-150 słów (do ok. minuty mówienia), chyba że jej scenariusze są wyraźnie krótsze.
 - title: krótki tytuł po polsku (do 60 znaków), z wielkiej litery, bez kropki na końcu - na bazie podanego tematu.
 - Nie wymyślaj marek, cen ani współprac, których nie ma w temacie ani w jej scenariuszach.
+
+{$rules}
 PROMPT;
 }
 
 function revisePrompt($today)
 {
+    $rules = humanStyleRules();
     return <<<PROMPT
 Poprawiasz scenariusz rolki (Instagram Reels / TikTok) stylistki i influencerki modowej. Dzisiaj jest {$today}.
 Powyżej jest aktualny scenariusz i jej uwagi. Wprowadź WSZYSTKIE uwagi (ostatnia jest najważniejsza), a resztę zostaw jak jest.
@@ -222,6 +227,8 @@ Zasady:
   Zwykłe akapity, bez nagłówków, bez emoji, bez opisów ujęć, bez hashtagów i bez wskazówek w nawiasach.
 - title: zostaw, chyba że uwaga dotyczy tytułu albo zmienia temat (wtedy krótki, do 60 znaków, bez kropki).
 - Nie wymyślaj marek, cen ani współprac, których nie ma w scenariuszu ani w uwagach.
+
+{$rules}
 PROMPT;
 }
 

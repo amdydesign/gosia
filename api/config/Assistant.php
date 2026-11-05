@@ -24,7 +24,8 @@ class Assistant
     const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     // lets a thinking block that no longer matches its conversation be dropped instead of failing the request
     const BINDING_BETA = 'thinking-binding-controls-2026-08-01';
-    const DEFAULT_MODEL = 'claude-opus-5-5';
+    // Sonnet: good enough for everyday chat at half of Opus's price - Opus stays one tap away
+    const DEFAULT_MODEL = 'claude-sonnet-5-5';
     const MAX_TOKENS = 64000;
     const MAX_STEPS = 16;
 
@@ -59,7 +60,7 @@ class Assistant
         ],
         'claude-opus-5-5' => [
             'label' => 'Opus 5.5',
-            'hint' => 'Najlepszy do pisania i trudniejszych spraw',
+            'hint' => 'Najlepszy do trudnych spraw, ok. 2× droższy',
             'effort' => 'medium',
             'web' => 'web_search_20260209',
             'fetch' => 'web_fetch_20260209',
