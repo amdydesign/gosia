@@ -24,6 +24,12 @@ class Assistant
     const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
     // lets a thinking block that no longer matches its conversation be dropped instead of failing the request
     const BINDING_BETA = 'thinking-binding-controls-2026-08-01';
+    // server-side clearing of old tool results (pages, contract texts) once a chat gets long
+    const CONTEXT_BETA = 'context-management-2025-06-27';
+    // she often answers after a break: a 1-hour cache keeps the chat at a tenth of the price meanwhile
+    const CACHE_TTL = '1h';
+    // from this prompt size the app suggests a new chat (every reply re-reads the whole chat)
+    const LONG_CHAT_TOKENS = 60000;
     // Sonnet: good enough for everyday chat at half of Opus's price - Opus stays one tap away
     const DEFAULT_MODEL = 'claude-sonnet-5-5';
     const MAX_TOKENS = 64000;
@@ -69,7 +75,7 @@ class Assistant
     ];
 
     /**
-     * USD per million tokens: input, output, cache read (5-minute cache writes cost 1.25x input).
+     * USD per million tokens: input, output, cache read (cache writes: 5 min 1.25x input, 1 hour 2x).
      * Includes the models a refusal may fall back to. 'long' = price above 100K prompt tokens.
      */
     const PRICES = [
@@ -110,12 +116,15 @@ class Assistant
             $price = self::PRICES[$part['model'] ?? $model] ?? (self::PRICES[$model] ?? self::PRICES[self::DEFAULT_MODEL]);
             $in = (int) ($part['input_tokens'] ?? 0);
             $write = (int) ($part['cache_creation_input_tokens'] ?? 0);
+            // 5-minute cache writes cost 1.25x input, 1-hour writes 2x
+            $write1h = (int) ($part['cache_creation']['ephemeral_1h_input_tokens'] ?? 0);
+            $write5m = max(0, $write - $write1h);
             $read = (int) ($part['cache_read_input_tokens'] ?? 0);
             $out = (int) ($part['output_tokens'] ?? 0);
             if (isset($price['long']) && $in + $write + $read > 100000) {
                 $price = $price['long'];
             }
-            $total += ($in * $price['in'] + $write * $price['in'] * 1.25 + $read * $price['read'] + $out * $price['out']) / 1000000;
+            $total += ($in * $price['in'] + $write5m * $price['in'] * 1.25 + $write1h * $price['in'] * 2 + $read * $price['read'] + $out * $price['out']) / 1000000;
         }
         $searches = (int) ($usage['server_tool_use']['web_search_requests'] ?? 0);
         return round($total + $searches * self::WEB_SEARCH_USD, 6);
@@ -237,7 +246,7 @@ PROMPT;
         }
         $model = self::modelId($model);
         $version = self::promptVersion($version);
-        $options = ['version' => $version, 'web' => true, 'fetch' => $version >= 2, 'fallbacks' => self::MODELS[$model]['fallbacks'], 'eager' => true, 'autocache' => true, 'binding' => true];
+        $options = ['version' => $version, 'web' => true, 'fetch' => $version >= 2, 'fallbacks' => self::MODELS[$model]['fallbacks'], 'eager' => true, 'autocache' => true, 'binding' => true, 'context' => true, 'ttl' => true];
 
         $messages = $history;
         $new = [];
@@ -245,6 +254,7 @@ PROMPT;
         $needBreak = false;
         $hasText = false;
         $totalCost = 0.0;
+        $promptTokens = 0;
 
         for ($step = 0; $step < self::MAX_STEPS; $step++) {
             $last = $step === self::MAX_STEPS - 1;
@@ -270,6 +280,7 @@ PROMPT;
             }
 
             $cost = self::cost($served, $result['usage']);
+            $promptTokens = self::promptTokens($result['usage']);
             $totalCost += $cost;
             $messages[] = $message;
             $new[] = ['kind' => 'assistant', 'message' => $message, 'model' => $served, 'cost' => $cost, 'usage' => $result['usage']];
@@ -311,7 +322,7 @@ PROMPT;
             $totalCost += $toolCost;
         }
 
-        return ['messages' => $new, 'model' => $served, 'cost' => round($totalCost, 6)];
+        return ['messages' => $new, 'model' => $served, 'cost' => round($totalCost, 6), 'prompt_tokens' => $promptTokens];
     }
 
     /**
@@ -355,6 +366,20 @@ PROMPT;
 
     // ---------------------------------------------------------------- streaming
 
+    private static function cacheControl(array $options)
+    {
+        return !empty($options['ttl']) ? ['type' => 'ephemeral', 'ttl' => self::CACHE_TTL] : ['type' => 'ephemeral'];
+    }
+
+    /** Prompt size of a response (what the next reply starts from). */
+    public static function promptTokens($usage)
+    {
+        $usage = json_decode(json_encode($usage), true);
+        return is_array($usage)
+            ? (int) ($usage['input_tokens'] ?? 0) + (int) ($usage['cache_read_input_tokens'] ?? 0) + (int) ($usage['cache_creation_input_tokens'] ?? 0)
+            : 0;
+    }
+
     public static function buildBody($model, array $messages, array $options, $noTools = false)
     {
         $config = self::MODELS[$model];
@@ -367,12 +392,12 @@ PROMPT;
         }
         $version = self::promptVersion($options['version'] ?? 1);
         if (!empty($options['web'])) {
-            $tools[] = ['type' => $config['web'], 'name' => 'web_search', 'max_uses' => $version >= 2 ? 10 : 5, 'user_location' => [
+            $tools[] = ['type' => $config['web'], 'name' => 'web_search', 'max_uses' => $version >= 2 ? 6 : 5, 'user_location' => [
                 'type' => 'approximate', 'country' => 'PL', 'timezone' => 'Europe/Warsaw',
             ]];
             // read whole pages (search results, links she pastes) - research needs more than snippets
             if (!empty($options['fetch'])) {
-                $tools[] = ['type' => $config['fetch'], 'name' => 'web_fetch', 'max_uses' => 8, 'max_content_tokens' => 40000, 'citations' => ['enabled' => true]];
+                $tools[] = ['type' => $config['fetch'], 'name' => 'web_fetch', 'max_uses' => 5, 'max_content_tokens' => 12000, 'citations' => ['enabled' => true]];
             }
         }
         // the frozen prefix (tools + system) gets its own cache point; the growing chat is cached automatically
@@ -380,7 +405,7 @@ PROMPT;
             'model' => $model,
             'max_tokens' => self::MAX_TOKENS,
             'stream' => true,
-            'system' => [['type' => 'text', 'text' => self::systemPrompt($version), 'cache_control' => ['type' => 'ephemeral']]],
+            'system' => [['type' => 'text', 'text' => self::systemPrompt($version), 'cache_control' => self::cacheControl($options)]],
             'tools' => $tools,
             'thinking' => ['type' => 'adaptive'],
             'output_config' => ['effort' => $config['effort']],
@@ -397,7 +422,18 @@ PROMPT;
             }
         }
         if (!empty($options['autocache'])) {
-            $body['cache_control'] = ['type' => 'ephemeral'];
+            $body['cache_control'] = self::cacheControl($options);
+        }
+        if (!empty($options['context'])) {
+            // old tool results (read pages, contract texts, lists) are cleared on the server once the chat is long;
+            // the stored history stays whole, and on these models it does not break the thinking binding
+            $body['context_management'] = ['edits' => [[
+                'type' => 'clear_tool_uses_20250919',
+                'trigger' => ['type' => 'input_tokens', 'value' => 40000],
+                'keep' => ['type' => 'tool_uses', 'value' => 4],
+                'clear_at_least' => ['type' => 'input_tokens', 'value' => 10000],
+                'exclude_tools' => ['moj_styl'],
+            ]]];
         }
         if (!empty($options['binding'])) {
             // safety net: a mismatched old thinking block is skipped, the chat keeps working
@@ -429,6 +465,9 @@ PROMPT;
             }
             if (!empty($options['binding'])) {
                 $betas[] = self::BINDING_BETA;
+            }
+            if (!empty($options['context'])) {
+                $betas[] = self::CONTEXT_BETA;
             }
             if ($betas) {
                 $headers[] = 'anthropic-beta: ' . implode(',', $betas);
@@ -486,6 +525,14 @@ PROMPT;
                 $lower = strtolower($detail);
                 if (!empty($options['fallbacks']) && strpos($lower, 'fallback') !== false) {
                     $options['fallbacks'] = false;
+                    continue;
+                }
+                if (!empty($options['context']) && (strpos($lower, 'context_management') !== false || strpos($lower, 'context-management') !== false || strpos($lower, 'clear_tool_uses') !== false)) {
+                    $options['context'] = false;
+                    continue;
+                }
+                if (!empty($options['ttl']) && strpos($lower, 'ttl') !== false) {
+                    $options['ttl'] = false;
                     continue;
                 }
                 if (empty($options['strip_empty']) && strpos($lower, 'non-empty') !== false) {

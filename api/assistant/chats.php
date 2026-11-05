@@ -37,6 +37,9 @@ try {
         $stmt = $conn->prepare("SELECT id, kind, content, model, cost_usd, created_at FROM assistant_messages WHERE chat_id = :chat_id ORDER BY id");
         $stmt->execute(['chat_id' => $id]);
         $messages = Assistant::bubbles($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt = $conn->prepare("SELECT usage_json FROM assistant_messages WHERE chat_id = :chat_id AND kind = 'assistant' AND usage_json IS NOT NULL ORDER BY id DESC LIMIT 1");
+        $stmt->execute(['chat_id' => $id]);
+        $lastUsage = json_decode((string) $stmt->fetchColumn(), true);
         Response::success([
             'chat' => [
                 'id' => (int) $chat['id'],
@@ -45,6 +48,7 @@ try {
                 'cost_usd' => round(array_sum(array_column($messages, 'cost_usd')), 6),
             ],
             'messages' => $messages,
+            'long_chat' => Assistant::promptTokens($lastUsage) > Assistant::LONG_CHAT_TOKENS,
             'usd_pln' => Assistant::usdToPln(),
         ]);
     }

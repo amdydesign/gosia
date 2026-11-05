@@ -90,6 +90,7 @@ export default function Assistant() {
     const [historyOpen, setHistoryOpen] = useState(false);
     const [modelOpen, setModelOpen] = useState(false);
     const [barHidden, setBarHidden] = useState(false);
+    const [longChat, setLongChat] = useState(false);
     const [listening, setListening] = useState(false);
     const recognitionRef = useRef(null);
     const [usdPln, setUsdPln] = useState(3.7);
@@ -134,7 +135,10 @@ export default function Assistant() {
                 if (open) {
                     try {
                         const chat = await getChat(open);
-                        if (!cancelled) setMessages(chat.messages || []);
+                        if (!cancelled) {
+                            setMessages(chat.messages || []);
+                            setLongChat(!!chat.long_chat);
+                        }
                     } catch {
                         if (!cancelled) setChatId(null);
                     }
@@ -185,6 +189,7 @@ export default function Assistant() {
             const chat = await getChat(id);
             setChatId(id);
             setMessages(chat.messages || []);
+            setLongChat(!!chat.long_chat);
             requestAnimationFrame(() => scrollToBottom());
         } catch (err) {
             toast.error(err.message || 'Nie udało się otworzyć rozmowy');
@@ -197,6 +202,7 @@ export default function Assistant() {
         setHistoryOpen(false);
         setChatId(null);
         setMessages([]);
+        setLongChat(false);
         inputRef.current?.focus();
     };
 
@@ -207,6 +213,7 @@ export default function Assistant() {
             if (id === chatId) {
                 setChatId(null);
                 setMessages([]);
+                setLongChat(false);
             }
             toast.success('Rozmowa usunięta', {
                 duration: 6000,
@@ -340,6 +347,7 @@ export default function Assistant() {
                     } else if (name === 'done') {
                         update((m) => ({ ...m, pending: false, model: data.model, modelLabel: data.model_label, cost_usd: data.cost_usd }));
                         if (data.usd_pln) setUsdPln(data.usd_pln);
+                        setLongChat(!!data.long_chat);
                         if (data.chat_id) setChatId(data.chat_id);
                         refreshChats().catch(() => {});
                     } else if (name === 'error') {
@@ -531,6 +539,17 @@ export default function Assistant() {
                             </div>
                         )
                     )}
+                </div>
+            )}
+
+            {longChat && !streaming && messages.length > 0 && (
+                <div className="mt-2 rounded-2xl border border-amber-300/60 bg-amber-50 text-amber-900 px-4 py-3 flex items-center gap-3">
+                    <p className="flex-1 text-sm">
+                        <strong>Długa rozmowa</strong> — każda odpowiedź jest tu droższa. Nowy temat zacznij w nowej.
+                    </p>
+                    <button type="button" onClick={newChat} className="shrink-0 h-9 px-3 rounded-full bg-ink text-canvas text-sm font-medium inline-flex items-center gap-1">
+                        <Plus size={15} /> Nowa
+                    </button>
                 </div>
             )}
 

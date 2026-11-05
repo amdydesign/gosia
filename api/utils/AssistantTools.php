@@ -18,8 +18,8 @@ require_once __DIR__ . '/WritingStyle.php';
 
 class AssistantTools
 {
-    const MAX_ROWS = 60;
-    const MAX_DOC_TEXT = 30000;
+    const MAX_ROWS = 40;
+    const MAX_DOC_TEXT = 20000;
 
     /** Tool definitions for the Messages API. */
     public static function definitions()

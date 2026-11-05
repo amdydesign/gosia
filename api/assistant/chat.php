@@ -182,6 +182,8 @@ try {
         'cost_usd' => $result['cost'],
         'chat_cost_usd' => round((float) $stmt->fetchColumn(), 6),
         'usd_pln' => Assistant::usdToPln(),
+        // a long chat costs more per reply - the app suggests starting a new one
+        'long_chat' => $result['prompt_tokens'] > Assistant::LONG_CHAT_TOKENS,
         'title' => $title,
         'model' => $result['model'],
         'model_label' => Assistant::modelLabel($result['model']),
