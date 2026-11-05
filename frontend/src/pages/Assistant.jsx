@@ -324,6 +324,14 @@ export default function Assistant() {
                             duration: 7000,
                             action: { label: 'Cofnij', onClick: () => apiRequest(`/ideas/delete.php?id=${data.id}`, 'DELETE').catch(() => {}) },
                         });
+                    } else if (name === 'idea_updated') {
+                        toast.success(`Zmieniono pomysł: ${data.title}`, {
+                            duration: 8000,
+                            action: {
+                                label: 'Cofnij',
+                                onClick: () => apiRequest(`/ideas/update.php?id=${data.id}`, 'PUT', data.previous).catch(() => {}),
+                            },
+                        });
                     } else if (name === 'done') {
                         update((m) => ({ ...m, pending: false, model: data.model, modelLabel: data.model_label, cost_usd: data.cost_usd }));
                         if (data.usd_pln) setUsdPln(data.usd_pln);

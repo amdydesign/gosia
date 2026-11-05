@@ -2,7 +2,7 @@
 /**
  * "Asystent": tools Claude calls to read her panel (and add a task).
  *
- * Everything is read-only except dodaj_zadanie / dodaj_pomysl - both can be undone from the toast.
+ * Everything is read-only except dodaj_zadanie / dodaj_pomysl / edytuj_pomysl - each can be undone from the toast.
  * Results are small JSON documents in Polish field names, so the model can quote them.
  */
 
@@ -111,6 +111,21 @@ class AssistantTools
                     'required' => ['tytul', 'tresc'],
                 ],
             ],
+            [
+                'name' => 'edytuj_pomysl',
+                'description' => 'Zmienia istniejący pomysł w Pomysłach: tytuł, treść scenariusza (podmienia całą treść - wpisz pełną nową wersję), dzień nagrania albo status. Id znajdziesz narzędziem pomysly (lub z dodaj_pomysl). Podaj tylko pola, które się zmieniają. Gosia może cofnąć zmianę jednym stuknięciem.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'id' => ['type' => 'integer', 'description' => 'Id pomysłu'],
+                        'tytul' => ['type' => 'string', 'description' => 'Nowy tytuł'],
+                        'tresc' => ['type' => 'string', 'description' => 'Pełna nowa treść scenariusza'],
+                        'nagrac_dnia' => ['type' => 'string', 'description' => 'RRRR-MM-DD, albo "" żeby zdjąć z planu'],
+                        'status' => ['type' => 'string', 'enum' => ['do_nagrania', 'nagrane']],
+                    ],
+                    'required' => ['id'],
+                ],
+            ],
         ];
         // stream tool arguments as they are written; run() checks them before use
         foreach ($tools as &$tool) {
@@ -131,6 +146,7 @@ class AssistantTools
             'dokumenty' => 'Czytam dokumenty…',
             'dodaj_zadanie' => 'Dodaję zadanie…',
             'dodaj_pomysl' => 'Zapisuję w Pomysłach…',
+            'edytuj_pomysl' => 'Poprawiam pomysł…',
             'web_search' => 'Szukam w internecie…',
             'web_fetch' => 'Czytam stronę…',
         ];
@@ -165,6 +181,8 @@ class AssistantTools
                     return [self::json(self::addTask($conn, $userId, $input, $events)), false];
                 case 'dodaj_pomysl':
                     return [self::json(self::addIdea($conn, $userId, $input, $events)), false];
+                case 'edytuj_pomysl':
+                    return [self::json(self::editIdea($conn, $userId, $input, $events)), false];
             }
             return [self::json(['blad' => 'Nie ma takiego narzędzia.']), true];
         } catch (InvalidArgumentException $e) {
@@ -531,6 +549,51 @@ class AssistantTools
 
         $events[] = ['type' => 'idea', 'id' => $id, 'title' => $title, 'planned_for' => $planned];
         return ['dodano' => true, 'id' => $id, 'tytul' => $title, 'nagrac_dnia' => $planned];
+    }
+
+    private static function editIdea(PDO $conn, $userId, array $input, array &$events)
+    {
+        Schema::ensureColumns($conn, 'ideas');
+        $id = (int) ($input['id'] ?? 0);
+        $stmt = $conn->prepare("SELECT id, title, content, status, planned_for FROM ideas WHERE id = :id AND user_id = :user_id");
+        $stmt->execute(['id' => $id, 'user_id' => $userId]);
+        $before = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$before) {
+            throw new InvalidArgumentException('Nie ma pomysłu o tym id - sprawdź narzędziem pomysly.');
+        }
+
+        $fields = [];
+        $params = ['id' => $id, 'user_id' => $userId];
+        if (isset($input['tytul']) && trim((string) $input['tytul']) !== '') {
+            $fields[] = 'title = :title';
+            $params['title'] = mb_substr(trim((string) $input['tytul']), 0, 255);
+        }
+        if (isset($input['tresc']) && trim((string) $input['tresc']) !== '') {
+            $fields[] = 'content = :content';
+            $params['content'] = mb_substr(trim((string) $input['tresc']), 0, 60000);
+        }
+        if (array_key_exists('nagrac_dnia', $input)) {
+            $fields[] = 'planned_for = :planned';
+            $params['planned'] = self::date($input['nagrac_dnia']);
+        }
+        if (in_array($input['status'] ?? null, ['do_nagrania', 'nagrane'], true)) {
+            $fields[] = 'status = :status';
+            $params['status'] = $input['status'] === 'nagrane' ? 'recorded' : 'draft';
+        }
+        if (!$fields) {
+            throw new InvalidArgumentException('Nic do zmiany - podaj tytul, tresc, nagrac_dnia albo status.');
+        }
+        $conn->prepare("UPDATE ideas SET " . implode(', ', $fields) . " WHERE id = :id AND user_id = :user_id")->execute($params);
+
+        $title = $params['title'] ?? $before['title'];
+        // the app's "Cofnij" puts the previous version back
+        $events[] = ['type' => 'idea_updated', 'id' => $id, 'title' => $title, 'previous' => [
+            'title' => $before['title'],
+            'content' => (string) $before['content'],
+            'status' => $before['status'],
+            'planned_for' => $before['planned_for'],
+        ]];
+        return ['zmieniono' => true, 'id' => $id, 'tytul' => $title];
     }
 
     // ---------------------------------------------------------------- helpers
