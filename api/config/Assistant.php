@@ -63,14 +63,6 @@ class Assistant
             'fetch' => 'web_fetch_20260209',
             'fallbacks' => true,
         ],
-        'claude-fable-5-1' => [
-            'label' => 'Fable 5.1',
-            'hint' => 'Najmocniejszy, najdroższy i wolniejszy',
-            'effort' => 'medium',
-            'web' => 'web_search_20260209',
-            'fetch' => 'web_fetch_20260209',
-            'fallbacks' => true,
-        ],
     ];
 
     public static function models()
