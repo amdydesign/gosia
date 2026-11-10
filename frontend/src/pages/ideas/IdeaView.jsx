@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Edit2, Play, CheckCircle2, Trash2, Lightbulb, Clock, Type, Undo2, Copy, CalendarCheck } from 'lucide-react';
+import { Edit2, Play, CheckCircle2, Trash2, Lightbulb, Clock, Type, Undo2, Copy, CalendarCheck, MoreHorizontal } from 'lucide-react';
 import { isPlanned, localToday, planIdea } from '../../services/agenda';
 import ideasService from '../../services/ideas';
 import { useToast } from '../../context/ToastContext';
@@ -26,6 +26,7 @@ export default function IdeaView() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
     const prompterOpen = searchParams.get('prompter') === '1';
 
     useEffect(() => {
@@ -157,10 +158,20 @@ export default function IdeaView() {
 
             {recorded && <ReelResults idea={idea} aiEnabled={!!dashboard?.ai?.enabled} onChange={setIdea} />}
 
-            <div className="grid grid-cols-3 gap-2">
-                <Button to={`/ideas/${id}/edit`} variant="secondary" icon={Edit2}>Edytuj</Button>
-                <Button variant="secondary" icon={Copy} onClick={copyText} disabled={!idea.content}>Do Edits</Button>
-                <Button variant="danger" icon={Trash2} onClick={handleDelete}>Usuń</Button>
+            {/* "Usuń" waits under "…" (as in a collaboration) - not a red button next to the everyday ones */}
+            <div className="relative flex gap-2">
+                <Button to={`/ideas/${id}/edit`} variant="secondary" icon={Edit2} className="flex-1">Edytuj</Button>
+                <Button variant="secondary" icon={Copy} onClick={copyText} disabled={!idea.content} className="flex-1">Do Edits</Button>
+                <button type="button" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen} aria-label="Więcej" className="btn btn-secondary !px-0 w-12 shrink-0">
+                    <MoreHorizontal size={20} />
+                </button>
+                {moreOpen && (
+                    <div className="absolute right-0 bottom-full mb-2 w-56 rounded-2xl bg-surface border border-line shadow-float overflow-hidden z-10">
+                        <button type="button" onClick={() => { setMoreOpen(false); handleDelete(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-50 text-left">
+                            <Trash2 size={16} /> Usuń
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -44,10 +44,17 @@ try {
         Response::success(null, 'Odłączono');
     }
 
+    // All of it or nothing: the link, the deadlines and the brief leaving "W przygotowaniu".
+    // (schema checks first - adding a column inside a transaction would end it)
+    require_once __DIR__ . '/../collaborations/helpers.php';
+    Schema::ensureCollaborations($conn);
+    $conn->beginTransaction();
+
     $collabId = intval($data['collaboration_id'] ?? 0);
-    $stmt = $conn->prepare("SELECT id FROM collaborations WHERE id = :id AND user_id = :user_id");
+    $stmt = $conn->prepare("SELECT id FROM collaborations WHERE id = :id AND user_id = :user_id FOR UPDATE");
     $stmt->execute(['id' => $collabId, 'user_id' => $userId]);
     if (!$stmt->fetch()) {
+        $conn->rollBack();
         Response::notFound('Współpraca nie istnieje');
     }
 
@@ -55,7 +62,6 @@ try {
     $conn->prepare($sql)->execute(array_merge([$collabId, $userId], $ids));
 
     // Deadlines from the contract fill the collaboration's empty ones
-    require_once __DIR__ . '/../collaborations/helpers.php';
     $stmt = $conn->prepare("SELECT terms FROM documents WHERE user_id = ? AND id IN ($placeholders) AND terms IS NOT NULL");
     $stmt->execute(array_merge([$userId], $ids));
     foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $json) {
@@ -64,10 +70,14 @@ try {
 
     // A contract / bill for a brief: the job is agreed - out of "W przygotowaniu", the amount from the document
     collabAgreeFromDocuments($conn, $userId, $collabId, $ids);
+    $conn->commit();
 
     Response::success(['collaboration_id' => $collabId, 'document_ids' => $ids], 'Połączono ze współpracą');
 
 } catch (Exception $e) {
+    if (isset($conn) && $conn->inTransaction()) {
+        $conn->rollBack();
+    }
     if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Link failed: ' . $e->getMessage(), 500);
     }

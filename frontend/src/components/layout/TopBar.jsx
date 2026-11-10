@@ -6,6 +6,7 @@ import Logo from '../ui/Logo';
 import { userName } from '../../utils/format';
 import { useAuth } from '../../context/AuthContext';
 import { NAV_ITEMS, activeMoreItem } from './navItems';
+import OfflineBar from './OfflineBar';
 
 /**
  * Desktop: logo, pill navigation (+ "Więcej" menu), "Dodaj" and the profile avatar in one row.
@@ -142,6 +143,7 @@ export default function TopBar({ meta, onOpenProfile, onAdd, onOpenMenu }) {
                 {privacyButton}
                 {avatar}
             </div>
+            <OfflineBar />
         </header>
     );
 }

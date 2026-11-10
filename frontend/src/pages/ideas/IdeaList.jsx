@@ -13,6 +13,9 @@ import { CardSkeleton } from '../../components/ui/Skeleton';
 import { estimateSpeechSeconds, formatSeconds } from '../../utils/format';
 import { isPlanned } from '../../services/agenda';
 import ReelGenerator from '../../components/ideas/ReelGenerator';
+import LoadError from '../../components/ui/LoadError';
+import { usePersistentState } from '../../hooks/usePersistentState';
+import { useRefetchOnVisible } from '../../hooks/useRefetchOnVisible';
 
 const FILTERS = [
     { value: 'draft', label: 'Do nagrania' },
@@ -20,6 +23,7 @@ const FILTERS = [
     { value: 'published', label: 'Wyniki' },
 ];
 const TAB_KEY = 'gonia.ideasTab';
+const QUERY_KEY = 'gonia.ideas.query';
 
 function readTab() {
     try {
@@ -45,7 +49,8 @@ export default function IdeaList() {
             // ignore
         }
     };
-    const [query, setQuery] = useState('');
+    const [query, setQuery] = usePersistentState(QUERY_KEY, '', (v) => typeof v === 'string');
+    const [reloads, setReloads] = useState(0);
     const [aiEnabled, setAiEnabled] = useState(false);
     const [generatorOpen, setGeneratorOpen] = useState(false);
 
@@ -57,9 +62,10 @@ export default function IdeaList() {
         let cancelled = false;
         (async () => {
             try {
-                setLoading(true);
                 const data = await ideasService.getAll(null, 'all');
-                if (!cancelled) setIdeas(Array.isArray(data) ? data : []);
+                if (cancelled) return;
+                setIdeas(Array.isArray(data) ? data : []);
+                setError('');
             } catch (err) {
                 if (!cancelled) setError(err.message || 'Błąd ładowania pomysłów');
             } finally {
@@ -69,7 +75,15 @@ export default function IdeaList() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [reloads]);
+
+    // Back from the background: fresh list (no skeleton - the old one stays until the new one is in)
+    useRefetchOnVisible(() => setReloads((n) => n + 1));
+    const retry = () => {
+        setLoading(true);
+        setError('');
+        setReloads((n) => n + 1);
+    };
 
     const counts = useMemo(
         () => ({
@@ -137,8 +151,8 @@ export default function IdeaList() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {[0, 1, 2].map((i) => <CardSkeleton key={i} className="h-44" />)}
                 </div>
-            ) : error ? (
-                <EmptyState icon={Lightbulb} title="Nie udało się pobrać pomysłów" text={error} />
+            ) : error && ideas.length === 0 ? (
+                <LoadError onRetry={retry} />
             ) : filtered.length === 0 ? (
                 <div className="card">
                     <EmptyState

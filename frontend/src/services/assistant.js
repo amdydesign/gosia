@@ -11,7 +11,8 @@ export const restoreChat = (id) => apiRequest('/assistant/chats.php', 'POST', { 
 
 /**
  * Send a message and read the reply as it is written.
- * onEvent(name, data): status | tool | text | source | task | done | error
+ * onEvent(name, data): chat | status | tool | text | source | task | done | error | dropped
+ * "dropped": the connection ended before the reply did - the server keeps writing it.
  * Resolves when the stream ends; throws only when the request itself fails.
  */
 export async function sendMessage({ chatId, model, message, images = [], onEvent, signal }) {
@@ -57,7 +58,14 @@ export async function sendMessage({ chatId, model, message, images = [], onEvent
     };
 
     for (;;) {
-        const { value, done } = await reader.read();
+        let chunk;
+        try {
+            chunk = await reader.read();
+        } catch {
+            // the phone went to sleep or lost the network mid-answer
+            break;
+        }
+        const { value, done } = chunk;
         if (done) break;
         buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
         let pos;
@@ -67,5 +75,5 @@ export async function sendMessage({ chatId, model, message, images = [], onEvent
         }
     }
     if (buffer.trim()) handle(buffer);
-    if (!ended) onEvent('error', { message: 'Połączenie się urwało. Odpowiedź może pojawić się po odświeżeniu rozmowy.' });
+    if (!ended) onEvent('dropped', {});
 }

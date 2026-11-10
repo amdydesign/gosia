@@ -424,19 +424,36 @@ class AiClient
 
     private static function post($url, array $headers, array $body, $timeout = self::TIMEOUT)
     {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 15,
-            CURLOPT_TIMEOUT => $timeout,
-        ]);
-        $raw = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
+        $payload = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // overloaded / rate limited: two more tries with a short pause before she sees an error
+        for ($attempt = 0; ; $attempt++) {
+            $retryAfter = 0;
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 15,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_HEADERFUNCTION => function ($ch, $line) use (&$retryAfter) {
+                    if (preg_match('/^retry-after:\s*(\d+)/i', $line, $m)) {
+                        $retryAfter = (int) $m[1];
+                    }
+                    return strlen($line);
+                },
+            ]);
+            $raw = curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($raw !== false && ($status === 429 || $status >= 500) && $attempt < 2) {
+                sleep(min(10, max($retryAfter, $attempt === 0 ? 2 : 5)));
+                continue;
+            }
+            break;
+        }
 
         if ($raw === false) {
             throw new RuntimeException('Brak połączenia z usługą AI (' . $error . ').');

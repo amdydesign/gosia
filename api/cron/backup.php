@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../utils/Backup.php';
+require_once __DIR__ . '/../utils/CronLock.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->safeLoad();
@@ -26,7 +27,15 @@ if (!$isCli) {
 
 $withFiles = $isCli ? in_array('--files', $argv ?? [], true) : !empty($_GET['files']);
 $db = new Database();
-$report = Backup::run($db->getConnection(), $withFiles);
+$conn = $db->getConnection();
+// one backup at a time (a second start while one is running just ends)
+if (!CronLock::acquire($conn, 'backup')) {
+    $busy = 'Kopia już się robi - spróbuj za chwilę.';
+    echo $isCli ? $busy . "\n" : json_encode(['success' => false, 'message' => $busy], JSON_UNESCAPED_UNICODE);
+    exit($isCli ? 1 : 0);
+}
+$report = Backup::run($conn, $withFiles);
+CronLock::release($conn, 'backup');
 
 if ($isCli) {
     echo ($report['ok'] ? 'OK: ' . implode(', ', $report['files']) . ($report['remote'] ? ' (+ poza serwerem)' : '') : 'Błąd: ' . $report['error']) . "\n";

@@ -57,6 +57,9 @@ try {
     $parts = [];
 
     if ($mime === 'application/pdf') {
+        if (filesize($path) > 20 * 1024 * 1024) {
+            Response::error('Ten PDF jest za duży dla AI (max 20 MB). Podziel go albo zmniejsz.', 413);
+        }
         $parts[] = ['media_type' => 'application/pdf', 'data' => base64_encode(file_get_contents($path))];
     } elseif (in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
         if (filesize($path) > DOCUMENTS_AI_IMAGE_MAX) {
@@ -72,7 +75,16 @@ try {
 
     // Full text is requested for PDFs/photos: the AI reads scans better than the device OCR
     $needsText = !$hasText || $mime === 'application/pdf' || strpos($mime, 'image/') === 0;
-    $result = AiClient::extractDocument(documentsAnalyzePrompt(date('Y-m-d'), $needsText), $parts, documentsAnalyzeSchema());
+    try {
+        $result = AiClient::extractDocument(documentsAnalyzePrompt(date('Y-m-d'), $needsText), $parts, documentsAnalyzeSchema());
+    } catch (RuntimeException $e) {
+        // a long contract: the full transcription did not fit - read the terms alone
+        if (!$needsText || strpos($e->getMessage(), 'za długa') === false) {
+            throw $e;
+        }
+        $needsText = false;
+        $result = AiClient::extractDocument(documentsAnalyzePrompt(date('Y-m-d'), false), $parts, documentsAnalyzeSchema());
+    }
 
     $title = trim((string) ($result['title'] ?? ''));
     $docDate = documentsParseDate($result['doc_date'] ?? '');

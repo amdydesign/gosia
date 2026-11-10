@@ -13,6 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed', 405);
 }
 
+// Log in first - the server's API key is not for anonymous callers
+$userId = getCurrentUserId();
+
 // Load credentials
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
 if (!file_exists($credsPath)) {
@@ -26,14 +29,17 @@ if (!$apiKey) {
 }
 
 $input = json_decode(file_get_contents('php://input'), true);
-$channelId = $input['channel_id'] ?? null;
+$channelId = trim((string) ($input['channel_id'] ?? ''));
 
-if (!$channelId) {
+if ($channelId === '') {
     Response::error('Podaj ID kanału (np. UC...)', 400);
+}
+if (!preg_match('/^[A-Za-z0-9_-]{10,64}$/', $channelId)) {
+    Response::error('To nie wygląda na ID kanału (zaczyna się od UC...).', 400);
 }
 
 // Fetch from YouTube API
-$url = "https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id={$channelId}&key={$apiKey}";
+$url = "https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=" . rawurlencode($channelId) . "&key=" . rawurlencode($apiKey);
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $url);
@@ -45,7 +51,8 @@ curl_close($ch);
 $data = json_decode($response, true);
 
 if ($httpCode !== 200) {
-    Response::error('Błąd API YouTube: ' . ($data['error']['message'] ?? 'Nieznany błąd'), 400);
+    error_log('fetch_youtube_public: HTTP ' . $httpCode . ' ' . ($data['error']['message'] ?? ''));
+    Response::error('YouTube nie odpowiedział poprawnie. Spróbuj później.', 400);
 }
 
 if (empty($data['items'])) {
@@ -58,7 +65,6 @@ $subscriberCount = $item['statistics']['subscriberCount'];
 
 // Save to DB
 try {
-    $userId = getCurrentUserId();
     $db = new Database();
     $conn = $db->getConnection();
 
@@ -95,5 +101,6 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd bazy danych: ' . $e->getMessage(), 500);
+    error_log('fetch_youtube_public: ' . $e->getMessage());
+    Response::error('Nie udało się zapisać. Spróbuj jeszcze raz.', 500);
 }

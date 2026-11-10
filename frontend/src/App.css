@@ -170,6 +170,25 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+
+  /* Small buttons and chips look the same (~28 px) but take a finger: on touch screens
+     the tap area reaches 8 px above and below, to the 44 px a thumb needs. */
+  @media (pointer: coarse) {
+    .btn-sm,
+    .chip {
+      position: relative;
+    }
+    .btn-sm::after,
+    .chip::after {
+      content: '';
+      position: absolute;
+      inset: -8px 0;
+    }
+    /* a row of chips that scrolls sideways must not start scrolling up and down because of it */
+    .overflow-x-auto {
+      overflow-y: hidden;
+    }
+  }
 }
 
 @layer components {

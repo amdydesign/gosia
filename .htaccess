@@ -4,6 +4,12 @@
     Deny from all
 </FilesMatch>
 
+# Repo files that are not part of the app: docs, SQL, scripts, package manifests
+<FilesMatch "(\.(md|sql|bat|sh|lock|example|code-workspace|gitignore)|^composer\.json|^package(-lock)?\.json)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
 # pdf.js worker is an ES module - browsers refuse it without a JS mime type
 AddType text/javascript .mjs
 
@@ -15,6 +21,7 @@ AddType text/javascript .mjs
     Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' blob: data:; worker-src 'self' blob:; object-src 'self' blob:; frame-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Strict-Transport-Security "max-age=31536000" env=HTTPS
     <FilesMatch "^sw\.js$">
         Header set Cache-Control "no-cache, must-revalidate"
     </FilesMatch>
@@ -26,12 +33,18 @@ AddType text/javascript .mjs
 RewriteEngine On
 RewriteBase /
 
+# Never serve the git repository, the frontend sources or build leftovers
+RewriteRule ^(\.git|frontend|build|public_build|node_modules)(/|$) - [R=404,L]
+
 # API - pass through
 RewriteRule ^api/(.*)$ api/$1 [L]
 
 # Static files - serve directly if they exist
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
+
+# A missing build file (old bundle after a deploy) is a 404, not the app shell
+RewriteRule ^(assets|ocr|icons)/ - [R=404,L]
 
 # All other requests go to React index.html
 RewriteCond %{REQUEST_FILENAME} !-f

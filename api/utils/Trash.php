@@ -32,10 +32,23 @@ class Trash
         if (!$table) {
             return null;
         }
-        $stmt = $conn->prepare("SELECT * FROM `$table` WHERE id = :id AND user_id = :user_id");
-        $stmt->execute(['id' => $id, 'user_id' => $userId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($type === 'collaboration' || $type === 'purchase') {
+            Schema::ensure($conn, 'attachments'); // before the transaction - creating a table would end it
+        }
+
+        // The row is read and locked inside the transaction: a second DELETE of the same thing
+        // (double tap) waits here, then finds nothing - one bin entry, not two.
+        $conn->beginTransaction();
+        try {
+            $stmt = $conn->prepare("SELECT * FROM `$table` WHERE id = :id AND user_id = :user_id FOR UPDATE");
+            $stmt->execute(['id' => $id, 'user_id' => $userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $conn->rollBack();
+            throw $e;
+        }
         if (!$row) {
+            $conn->rollBack();
             return null;
         }
 
@@ -67,7 +80,6 @@ class Trash
             }
         }
 
-        $conn->beginTransaction();
         try {
             $conn->prepare("
                 INSERT INTO trash (user_id, entity_type, entity_id, title, payload, files, deleted_at)
@@ -105,10 +117,18 @@ class Trash
     public static function restore(PDO $conn, $userId, $trashId)
     {
         Schema::ensure($conn, 'trash');
-        $stmt = $conn->prepare("SELECT * FROM trash WHERE id = :id AND user_id = :user_id");
-        $stmt->execute(['id' => $trashId, 'user_id' => $userId]);
-        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+        // locked for the same reason as in put(): a double "Cofnij" restores once
+        $conn->beginTransaction();
+        try {
+            $stmt = $conn->prepare("SELECT * FROM trash WHERE id = :id AND user_id = :user_id FOR UPDATE");
+            $stmt->execute(['id' => $trashId, 'user_id' => $userId]);
+            $item = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $conn->rollBack();
+            throw $e;
+        }
         if (!$item) {
+            $conn->rollBack();
             return null;
         }
         $type = $item['entity_type'];
@@ -117,7 +137,6 @@ class Trash
         $row = $payload['row'];
         $children = $payload['children'] ?? [];
 
-        $conn->beginTransaction();
         try {
             $newId = self::insert($conn, $table, $row);
             foreach ($children['team'] ?? [] as $member) {

@@ -7,7 +7,8 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import authService from '../services/auth';
 import { fetchMe } from '../services/users';
 import { detachPushFromAccount } from '../services/push';
-import { APP_HEADERS, apiRequest, clearLegacyToken, clearSession, getLegacyToken } from '../utils/api';
+import { APP_HEADERS, apiRequest, clearLegacyToken, clearSession, getLegacyToken, takeReturnPath } from '../utils/api';
+import { clearAllDrafts } from '../hooks/useDraft';
 
 /** Is there a working session cookie? (no redirect - used before we know) */
 async function probeSession() {
@@ -95,12 +96,19 @@ export function AuthProvider({ children }) {
             sessionStorage.removeItem('gonia.reelGenerator');
             localStorage.removeItem('gosia-return-keep');
             localStorage.removeItem('gosia-return-open');
+            // what she typed / searched for on this account (notes, filters)
+            const own = ['gonia.capture', 'gonia.docs.', 'gonia.collabs.', 'gonia.ideas.query', 'gonia.purchases.', 'gonia.stats.'];
+            Object.keys(localStorage)
+                .filter((k) => own.some((p) => k.startsWith(p)))
+                .forEach((k) => localStorage.removeItem(k));
         } catch {
             // storage blocked - nothing to clean
         }
+        clearAllDrafts();
         setUser(null);
         setIsAuthenticated(false);
         await authService.logout();
+        takeReturnPath(); // a deliberate logout starts from Start next time
     };
 
     const updateUser = useCallback((next) => {

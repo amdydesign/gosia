@@ -166,6 +166,8 @@ function LiveCamera({ auto, onCapture, onFallback }) {
             const video = videoRef.current;
             video.srcObject = stream;
             await video.play().catch(() => {});
+            // closed while the camera was starting: no interval may be left running
+            if (cancelled) return;
             let shownW = video.videoWidth;
             setDims({ width: video.videoWidth, height: video.videoHeight });
 
@@ -250,11 +252,12 @@ function LiveCamera({ auto, onCapture, onFallback }) {
  * or with the shutter), straightened and cleaned up automatically, then the
  * scanner returns to the camera for the next page. onDone(pages: HTMLCanvasElement[]).
  */
-export default function DocumentScanner({ onCancel, onDone }) {
+export default function DocumentScanner({ onCancel, onDone, initialPages }) {
     const fallbackRef = useRef(null);
-    const [stage, setStage] = useState('camera'); // camera | crop | preview | pages
+    // initialPages: a scan closed by mistake and brought back with "Cofnij" opens on its page list
+    const [stage, setStage] = useState(initialPages?.length ? 'pages' : 'camera'); // camera | crop | preview | pages
     const [auto, setAuto] = useState(true);
-    const [pages, setPages] = useState([]); // { canvas, url }
+    const [pages, setPages] = useState(() => initialPages || []); // { canvas, url }
     const [photo, setPhoto] = useState(null);
     const [corners, setCorners] = useState(null);
     const [warped, setWarped] = useState(null);
@@ -327,12 +330,14 @@ export default function DocumentScanner({ onCancel, onDone }) {
     };
 
     const finish = () => onDone(pages.map((p) => p.canvas));
+    // Closing hands the scanned pages back, so the caller can offer "Cofnij" instead of losing them
+    const close = () => onCancel(pages);
     const title = stage === 'crop' ? 'Dopasuj rogi kartki' : stage === 'preview' ? `Strona ${pages.length + 1}` : stage === 'pages' ? pagesLabel(pages.length) : 'Skanuj dokument';
 
     return (
         <div className="fixed inset-0 z-[95] bg-neutral-950 text-white flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="flex items-center justify-between px-3 h-14 shrink-0">
-                <button type="button" onClick={onCancel} className="p-2 rounded-full hover:bg-white/10" aria-label="Zamknij skaner">
+                <button type="button" onClick={close} className="w-11 h-11 -ml-1 flex items-center justify-center rounded-full hover:bg-white/10" aria-label="Zamknij skaner">
                     <X size={22} />
                 </button>
                 <div className="text-sm font-semibold">{title}</div>

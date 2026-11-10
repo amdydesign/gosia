@@ -4,7 +4,7 @@
 Document root w dHosting jest na `public_html` i nie można tego zmienić. Dodałem plik `.htaccess`, który automatycznie przekierowuje ruch.
 
 ## Co robi .htaccess?
-- Gdy wchodzisz na `panel.malgorzatamordarska.pl` → pokazuje aplikację React z `frontend/dist`
+- Gdy wchodzisz na `panel.malgorzatamordarska.pl` → pokazuje aplikację React z katalogu głównego repo (`index.html`, `assets/` - trafiają tam przez `npm run deploy`)
 - Gdy aplikacja wywołuje `/api/...` → kieruje do folderu `api`
 
 ## Deploy - Krok po kroku

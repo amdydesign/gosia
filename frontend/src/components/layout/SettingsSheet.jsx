@@ -15,7 +15,6 @@ import BackupSheet from '../settings/BackupSheet';
 import ShareSheet from '../settings/ShareSheet';
 import { useAuth } from '../../context/AuthContext';
 import { usePush } from '../../hooks/usePush';
-import { useConfirm } from '../../context/ConfirmContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { usePreferences } from '../../context/PreferencesContext';
@@ -63,11 +62,10 @@ function Row({ icon, title, text, onClick, right, active = false, switchOn }) {
 /**
  * Profile menu (avatar): look, privacy, notifications and account - in short labelled groups.
  */
-export default function SettingsSheet({ open, onClose }) {
+export default function SettingsSheet({ open, onClose, target }) {
     const { user, logout, updateUser } = useAuth();
     const toast = useToast();
     const push = usePush();
-    const confirm = useConfirm();
     const { data: dashboard } = useDashboard();
     const { openAiSettings } = useQuickActions();
     const { theme, setTheme, hideByDefault, setHideByDefault } = usePreferences();
@@ -78,6 +76,12 @@ export default function SettingsSheet({ open, onClose }) {
     const [securityOpen, setSecurityOpen] = useState(false);
     const [trashOpen, setTrashOpen] = useState(false);
     const [backupOpen, setBackupOpen] = useState(false);
+    // opened straight at a section (Start: "Brak kopii zapasowej" -> Kopie zapasowe)
+    const [handledTarget, setHandledTarget] = useState(null);
+    if (target && target !== handledTarget) {
+        setHandledTarget(target);
+        if (target.section === 'backup' && user?.is_admin) setBackupOpen(true);
+    }
     const [shareOpen, setShareOpen] = useState(false);
     const [editingName, setEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
@@ -98,11 +102,8 @@ export default function SettingsSheet({ open, onClose }) {
         }
     };
 
-    const handleLogout = async () => {
-        if (await confirm({ title: 'Wylogować?', message: 'Żeby wrócić, zaloguj się ponownie.', confirmLabel: 'Wyloguj' })) {
-            await logout();
-        }
-    };
+    // No "Czy na pewno?": logging back in is the undo, and form drafts are cleared on purpose
+    const handleLogout = () => logout();
 
     const pushText =
         push.status === 'subscribed'

@@ -11,7 +11,9 @@
  *  - overdue payments once a week,
  *  - ideas to record on Mondays and Thursdays.
  * At night it also empties the bin (older than 30 days) and makes the backup (api/utils/Backup.php).
- * Every message is logged in push_log, so running often never repeats one.
+ * Every message that reached a device is logged in push_log, so running often never repeats one.
+ * A message that reached no device (push service down) is tried again on the next runs,
+ * for up to 12 hours. Only one run works at a time (CronLock).
  * Messages carry no amounts - the lock screen can be seen by others.
  *
  * dHosting (cron co 15 minut):
@@ -29,6 +31,7 @@ require_once __DIR__ . '/../config/Users.php';
 require_once __DIR__ . '/../utils/TodayAgenda.php';
 require_once __DIR__ . '/../utils/Trash.php';
 require_once __DIR__ . '/../utils/Backup.php';
+require_once __DIR__ . '/../utils/CronLock.php';
 require_once __DIR__ . '/../inbox/helpers.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
@@ -48,12 +51,21 @@ if (!$isCli) {
 
 $dry = $isCli ? in_array('--dry', $argv ?? [], true) : !empty($_GET['dry']);
 const RETURNS_TIME = '12:00';
+// a push that reaches no device is retried on later runs - but not longer than this
+const RETRY_HOURS = 12;
+
+$db = new Database();
+$conn = $db->getConnection();
+// The previous run may still be working (slow push service, nightly backup) - never two at once.
+// A dry run sends and saves nothing, so it may always look.
+if (!$dry && !CronLock::acquire($conn, 'reminders')) {
+    echo $isCli ? "Already running.\n" : json_encode(['success' => true, 'message' => 'Already running']);
+    exit;
+}
 
 if (!$dry && !WebPush::isConfigured()) {
     // no push yet - the nightly jobs still run
     try {
-        $db = new Database();
-        $conn = $db->getConnection();
         if (date('H:i') < '00:15') {
             Trash::purge($conn);
         }
@@ -67,8 +79,6 @@ if (!$dry && !WebPush::isConfigured()) {
 }
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
     foreach (['push_subscriptions', 'push_log', 'reminders', 'app_settings'] as $table) {
         Schema::ensure($conn, $table);
     }
@@ -96,23 +106,38 @@ try {
                 $stmt = $conn->prepare("SELECT 1 FROM push_log WHERE user_id = :user_id AND dedup_key = :k");
                 $stmt->execute(['user_id' => $userId, 'k' => $dedupKey]);
                 if ($stmt->fetchColumn()) {
-                    return;
+                    return 0;
                 }
             }
             $delivered = $dry ? 0 : $webPush->sendToUser($conn, $userId, $payload);
             $report[] = ['user' => $userId, 'key' => $dedupKey, 'title' => $payload['title'], 'body' => $payload['body'] ?? '', 'delivered' => $delivered];
             if ($dedupKey !== null && !$dry) {
-                $conn->prepare("INSERT IGNORE INTO push_log (user_id, dedup_key, sent_at) VALUES (:user_id, :k, :at)")
-                    ->execute(['user_id' => $userId, 'k' => $dedupKey, 'at' => date('Y-m-d H:i:s')]);
+                $log = $conn->prepare("INSERT IGNORE INTO push_log (user_id, dedup_key, sent_at) VALUES (:user_id, :k, :at)");
+                if ($delivered === 0) {
+                    // Reached no device: leave it for the next run. The first miss is noted, so a push
+                    // that keeps failing (e.g. a weekly one) is given up after RETRY_HOURS, not retried all week.
+                    $failKey = 'fail:' . md5($dedupKey);
+                    $log->execute(['user_id' => $userId, 'k' => $failKey, 'at' => date('Y-m-d H:i:s')]);
+                    $first = $conn->prepare("SELECT sent_at FROM push_log WHERE user_id = :user_id AND dedup_key = :k");
+                    $first->execute(['user_id' => $userId, 'k' => $failKey]);
+                    if (time() - (int) strtotime((string) $first->fetchColumn()) < RETRY_HOURS * 3600) {
+                        return 0;
+                    }
+                }
+                $log->execute(['user_id' => $userId, 'k' => $dedupKey, 'at' => date('Y-m-d H:i:s')]);
             }
+            return $delivered;
         };
 
         // 1. Snoozed things that are due now
-        $stmt = $conn->prepare("SELECT id, title, url FROM reminders WHERE user_id = :user_id AND sent_at IS NULL AND remind_at <= :now ORDER BY remind_at");
+        $stmt = $conn->prepare("SELECT id, title, url, remind_at FROM reminders WHERE user_id = :user_id AND sent_at IS NULL AND remind_at <= :now ORDER BY remind_at");
         $stmt->execute(['user_id' => $userId, 'now' => $now->format('Y-m-d H:i:s')]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $send(['title' => 'Przypominam', 'body' => $r['title'], 'url' => $r['url'], 'tag' => 'reminder-' . $r['id']], null);
-            if (!$dry) {
+            $delivered = $send(['title' => 'Przypominam', 'body' => $r['title'], 'url' => $r['url'], 'tag' => 'reminder-' . $r['id']], null);
+            // Marked as sent only when it reached a device; otherwise the next run tries again -
+            // until it is RETRY_HOURS late, so it cannot loop forever.
+            $tooLate = $now->getTimestamp() - strtotime($r['remind_at']) > RETRY_HOURS * 3600;
+            if (!$dry && ($delivered > 0 || $tooLate)) {
                 $conn->prepare("UPDATE reminders SET sent_at = :at WHERE id = :id")->execute(['at' => date('Y-m-d H:i:s'), 'id' => $r['id']]);
             }
         }

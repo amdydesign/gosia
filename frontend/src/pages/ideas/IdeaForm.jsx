@@ -8,7 +8,11 @@ import Field from '../../components/ui/Field';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { PageSkeleton } from '../../components/ui/Skeleton';
+import DraftNotice from '../../components/ui/DraftNotice';
+import { useDraft } from '../../hooks/useDraft';
 import { countWords, estimateSpeechSeconds, formatSeconds } from '../../utils/format';
+
+const EMPTY = { title: '', content: '', status: 'draft' };
 
 export default function IdeaForm() {
     const { id } = useParams();
@@ -18,9 +22,13 @@ export default function IdeaForm() {
     const { refresh } = useDashboard();
     const textareaRef = useRef(null);
 
-    const [form, setForm] = useState({ title: '', content: '', status: 'draft' });
+    // A half-written script survives leaving the screen, a lost session or a closed app
+    const draft = useDraft(isEdit ? `idea.edit.${id}` : 'idea.new');
+    const [form, setForm] = useState(() => (!isEdit && draft.initial ? { ...EMPTY, ...draft.initial } : EMPTY));
+    const [loaded, setLoaded] = useState(isEdit ? null : EMPTY); // what the server has - the draft is whatever differs
     const [loading, setLoading] = useState(isEdit);
     const [saving, setSaving] = useState(false);
+    const savingRef = useRef(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -29,7 +37,10 @@ export default function IdeaForm() {
         (async () => {
             try {
                 const data = await ideasService.getOne(null, id);
-                if (!cancelled) setForm({ title: data.title || '', content: data.content || '', status: data.status || 'draft' });
+                if (cancelled) return;
+                const server = { title: data.title || '', content: data.content || '', status: data.status || 'draft' };
+                setLoaded(server);
+                setForm(draft.initial ? { ...server, ...draft.initial } : server);
             } catch {
                 if (!cancelled) setError('Błąd ładowania danych');
             } finally {
@@ -39,7 +50,21 @@ export default function IdeaForm() {
         return () => {
             cancelled = true;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, isEdit]);
+
+    const dirty = !!loaded && (form.title !== loaded.title || form.content !== loaded.content);
+    const saveDraft = draft.save;
+    useEffect(() => {
+        if (dirty && !savingRef.current) saveDraft({ title: form.title, content: form.content });
+    }, [dirty, form.title, form.content, saveDraft]);
+
+    const discardDraft = () => {
+        const old = form;
+        draft.clear();
+        setForm(loaded || EMPTY);
+        toast.info('Szkic wyczyszczony', { action: { label: 'Cofnij', onClick: () => setForm(old) } });
+    };
 
     // Auto-grow textarea
     useEffect(() => {
@@ -55,21 +80,26 @@ export default function IdeaForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (savingRef.current) return; // a second tap while saving must not add the idea twice
+        savingRef.current = true;
         setSaving(true);
         setError('');
         try {
             if (isEdit) {
                 await ideasService.update(null, id, form);
+                draft.clear();
                 toast.success('Pomysł zapisany');
                 navigate(`/ideas/${id}`, { replace: true });
             } else {
                 const result = await ideasService.create(null, form);
+                draft.clear();
                 toast.success('Pomysł dodany');
                 navigate(result?.id ? `/ideas/${result.id}` : '/ideas', { replace: true });
             }
             refresh();
         } catch (err) {
             setError(err.message || 'Błąd zapisu');
+            savingRef.current = false;
             setSaving(false);
         }
     };
@@ -84,6 +114,7 @@ export default function IdeaForm() {
             </div>
 
             {error && <div className="bg-red-50 text-red-700 border border-red-100 p-3.5 rounded-xl text-sm">{error}</div>}
+            {draft.restored && <DraftNotice onDiscard={discardDraft} className="px-1" />}
 
             <Card className="space-y-5">
                 <Field label="Tytuł / temat" required>

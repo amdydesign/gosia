@@ -5,6 +5,7 @@
  */
 import { extractPdfText } from './pdfText';
 import { loadPdfjs } from './pdfjs';
+import { lazyImport } from './chunks';
 
 const MAX_OCR_PAGES = 12;
 let workerPromise = null;
@@ -13,7 +14,7 @@ let progressListener = null;
 async function getWorker() {
     if (!workerPromise) {
         workerPromise = (async () => {
-            const { createWorker } = await import('tesseract.js');
+            const { createWorker } = await lazyImport(() => import('tesseract.js'));
             return createWorker('pol', 1, {
                 workerPath: '/ocr/worker.min.js',
                 corePath: '/ocr/tesseract-core-simd-lstm.wasm.js',

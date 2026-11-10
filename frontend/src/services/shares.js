@@ -8,6 +8,7 @@
 import { useSyncExternalStore } from 'react';
 import { apiFetch, apiRequest } from '../utils/api';
 import { makePoster } from '../utils/poster';
+import { notify } from '../utils/notify';
 
 export const listShares = () => apiRequest('/share/index.php');
 export const updateShare = (id, data) => apiRequest(`/share/update.php?id=${id}`, 'PUT', data);
@@ -158,7 +159,8 @@ async function uploadOne(item) {
 
 async function keepAwake(on) {
     try {
-        if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+        // the system drops the lock whenever the app goes to the background - ask again then
+        if (on && (!wakeLock || wakeLock.released) && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen');
         if (!on && wakeLock) {
             await wakeLock.release();
             wakeLock = null;
@@ -167,6 +169,11 @@ async function keepAwake(on) {
         wakeLock = null;
     }
 }
+
+// Back in front while still uploading: take the screen lock again (it was released in the background)
+const relockOnReturn = () => {
+    if (document.visibilityState === 'visible' && running) keepAwake(true);
+};
 
 const warnLeaving = (e) => {
     e.preventDefault();
@@ -177,6 +184,7 @@ async function run() {
     if (running) return;
     running = true;
     window.addEventListener('beforeunload', warnLeaving);
+    document.addEventListener('visibilitychange', relockOnReturn);
     try {
         for (;;) {
             const next = [...uploads].reverse().find((u) => u.status === 'waiting'); // oldest first
@@ -188,9 +196,21 @@ async function run() {
                 uploads = uploads.filter((u) => u.key !== next.key);
                 emit();
                 finishedListeners.forEach((l) => l(share));
+                // said on whatever screen she is on by now - the upload may have taken minutes
+                notify.success(`Gotowe: ${share.title}`, {
+                    duration: 10000,
+                    action: {
+                        label: 'Kopiuj link',
+                        onClick: async () => {
+                            if (await copyLink(share)) notify.success('Link skopiowany');
+                            else notify.error('Nie udało się skopiować');
+                        },
+                    },
+                });
             } catch (err) {
                 if (uploads.some((u) => u.key === next.key)) {
                     patch(next.key, { status: 'error', error: err.message || 'Nie udało się wysłać' });
+                    notify.error(`Nie udało się wysłać: ${next.name}`);
                 }
             } finally {
                 controllers.delete(next.key);
@@ -199,6 +219,7 @@ async function run() {
     } finally {
         running = false;
         window.removeEventListener('beforeunload', warnLeaving);
+        document.removeEventListener('visibilitychange', relockOnReturn);
         keepAwake(false);
     }
 }

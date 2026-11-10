@@ -5,3 +5,12 @@
     RewriteCond %{HTTP:Authorization} ^(.*)
     RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
 </IfModule>
+
+# Not endpoints: dependencies' manifests, SQL, examples, docs
+<FilesMatch "(\.(md|sql|lock|example|json|dist|txt)|^LICENSE)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+<IfModule mod_rewrite.c>
+    RewriteRule ^(database|vendor|backups|cache)(/|$) - [R=404,L]
+</IfModule>

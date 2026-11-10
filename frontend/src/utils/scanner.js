@@ -3,6 +3,7 @@
  * find the sheet of paper in a photo, straighten it (perspective warp)
  * and clean it up so it looks like a scan.
  */
+import { lazyImport } from './chunks';
 
 const MAX_SIDE = 3200; // working resolution of a page photo (small print must stay readable)
 const DETECT_SIDE = 400; // resolution used to look for the sheet
@@ -583,7 +584,7 @@ export function enhance(source, mode = 'color') {
 
 /** Join page canvases into one A4-wide PDF (JPEG pages). Returns a File. */
 export async function pagesToPdf(pages, fileName) {
-    const { PDFDocument } = await import('pdf-lib');
+    const { PDFDocument } = await lazyImport(() => import('pdf-lib'));
     const pdf = await PDFDocument.create();
     for (const canvas of pages) {
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));

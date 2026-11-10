@@ -18,6 +18,9 @@ try {
     $userId = getCurrentUserId();
     $id = isset($_GET['id']) ? intval($_GET['id']) : null;
     $data = json_decode(file_get_contents("php://input"));
+    if (!is_object($data)) {
+        $data = new stdClass(); // empty or broken body: nothing to change
+    }
 
     if (!$id) {
         Response::error('Missing purchase ID', 400);

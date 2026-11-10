@@ -42,5 +42,6 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd: ' . $e->getMessage(), 500);
+    error_log('social refresh: ' . $e->getMessage());
+    Response::error('Nie udało się odświeżyć statystyk. Spróbuj później.', 500);
 }

@@ -6,11 +6,22 @@
 
 // Allow from React app origin
 $allowedOrigins = [
-    'http://localhost:5173',     // Vite dev server
-    'http://localhost:3000',     // Alternative dev port
     'https://panel.malgorzatamordarska.pl',  // Production
-    'http://panel.malgorzatamordarska.pl'    // Production (http)
 ];
+// Dev servers only with APP_DEBUG=true in api/.env (read here - this file runs before Database loads it)
+if (corsDebugMode()) {
+    $allowedOrigins[] = 'http://localhost:5173'; // Vite dev server
+    $allowedOrigins[] = 'http://localhost:3000'; // Alternative dev port
+}
+
+function corsDebugMode()
+{
+    if (isset($_ENV['APP_DEBUG'])) {
+        return $_ENV['APP_DEBUG'] === 'true';
+    }
+    $env = @file_get_contents(__DIR__ . '/../.env');
+    return $env !== false && preg_match('/^\s*APP_DEBUG\s*=\s*["\']?true["\']?\s*$/mi', $env) === 1;
+}
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 

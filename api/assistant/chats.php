@@ -4,7 +4,7 @@
  *
  * GET    /api/assistant/chats.php          -> { enabled, models: [{ id, label, hint }], default_model, chats: [{ id, title, model, updated_at, cost_usd }],
  *                                              month_cost_usd, usd_pln }
- * GET    /api/assistant/chats.php?id=12    -> { chat: { id, title, model, cost_usd }, messages: [{ id, role, text, images, sources, model, cost_usd, created_at }], usd_pln }
+ * GET    /api/assistant/chats.php?id=12    -> { chat: { id, title, model, cost_usd }, busy, messages: [{ id, role, text, images, sources, model, cost_usd, created_at }], usd_pln }
  * Costs: USD from the API's token counts (with cache and web searches); usd_pln converts for the app.
  * DELETE /api/assistant/chats.php?id=12    -> to the bin for 30 days (the app offers "Cofnij")
  * POST   /api/assistant/chats.php          { restore: 12 } -> back from the bin
@@ -24,11 +24,12 @@ try {
     Schema::ensure($conn, 'assistant_chats');
     Schema::ensure($conn, 'assistant_messages');
     Schema::ensureColumns($conn, 'assistant_messages');
+    Schema::ensureColumn($conn, 'assistant_chats', 'busy_at');
     $method = $_SERVER['REQUEST_METHOD'];
     $id = (int) ($_GET['id'] ?? 0);
 
     if ($method === 'GET' && $id > 0) {
-        $stmt = $conn->prepare("SELECT id, title, model FROM assistant_chats WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL");
+        $stmt = $conn->prepare("SELECT id, title, model, busy_at > DATE_SUB(NOW(), INTERVAL " . Assistant::BUSY_MINUTES . " MINUTE) AS busy FROM assistant_chats WHERE id = :id AND user_id = :user_id AND deleted_at IS NULL");
         $stmt->execute(['id' => $id, 'user_id' => $userId]);
         $chat = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$chat) {
@@ -48,6 +49,8 @@ try {
                 'cost_usd' => round(array_sum(array_column($messages, 'cost_usd')), 6),
             ],
             'messages' => $messages,
+            // a reply is still being written (the app was closed mid-answer) - the app waits and reloads
+            'busy' => !empty($chat['busy']),
             'long_chat' => Assistant::promptTokens($lastUsage) > Assistant::LONG_CHAT_TOKENS,
             'usd_pln' => Assistant::usdToPln(),
         ]);

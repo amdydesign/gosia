@@ -9,6 +9,7 @@
  */
 
 require_once __DIR__ . '/../config/Schema.php';
+require_once __DIR__ . '/../config/Users.php';
 require_once __DIR__ . '/../utils/CapturePrompts.php';
 
 const INBOX_KINDS = ['purchase', 'collaboration', 'document', 'idea', 'task'];
@@ -33,7 +34,13 @@ function inboxUserFromToken(PDO $conn, $token)
         return null;
     }
     Schema::ensure($conn, 'app_settings');
-    $stmt = $conn->query("SELECT user_id, value FROM app_settings WHERE name = 'inbox_token'");
+    // a blocked account's token stops working too
+    Users::ensure($conn);
+    $stmt = $conn->query("
+        SELECT s.user_id, s.value FROM app_settings s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.name = 'inbox_token' AND u.is_active = 1
+    ");
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         if (hash_equals((string) $row['value'], $token)) {
             return (int) $row['user_id'];

@@ -11,6 +11,7 @@ export default function SocialCallback() {
     const { platform } = useParams();
     const navigate = useNavigate();
     const code = searchParams.get('code');
+    const state = searchParams.get('state');
     const oauthError = searchParams.get('error');
     const [status, setStatus] = useState(() => (oauthError || !code ? 'error' : 'processing'));
     const [message, setMessage] = useState(() =>
@@ -24,7 +25,7 @@ export default function SocialCallback() {
         (async () => {
             try {
                 const targetPlatform = platform || 'youtube';
-                const res = await statsService.exchangeSocialCode(targetPlatform, code);
+                const res = await statsService.exchangeSocialCode(targetPlatform, code, state);
                 if (cancelled) return;
                 if (res.success) {
                     setStatus('success');
@@ -43,7 +44,7 @@ export default function SocialCallback() {
         return () => {
             cancelled = true;
         };
-    }, [code, oauthError, platform]);
+    }, [code, state, oauthError, platform]);
 
     return (
         <AuthShell>

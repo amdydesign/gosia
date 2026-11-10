@@ -3,12 +3,14 @@
  * Backups - run by the existing cron (send_reminders.php) once a night, or by hand:
  *   php api/cron/backup.php            (add --files to include uploads now)
  *
- *  - every night: the whole database -> api/backups/db-YYYY-MM-DD.sql.gz (last 14 kept)
- *  - Sundays: uploaded files (contracts, receipts) -> api/backups/files-YYYY-MM-DD.zip (last 2 kept)
+ *  - every night: the whole database -> api/backups/db-YYYY-MM-DD-<random>.sql.gz (last 14 days kept)
+ *  - Sundays: uploaded files (contracts, receipts) -> api/backups/files-YYYY-MM-DD-<random>.zip (last 2 kept)
+ *    (the random part makes the names impossible to guess, should the directory ever be served)
  *  - off the server (optional): the same files to S3-compatible storage (Backblaze B2,
  *    Cloudflare R2, AWS...) - set BACKUP_S3_* in api/.env. With BACKUP_PASSWORD they are
  *    encrypted first (AES-256-GCM); keep that password outside the server too.
- *  - a failure sends a push to the admin.
+ *  - a failure sends a push to the admin - also when a run died half-way (e.g. out of memory);
+ *    the nightly run is tried up to 3 times.
  * Restore: php api/utils/restore_backup.php <file>
  */
 
@@ -20,15 +22,24 @@ class Backup
     const KEEP_FILES = 2;
     const CHUNK = 8388608; // 8 MB - encryption works in pieces so big archives fit in memory
     const MAGIC = "GONIABK1";
+    const MAX_TRIES = 3;           // nightly attempts before giving up until tomorrow
+    const INSERT_BYTES = 1048576;  // one INSERT statement holds about 1 MB of rows
+    // db-2026-10-26.sql.gz (older copies) or db-2026-10-26-0f3a9c....sql.gz
+    const NAME_PATTERN = '/^(db|files)-(\d{4}-\d{2}-\d{2})(?:-[a-f0-9]{8,32})?\.(sql\.gz|zip)$/';
 
     public static function dir()
     {
         return __DIR__ . '/../backups';
     }
 
-    /** Once a night (after 03:00), called from the 15-minute cron. Returns a report or null. */
+    /**
+     * Once a night (03:00-05:59), called from the 15-minute cron. Returns a report or null.
+     * "Done for today" is saved only after a success, so a run that failed or died is tried
+     * again on the next cron runs (MAX_TRIES a night).
+     */
     public static function runIfDue(PDO $conn, DateTime $now)
     {
+        self::noteUnfinished($conn);
         if ($now->format('H') < '03' || $now->format('H') > '05') {
             return null;
         }
@@ -36,8 +47,48 @@ class Backup
         if (self::state($conn, 'backup_last_run') === $today) {
             return null;
         }
-        self::setState($conn, 'backup_last_run', $today);
-        return self::run($conn, $now->format('N') === '7');
+        // "YYYY-MM-DD n" - how many times tonight's backup was started
+        $tries = explode(' ', self::state($conn, 'backup_tries'));
+        $count = $tries[0] === $today ? (int) ($tries[1] ?? 0) : 0;
+        if ($count >= self::MAX_TRIES) {
+            return null;
+        }
+        self::setState($conn, 'backup_tries', $today . ' ' . ($count + 1));
+        self::setState($conn, 'backup_started', date('Y-m-d H:i:s'));
+        $report = self::run($conn, $now->format('N') === '7');
+        self::setState($conn, 'backup_started', '');
+        if ($report['ok']) {
+            self::setState($conn, 'backup_last_run', $today);
+        }
+        return $report;
+    }
+
+    /**
+     * A nightly run that started and never finished (fatal error: memory, time limit) leaves
+     * "backup_started" behind. Seen on a later cron run: save the error and tell the admin.
+     */
+    private static function noteUnfinished(PDO $conn)
+    {
+        $started = self::state($conn, 'backup_started');
+        if ($started === '' || time() - (int) strtotime($started) < 600) {
+            return;
+        }
+        self::setState($conn, 'backup_started', '');
+        $message = 'Kopia zaczęta ' . substr($started, 0, 16) . ' nie skończyła się (np. zabrakło pamięci albo czasu).';
+        self::setState($conn, 'backup_last_error', date('Y-m-d H:i') . ' ' . $message);
+        self::alertAdmins($conn, $message);
+    }
+
+    /** Days since the last backup that worked, or null when there was none yet. */
+    public static function daysSinceLastOk(PDO $conn)
+    {
+        $last = strtotime(self::state($conn, 'backup_last_ok'));
+        return $last ? max(0, (int) floor((time() - $last) / 86400)) : null;
+    }
+
+    public static function lastOk(PDO $conn)
+    {
+        return self::state($conn, 'backup_last_ok') ?: null;
     }
 
     /** @return array ['ok' => bool, 'files' => [...], 'remote' => bool, 'error' => ?string] */
@@ -64,7 +115,7 @@ class Backup
             self::rotate();
             self::setState($conn, 'backup_last_ok', date('Y-m-d H:i:s'));
             self::setState($conn, 'backup_last_error', '');
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $report['ok'] = false;
             $report['error'] = $e->getMessage();
             self::setState($conn, 'backup_last_error', date('Y-m-d H:i') . ' ' . mb_substr($e->getMessage(), 0, 400));
@@ -78,10 +129,14 @@ class Backup
     {
         $files = [];
         foreach (glob(self::dir() . '/{db,files}-*', GLOB_BRACE) ?: [] as $path) {
+            if (!preg_match(self::NAME_PATTERN, basename($path))) {
+                continue; // unfinished pieces (.part, .enc)
+            }
             $files[] = ['name' => basename($path), 'size' => filesize($path), 'date' => date('Y-m-d H:i', filemtime($path))];
         }
+        // newest first: by the day in the name, then by the time written
         usort($files, function ($a, $b) {
-            return strcmp($b['name'], $a['name']);
+            return strcmp(substr($b['name'], strpos($b['name'], '-') + 1, 10) . $b['date'], substr($a['name'], strpos($a['name'], '-') + 1, 10) . $a['date']);
         });
         return [
             'last_ok' => self::state($conn, 'backup_last_ok') ?: null,
@@ -94,42 +149,101 @@ class Backup
 
     /* ------------------------------------------------------------- dump */
 
-    private static function dumpDatabase(PDO $conn)
+    /** Random part of a file name - backups cannot be found by guessing the date. */
+    private static function suffix()
     {
-        $path = self::dir() . '/db-' . date('Y-m-d') . '.sql.gz';
+        return bin2hex(random_bytes(8));
+    }
+
+    /**
+     * A second connection that streams rows instead of loading whole tables into memory,
+     * with one consistent view of the data for the whole dump.
+     */
+    private static function dumpConnection()
+    {
+        $pdo = new PDO(
+            "mysql:host={$_ENV['DB_HOST']};dbname={$_ENV['DB_NAME']};charset=utf8mb4",
+            $_ENV['DB_USER'],
+            $_ENV['DB_PASS'],
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => false,
+                PDO::ATTR_STRINGIFY_FETCHES => true,
+            ]
+        );
+        // the same clock as the main connection (TIMESTAMP columns are written in session time)
+        $pdo->exec("SET time_zone = '" . date('P') . "'");
+        $pdo->exec("START TRANSACTION WITH CONSISTENT SNAPSHOT");
+        return $pdo;
+    }
+
+    /** Copy of the database as it is right now, kept until removed by hand (before a restore). */
+    public static function safetyDump(PDO $conn)
+    {
+        self::prepareDir();
+        return self::dumpDatabase($conn, 'before-restore-' . date('Y-m-d-His'));
+    }
+
+    private static function dumpDatabase(PDO $conn, $name = null)
+    {
+        $path = self::dir() . '/' . ($name ?: 'db-' . date('Y-m-d')) . '-' . self::suffix() . '.sql.gz';
+        // table list and CREATE statements: small, read through the main connection
+        $tables = $conn->query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")->fetchAll(PDO::FETCH_NUM);
+        $read = self::dumpConnection();
         $gz = gzopen($path . '.part', 'wb6');
         if (!$gz) {
             throw new RuntimeException('Nie mogę zapisać kopii w api/backups');
         }
-        gzwrite($gz, "-- Gonia backup " . date('Y-m-d H:i:s') . "\nSET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n\n");
-        foreach ($conn->query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")->fetchAll(PDO::FETCH_NUM) as $t) {
-            $table = $t[0];
-            $create = $conn->query("SHOW CREATE TABLE `$table`")->fetch(PDO::FETCH_NUM)[1];
-            gzwrite($gz, "DROP TABLE IF EXISTS `$table`;\n$create;\n");
-            $rows = $conn->query("SELECT * FROM `$table`");
-            $batch = [];
-            $columns = null;
-            while ($row = $rows->fetch(PDO::FETCH_ASSOC)) {
-                if ($columns === null) {
-                    $columns = '`' . implode('`, `', array_keys($row)) . '`';
+        try {
+            self::write($gz, "-- Gonia backup " . date('Y-m-d H:i:s') . "\nSET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n\n");
+            foreach ($tables as $t) {
+                $table = $t[0];
+                $create = $conn->query("SHOW CREATE TABLE `$table`")->fetch(PDO::FETCH_NUM)[1];
+                self::write($gz, "DROP TABLE IF EXISTS `$table`;\n$create;\n");
+                // rows are written one by one; a statement is closed after about 1 MB
+                $rows = $read->query("SELECT * FROM `$table`");
+                $bytes = 0;
+                while ($row = $rows->fetch(PDO::FETCH_ASSOC)) {
+                    $line = '(' . implode(', ', array_map(function ($v) use ($conn) {
+                        return $v === null ? 'NULL' : $conn->quote((string) $v);
+                    }, $row)) . ')';
+                    if ($bytes === 0) {
+                        self::write($gz, "INSERT INTO `$table` (`" . implode('`, `', array_keys($row)) . "`) VALUES\n" . $line);
+                    } else {
+                        self::write($gz, ",\n" . $line);
+                    }
+                    $bytes += strlen($line);
+                    if ($bytes >= self::INSERT_BYTES) {
+                        self::write($gz, ";\n");
+                        $bytes = 0;
+                    }
                 }
-                $batch[] = '(' . implode(', ', array_map(function ($v) use ($conn) {
-                    return $v === null ? 'NULL' : $conn->quote((string) $v);
-                }, $row)) . ')';
-                if (count($batch) >= 100) {
-                    gzwrite($gz, "INSERT INTO `$table` ($columns) VALUES\n" . implode(",\n", $batch) . ";\n");
-                    $batch = [];
+                $rows->closeCursor();
+                if ($bytes > 0) {
+                    self::write($gz, ";\n");
                 }
+                self::write($gz, "\n");
             }
-            if ($batch) {
-                gzwrite($gz, "INSERT INTO `$table` ($columns) VALUES\n" . implode(",\n", $batch) . ";\n");
-            }
-            gzwrite($gz, "\n");
+            self::write($gz, "SET FOREIGN_KEY_CHECKS = 1;\n");
+        } catch (Throwable $e) {
+            gzclose($gz);
+            @unlink($path . '.part');
+            throw $e;
         }
-        gzwrite($gz, "SET FOREIGN_KEY_CHECKS = 1;\n");
-        gzclose($gz);
-        rename($path . '.part', $path);
+        if (!gzclose($gz) || !rename($path . '.part', $path)) {
+            @unlink($path . '.part');
+            throw new RuntimeException('Nie mogę zapisać kopii w api/backups');
+        }
         return $path;
+    }
+
+    /** gzwrite that notices a full disk. */
+    private static function write($gz, $text)
+    {
+        if (gzwrite($gz, $text) !== strlen($text)) {
+            throw new RuntimeException('Nie mogę zapisać kopii w api/backups (brak miejsca?)');
+        }
     }
 
     private static function archiveUploads()
@@ -138,7 +252,7 @@ class Backup
         if (!$source || !class_exists('ZipArchive')) {
             return null;
         }
-        $path = self::dir() . '/files-' . date('Y-m-d') . '.zip';
+        $path = self::dir() . '/files-' . date('Y-m-d') . '-' . self::suffix() . '.zip';
         $zip = new ZipArchive();
         if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException('Nie mogę utworzyć archiwum plików');
@@ -160,13 +274,32 @@ class Backup
         return $path;
     }
 
+    /** Keep the newest copy of each day, for the last KEEP_DB / KEEP_FILES days; drop leftovers of broken runs. */
     private static function rotate()
     {
         foreach (['db' => self::KEEP_DB, 'files' => self::KEEP_FILES] as $kind => $keep) {
-            $list = glob(self::dir() . "/$kind-*") ?: [];
-            rsort($list);
-            foreach (array_slice($list, $keep) as $old) {
-                @unlink($old);
+            $byDay = [];
+            foreach (glob(self::dir() . "/$kind-*") ?: [] as $path) {
+                if (!preg_match(self::NAME_PATTERN, basename($path), $m)) {
+                    // .part / .enc / zip temp file of a run that died - not one that is being written now
+                    if (time() - (int) @filemtime($path) > 86400) {
+                        @unlink($path);
+                    }
+                    continue;
+                }
+                $byDay[$m[2]][] = $path;
+            }
+            krsort($byDay);
+            $day = 0;
+            foreach ($byDay as $paths) {
+                usort($paths, function ($a, $b) {
+                    return filemtime($b) <=> filemtime($a);
+                });
+                // older copies of the same day, and whole days past the limit
+                foreach ($day < $keep ? array_slice($paths, 1) : $paths as $old) {
+                    @unlink($old);
+                }
+                $day++;
             }
         }
     }

@@ -24,5 +24,6 @@ try {
         : ['success' => false, 'error' => $r['error'] ?? 'Nie udało się pobrać danych'], JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    error_log('scrape_instagram: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Nie udało się pobrać danych'], JSON_UNESCAPED_UNICODE);
 }

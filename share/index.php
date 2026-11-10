@@ -160,6 +160,14 @@ try {
             http_response_code(404);
             exit;
         }
+        if (!$canDownload) {
+            // Downloads are off: the player on the page still gets its stream, but the address
+            // opened on its own (browser tab -> "Zapisz jako") is refused, and no file name is offered.
+            if (in_array(strtolower($_SERVER['HTTP_SEC_FETCH_DEST'] ?? ''), ['document', 'iframe', 'frame', 'embed', 'object'], true)) {
+                shareGone('Pobieranie jest wyłączone', 'Ten plik można tylko obejrzeć.', 403);
+            }
+            shareStream($path, $mime, '', 'inline', 'private, no-store');
+        }
         shareStream($path, $mime, $share['original_name'], 'inline');
     }
 

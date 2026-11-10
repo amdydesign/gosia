@@ -64,6 +64,36 @@ export function usePurchaseActions({ onChange } = {}) {
         [toast, update]
     );
 
+    /** The same patch for several items, one by one. @return the items that were really saved */
+    const applyAll = useCallback(
+        async (items, patch) => {
+            const done = [];
+            for (const p of items) {
+                try {
+                    await apiRequest(`/purchases/update.php?id=${p.id}`, 'PUT', patch);
+                    onChange?.(p.id, patch);
+                    done.push(p);
+                } catch {
+                    // counted by the caller
+                }
+            }
+            refresh();
+            return done;
+        },
+        [onChange, refresh]
+    );
+
+    /** Never a success toast over a failure. @return false when nothing was saved */
+    const reportFailures = useCallback(
+        (saved, total) => {
+            if (saved === total) return true;
+            if (!saved) toast.error('Nie udało się zapisać — spróbuj jeszcze raz');
+            else toast.error(`Nie zapisało się ${total - saved} z ${total} — spróbuj jeszcze raz`);
+            return saved > 0;
+        },
+        [toast]
+    );
+
     const settle = useCallback(
         async (toReturn, toKeep, returnCost = null) => {
             const patches = [
@@ -82,8 +112,7 @@ export function usePurchaseActions({ onChange } = {}) {
                 }
             }
             refresh();
-            if (done.length < patches.length) toast.error('Nie wszystko udało się zapisać — spróbuj jeszcze raz');
-            if (!done.length) return false;
+            if (!reportFailures(done.length, patches.length)) return false;
             const back = toReturn.filter((p) => done.includes(p));
             const sum = back.reduce((s, p) => s + (Number(p.amount) || 0), 0);
             const undo = () =>
@@ -96,33 +125,35 @@ export function usePurchaseActions({ onChange } = {}) {
             );
             return true;
         },
-        [onChange, refresh, toast, update]
+        [onChange, refresh, reportFailures, toast, update]
     );
 
     /** "Paczka przyszła dziś" for a whole parcel - the return window starts again from today. */
     const delivered = useCallback(
         async (items) => {
             const today = getTodayDate();
-            for (const p of items) await update(p, { delivered_at: today });
+            const done = await applyAll(items, { delivered_at: today });
+            if (!reportFailures(done.length, items.length)) return;
             toast.success('Termin zwrotu liczę od dziś', {
                 duration: 5000,
-                action: { label: 'Cofnij', onClick: () => items.forEach((p) => update(p, { delivered_at: null })) },
+                action: { label: 'Cofnij', onClick: () => done.forEach((p) => update(p, { delivered_at: null })) },
             });
         },
-        [toast, update]
+        [applyAll, reportFailures, toast, update]
     );
 
     /** "Pieniądze są": the refund is on the account. */
     const refunded = useCallback(
         async (items) => {
-            for (const p of items) await update(p, { refunded_at: 'today' });
-            const sum = items.reduce((s, p) => s + Math.max(0, (Number(p.returned_amount) || 0) - (Number(p.return_cost) || 0)), 0);
+            const done = await applyAll(items, { refunded_at: 'today' });
+            if (!reportFailures(done.length, items.length)) return;
+            const sum = done.reduce((s, p) => s + Math.max(0, (Number(p.returned_amount) || 0) - (Number(p.return_cost) || 0)), 0);
             toast.success(`+${sum.toLocaleString('pl-PL')} zł wróciło`, {
                 duration: 5000,
-                action: { label: 'Cofnij', onClick: () => items.forEach((p) => update(p, { refunded_at: null })) },
+                action: { label: 'Cofnij', onClick: () => done.forEach((p) => update(p, { refunded_at: null })) },
             });
         },
-        [toast, update]
+        [applyAll, reportFailures, toast, update]
     );
 
     return { update, returned, keep, settle, delivered, refunded, busyId };

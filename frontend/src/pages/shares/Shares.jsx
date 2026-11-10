@@ -8,7 +8,6 @@ import {
     listShares,
     deleteShare,
     sendLink,
-    copyLink,
     posterUrl,
     queueShareUploads,
     cancelShareUpload,
@@ -22,6 +21,7 @@ import StorageCard from '../../components/shares/StorageCard';
 import PageHeader from '../../components/ui/PageHeader';
 import SearchInput from '../../components/ui/SearchInput';
 import EmptyState from '../../components/ui/EmptyState';
+import LoadError from '../../components/ui/LoadError';
 import { CardSkeleton } from '../../components/ui/Skeleton';
 
 const SORT_KEY = 'gosia-share-sort';
@@ -118,18 +118,9 @@ export default function Shares() {
             onShareUploaded((share) => {
                 setData((prev) => (prev ? { ...prev, items: [share, ...prev.items], total_size: prev.total_size + share.size } : prev));
                 setFreshId(share.id);
-                load(); // fresh space counter
-                toast.success(`Gotowe: ${share.title}`, {
-                    duration: 10000,
-                    action: {
-                        label: 'Kopiuj link',
-                        onClick: async () => {
-                            if (await copyLink(share)) toast.success('Link skopiowany');
-                        },
-                    },
-                });
+                load(); // fresh space counter ("Gotowe" itself is announced by the upload queue, on any screen)
             }),
-        [toast, load]
+        [load]
     );
 
     // "+" / Dodaj -> straight to picking a file
@@ -313,8 +304,8 @@ export default function Shares() {
                     <div className="space-y-3 mt-5">
                         {[0, 1, 2].map((i) => <CardSkeleton key={i} className="h-20" />)}
                     </div>
-                ) : error ? (
-                    <EmptyState icon={Link2} title="Nie udało się pobrać plików" text={error} />
+                ) : error && !data ? (
+                    <LoadError onRetry={load} className="mt-5" />
                 ) : items.length === 0 ? (
                     uploads.length === 0 && (
                         <EmptyState

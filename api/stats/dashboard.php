@@ -17,6 +17,7 @@ require_once __DIR__ . '/../utils/DoneLog.php';
 require_once __DIR__ . '/../utils/TodayAgenda.php';
 require_once __DIR__ . '/../purchases/helpers.php';
 require_once __DIR__ . '/../collaborations/helpers.php';
+require_once __DIR__ . '/../utils/Backup.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed', 405);
@@ -366,6 +367,20 @@ try {
         }
     }
 
+    // Admin only: no backup that worked for 2+ days (or none ever) - shown on Start, not just in Settings.
+    // null = all fine; otherwise { days: int|null (null = never made), last_ok: "Y-m-d H:i:s"|null }
+    $backupWarning = null;
+    try {
+        if (Users::isAdmin($conn, $userId)) {
+            $backupDays = Backup::daysSinceLastOk($conn);
+            if ($backupDays === null || $backupDays >= 2) {
+                $backupWarning = ['days' => $backupDays, 'last_ok' => Backup::lastOk($conn)];
+            }
+        }
+    } catch (Exception $e) {
+        $backupWarning = null;
+    }
+
     Response::success([
         'today' => date('Y-m-d'),
         'agenda' => $agenda,
@@ -414,6 +429,7 @@ try {
         'ai' => ['enabled' => AiClient::provider() !== null, 'provider' => AiClient::provider(), 'documents' => AiClient::key('claude') !== ''],
         'social' => $social,
         'social_stale' => $socialStale,
+        'backup_warning' => $backupWarning,
         'urgent_returns_count' => $urgentReturnsCount,
         'urgent_purchases' => $urgentPurchases,
         'unpaid_collaborations' => $unpaidCollabs,

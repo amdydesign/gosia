@@ -1,4 +1,5 @@
 import React from 'react';
+import { isChunkError } from '../../utils/chunks';
 
 class ErrorBoundary extends React.Component {
     constructor(props) {
@@ -15,6 +16,20 @@ class ErrorBoundary extends React.Component {
     }
 
     render() {
+        if (this.state.hasError && isChunkError(this.state.error)) {
+            // A screen's code could not be loaded: the app was updated while it stayed open
+            return (
+                <div className="min-h-dvh flex items-center justify-center p-6 bg-canvas">
+                    <div className="max-w-md w-full bg-surface border border-line rounded-3xl shadow-card p-8 text-center">
+                        <h1 className="text-xl font-display font-semibold text-ink tracking-tight">{navigator.onLine === false ? 'Brak internetu' : 'Jest nowa wersja'}</h1>
+                        <p className="text-sm text-ink-soft mt-2">
+                            {navigator.onLine === false ? 'Ten ekran wczyta się, gdy wróci połączenie.' : 'Odśwież aplikację, żeby wczytać ten ekran.'} Szkice formularzy zostają.
+                        </p>
+                        <button type="button" onClick={() => window.location.reload()} className="btn btn-primary w-full mt-6">Odśwież</button>
+                    </div>
+                </div>
+            );
+        }
         if (this.state.hasError) {
             return (
                 <div className="min-h-dvh flex items-center justify-center p-6 bg-canvas">

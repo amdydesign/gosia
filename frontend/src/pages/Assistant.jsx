@@ -98,6 +98,7 @@ export default function Assistant() {
 
     const inputRef = useRef(null);
     const fileRef = useRef(null);
+    const followRef = useRef(0);
 
     const setChatId = (id) => {
         setChatIdState(id);
@@ -122,6 +123,37 @@ export default function Assistant() {
         return data;
     }, []);
 
+    // A reply still being written on the server (the app was closed or lost the connection mid-answer):
+    // wait for it and show what is already stored, instead of asking her to send the message again
+    const follow = useCallback(async (id) => {
+        const token = ++followRef.current;
+        setStreaming(true);
+        setStatus('Odpowiedź kończy się w tle…');
+        for (let i = 0; i < 230 && followRef.current === token; i++) {
+            let busy = true;
+            try {
+                const chat = await getChat(id);
+                if (followRef.current !== token) return;
+                busy = !!chat.busy;
+                const stored = chat.messages || [];
+                setMessages(busy ? [...stored, { id: 'waiting', role: 'assistant', text: '', sources: [], pending: true }] : stored);
+                setLongChat(!!chat.long_chat);
+            } catch {
+                // offline for a moment - try again
+            }
+            if (!busy) break;
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+        }
+        if (followRef.current !== token) return;
+        setStreaming(false);
+        setStatus('');
+        refreshChats().catch(() => {});
+    }, [refreshChats]);
+
+    useEffect(() => () => {
+        followRef.current = -1;
+    }, []);
+
     // First load: chats + models, then the chat she left open
     useEffect(() => {
         let cancelled = false;
@@ -138,6 +170,7 @@ export default function Assistant() {
                         if (!cancelled) {
                             setMessages(chat.messages || []);
                             setLongChat(!!chat.long_chat);
+                            if (chat.busy) follow(open);
                         }
                     } catch {
                         if (!cancelled) setChatId(null);
@@ -190,6 +223,7 @@ export default function Assistant() {
             setChatId(id);
             setMessages(chat.messages || []);
             setLongChat(!!chat.long_chat);
+            if (chat.busy) follow(id);
             requestAnimationFrame(() => scrollToBottom());
         } catch (err) {
             toast.error(err.message || 'Nie udało się otworzyć rozmowy');
@@ -305,6 +339,9 @@ export default function Assistant() {
 
         const update = (fn) => setMessages((prev) => prev.map((m) => (m.id === replyId ? fn(m) : m)));
         let failed = null;
+        let savedPart = false;
+        let dropped = false;
+        let accepted = null; // chat id once the server has stored her message
 
         try {
             await sendMessage({
@@ -314,7 +351,12 @@ export default function Assistant() {
                 images: sentImages,
                 onEvent: (name, data) => {
                     const stick = nearBottom();
-                    if (name === 'text') {
+                    if (name === 'chat') {
+                        accepted = data.chat_id;
+                        setChatId(data.chat_id);
+                    } else if (name === 'dropped') {
+                        dropped = true;
+                    } else if (name === 'text') {
                         update((m) => ({ ...m, text: m.text + data.text }));
                         setStatus('');
                     } else if (name === 'status' || name === 'tool') {
@@ -352,6 +394,7 @@ export default function Assistant() {
                         refreshChats().catch(() => {});
                     } else if (name === 'error') {
                         failed = data.message || 'Coś poszło nie tak';
+                        savedPart = !!data.saved;
                     }
                     if (stick && name === 'text') requestAnimationFrame(() => scrollToBottom());
                 },
@@ -360,9 +403,25 @@ export default function Assistant() {
             failed = err.message || 'Asystent nie odpowiedział';
         }
 
+        if (dropped && accepted) {
+            // her message is stored and the reply is still being written - wait for it, never send twice
+            follow(accepted);
+            return;
+        }
         setStreaming(false);
         setStatus('');
+        if (failed && savedPart && accepted) {
+            // part of the reply (and what it already did) is stored - show the chat as it is
+            toast.error(failed, { duration: 7000 });
+            getChat(accepted)
+                .then((chat) => setMessages(chat.messages || []))
+                .catch(() => {});
+            refreshChats().catch(() => {});
+            return;
+        }
+        if (dropped) failed = 'Połączenie się urwało. Spróbuj jeszcze raz.';
         if (failed) {
+            if (accepted && accepted !== chatId) setChatId(chatId);
             // nothing was saved: take the message back to the box so one tap sends it again
             setMessages((prev) => prev.filter((m) => m.id !== replyId && m.id !== userBubble.id));
             setDraft(text);

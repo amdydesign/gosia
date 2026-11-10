@@ -33,6 +33,7 @@ export default function Button({
     to,
     href,
     type = 'button',
+    disabled = false,
     ...rest
 }) {
     const classes = ['btn', VARIANTS[variant] || '', SIZES[size] || '', block ? 'btn-block' : '', className]
@@ -63,7 +64,7 @@ export default function Button({
         );
     }
     return (
-        <button type={type} className={classes} disabled={loading || rest.disabled} {...rest}>
+        <button type={type} className={classes} {...rest} disabled={loading || disabled}>
             {content}
         </button>
     );

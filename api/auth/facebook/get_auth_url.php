@@ -6,6 +6,10 @@
 
 require_once __DIR__ . '/../../config/cors.php';
 require_once __DIR__ . '/../../config/Response.php';
+require_once __DIR__ . '/../../middleware/auth.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
+
+$userId = getCurrentUserId();
 
 $credsPath = __DIR__ . '/../../config/social_credentials.php';
 if (!file_exists($credsPath)) {
@@ -25,7 +29,8 @@ $params = [
     'redirect_uri' => $fb['redirect_uri'],
     'scope' => 'public_profile',
     'response_type' => 'code',
-    'state' => bin2hex(random_bytes(16))
+    // signed and bound to this user - checked in exchange.php
+    'state' => OAuthState::make($userId)
 ];
 
 $url = 'https://www.facebook.com/v26.0/dialog/oauth?' . http_build_query($params);

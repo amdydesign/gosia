@@ -175,6 +175,7 @@ function AddForm({ onCancel, onCreated }) {
 
     const submit = async (e) => {
         e.preventDefault();
+        if (saving) return; // no second account from a double tap
         setSaving(true);
         setError('');
         try {

@@ -29,7 +29,8 @@ import Sheet from '../components/ui/Sheet';
 import EmptyState from '../components/ui/EmptyState';
 import { PageSkeleton } from '../components/ui/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { addDays, formatCurrency, formatDateShort, formatWeekdayDate, getTodayDate, greetingForHour, openPicker, toDateInput, userName } from '../utils/format';
+import { DEADLINE_TEXT, addDays, daysFromToday, deadlineTone, formatCurrency, formatDateShort, formatWeekdayDate, getTodayDate, greetingForHour, openPicker, toDateInput, userName } from '../utils/format';
+import { usePersistentState } from '../hooks/usePersistentState';
 import { imagesFromDataTransfer } from '../utils/images';
 import {
     SNOOZE_PRESETS,
@@ -60,6 +61,8 @@ const WEEK_OPEN_KEY = 'gonia.weekOpen';
 const SNOOZED_OPEN_KEY = 'gonia.snoozedOpen';
 const LATE_OPEN_KEY = 'gonia.lateOpen';
 const REVIEW_OPEN_KEY = 'gonia.reviewOpen';
+const CAPTURE_KEY = 'gonia.capture';
+const UNDO_FAILED = 'Nie udało się cofnąć — spróbuj jeszcze raz';
 
 /** "przypomnę o 19:00" today, "jutro o 9:00" / "pt o 9:00" later. */
 function snoozeLabel(until) {
@@ -189,6 +192,8 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            <BackupWarning warning={data?.backup_warning} />
+
             {!focus && data?.week_review && <WeekReview review={data.week_review} />}
 
             <FocusCard
@@ -257,7 +262,15 @@ function useAgendaActions() {
         (text, undo) =>
             toast.success(text, {
                 duration: 5000,
-                action: { label: 'Cofnij', onClick: () => Promise.resolve(undo()).then(() => refresh()) },
+                action: {
+                    label: 'Cofnij',
+                    onClick: () =>
+                        Promise.resolve()
+                            .then(undo)
+                            .then(() => refresh())
+                            // a failed undo must not look like it worked
+                            .catch((err) => toast.error(err?.message || UNDO_FAILED)),
+                },
             }),
         [refresh, toast]
     );
@@ -395,7 +408,7 @@ function useAgendaActions() {
                 const when = res?.remind_at ? snoozeLabel(res.remind_at).replace(/^przypomnę /, '') : SNOOZE_PRESETS.find((p) => p.value === preset)?.label.toLowerCase() || '';
                 toast.success(`Odłożone — przypomnę ${when}`, {
                     duration: 5000,
-                    action: { label: 'Cofnij', onClick: () => cancelSnooze(item.ref_key).then(() => refresh()) },
+                    action: { label: 'Cofnij', onClick: () => cancelSnooze(item.ref_key).then(() => refresh()).catch((err) => toast.error(err?.message || UNDO_FAILED)) },
                 });
             });
         },
@@ -434,9 +447,13 @@ function useAgendaActions() {
                     action: {
                         label: 'Cofnij',
                         onClick: async () => {
-                            const res = await createTask(item.title, item.deadline || undefined, item.snoozed_until?.slice(0, 16));
-                            if (wasDone && res?.id) await setTaskDone(res.id, true);
-                            refresh();
+                            try {
+                                const res = await createTask(item.title, item.deadline || undefined, item.snoozed_until?.slice(0, 16));
+                                if (wasDone && res?.id) await setTaskDone(res.id, true);
+                                refresh();
+                            } catch (err) {
+                                toast.error(err?.message || UNDO_FAILED);
+                            }
                         },
                     },
                 });
@@ -453,7 +470,7 @@ function useAgendaActions() {
                 await planIdea(item.idea_id, false);
                 toast.success('Zdjęte z dzisiejszej listy', {
                     duration: 5000,
-                    action: { label: 'Cofnij', onClick: () => planIdea(item.idea_id, true).then(() => refresh()) },
+                    action: { label: 'Cofnij', onClick: () => planIdea(item.idea_id, true).then(() => refresh()).catch((err) => toast.error(err?.message || UNDO_FAILED)) },
                 });
             });
         },
@@ -489,6 +506,38 @@ function useAgendaActions() {
 }
 
 /* ------------------------------------------------------------------ pieces */
+
+/** The nightly backup stopped: one small amber line; a tap opens Settings -> Kopie zapasowe (admin). */
+function BackupWarning({ warning }) {
+    const { user } = useAuth();
+    const { openSettings } = useQuickActions();
+    // backend: null (all fine) or { days: int | null, last_ok } - days null = there has never been a backup
+    if (!warning) return null;
+    const never = warning.days === null || warning.days === undefined || Number.isNaN(Number(warning.days));
+    const n = Number(warning.days);
+    const cls = 'w-full flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-left text-sm text-amber-800';
+    const body = (
+        <>
+            <AlertCircle size={15} className="shrink-0" />
+            <span className="flex-1 min-w-0">
+                {never ? (
+                    <strong>Nie ma jeszcze żadnej kopii zapasowej</strong>
+                ) : (
+                    <>
+                        Brak kopii zapasowej od <strong>{n} {n === 1 ? 'dnia' : 'dni'}</strong>
+                    </>
+                )}
+            </span>
+        </>
+    );
+    if (!user?.is_admin) return <p className={cls}>{body}</p>;
+    return (
+        <button type="button" onClick={() => openSettings('backup')} className={cls}>
+            {body}
+            <ArrowRight size={14} className="shrink-0" />
+        </button>
+    );
+}
 
 function Progress({ done, total }) {
     const segments = Math.min(Math.max(total, 1), 8);
@@ -551,6 +600,8 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
 
     const busy = actions.busy === item.ref_key;
     const hours = item.kind === 'return' ? hoursLeft(item.deadline) : null;
+    // the bar fills with the same colours as every deadline in the app (red: 2 days or less, amber: up to 6)
+    const barTone = { danger: 'bg-red-600', warning: 'bg-amber-600' }[deadlineTone(daysFromToday(item.deadline) ?? item.days)] || 'bg-on-accent';
 
     return (
         <section aria-labelledby="teraz-title" className="rounded-[28px] bg-accent text-on-accent p-5 lg:p-7 flex flex-col gap-3">
@@ -575,11 +626,11 @@ function FocusCard({ item, canSkip, onSkip, actions, doneCount }) {
             {item.kind === 'return' && (
                 <div className="mt-1">
                     <div className="flex flex-wrap justify-between gap-x-3 text-sm font-semibold mb-1.5">
-                        <span>Termin: {deadlineLabel(item.days, item.deadline)}</span>
+                        <span>Termin: {deadlineLabel(daysFromToday(item.deadline) ?? item.days, item.deadline)}</span>
                         {hours !== null && <span>zostało ok. {hours} godz.</span>}
                     </div>
                     <div className="h-2.5 rounded-full bg-black/15 overflow-hidden">
-                        <div className="h-full rounded-full bg-on-accent" style={{ width: `${Math.min(100, Math.max(8, 100 - (hours / 168) * 100))}%` }} />
+                        <div className={`h-full rounded-full ${barTone}`} style={{ width: `${Math.min(100, Math.max(8, 100 - (hours / 168) * 100))}%` }} />
                     </div>
                 </div>
             )}
@@ -649,7 +700,7 @@ function WeekReview({ review }) {
             await refresh();
             toast.success('Przegląd zrobiony — dobry start tygodnia', {
                 duration: 5000,
-                action: { label: 'Cofnij', onClick: () => undismissAgenda(review.key).then(() => refresh()) },
+                action: { label: 'Cofnij', onClick: () => undismissAgenda(review.key).then(() => refresh()).catch((err) => toast.error(err?.message || UNDO_FAILED)) },
             });
         } catch (err) {
             toast.error(err.message || 'Nie udało się zapisać');
@@ -930,7 +981,9 @@ function HistorySheet({ onClose }) {
 
 function AgendaRow({ item, actions }) {
     const busy = actions.busy === item.ref_key;
-    const metaTone = item.late ? 'text-secondary font-medium' : 'text-ink-muted';
+    // late = coral as before; a deadline close by gets the shared red / amber
+    const tone = item.kind === 'return' ? deadlineTone(daysFromToday(item.deadline) ?? item.days) : 'ok';
+    const metaTone = item.late ? 'text-secondary font-medium' : DEADLINE_TEXT[tone] || 'text-ink-muted';
     const isLink = !['inbox'].includes(item.kind);
     const Body = isLink ? Link : 'button';
     const bodyProps = isLink ? { to: item.url } : { type: 'button', onClick: () => actions.complete(item) };
@@ -972,7 +1025,7 @@ function AgendaRow({ item, actions }) {
                             {' · '}
                         </>
                     ) : null}
-                    {item.kind === 'return' ? deadlineLabel(item.days, item.deadline) : item.meta}
+                    {item.kind === 'return' ? deadlineLabel(daysFromToday(item.deadline) ?? item.days, item.deadline) : item.meta}
                     {item.amount > 0 && (
                         <>
                             {' · '}
@@ -1024,7 +1077,8 @@ function CaptureCard({ ai, onInbox }) {
     const toast = useToast();
     const { refresh } = useDashboard();
     const { openCollab, openPurchase } = useQuickActions();
-    const [text, setText] = useState('');
+    // What she typed stays (also after a lost session) until it is really saved somewhere
+    const [text, setText] = usePersistentState(CAPTURE_KEY, '', (v) => typeof v === 'string');
     const [saving, setSaving] = useState(false);
     const imageRef = useRef(null);
 
@@ -1032,7 +1086,7 @@ function CaptureCard({ ai, onInbox }) {
         const res = await createTask(title, due, remindAt);
         toast.success(res?.remind_at ? `${title} — ${snoozeLabel(res.remind_at)}` : 'Zapisane jako zadanie', {
             duration: 5000,
-            action: { label: 'Cofnij', onClick: () => deleteTask(res.id).then(() => refresh()) },
+            action: { label: 'Cofnij', onClick: () => deleteTask(res.id).then(() => refresh()).catch((err) => toast.error(err?.message || UNDO_FAILED)) },
         });
     };
 
@@ -1078,12 +1132,15 @@ function CaptureCard({ ai, onInbox }) {
                     const res = await createIdea(result.title, result.idea?.content || note);
                     toast.success('Zapisane jako pomysł na rolkę', {
                         duration: 5000,
-                        action: { label: 'Cofnij', onClick: () => deleteIdea(res.id).then(() => refresh()) },
+                        action: { label: 'Cofnij', onClick: () => deleteIdea(res.id).then(() => refresh()).catch((err) => toast.error(err?.message || UNDO_FAILED)) },
                     });
                 } else if (result.kind === 'collaboration') {
-                    openCollab({ prefill: { brand: result.collaboration?.brand, amount_gross: result.collaboration?.amount_gross, notes: result.collaboration?.notes || note } });
+                    // the note stays in the field until the form is saved - closing the form loses nothing
+                    openCollab({ prefill: { brand: result.collaboration?.brand, amount_gross: result.collaboration?.amount_gross, notes: result.collaboration?.notes || note }, onSaved: () => setText('') });
+                    return;
                 } else if (result.kind === 'purchase') {
-                    openPurchase({ manual: true, prefill: result.purchase });
+                    openPurchase({ manual: true, prefill: result.purchase, onSaved: () => setText('') });
+                    return;
                 } else {
                     await saveAsTask(result.title || note, result.due_date, result.remind_at);
                 }

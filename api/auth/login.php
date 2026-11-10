@@ -6,7 +6,8 @@
  * Request body: { "username": "...", "password": "...", "remember": true }
  * Response: { "success": true, "data": { "user": {...} } } + the session cookie (config/Session.php)
  *
- * 5 wrong passwords for a login from one address -> 15 minutes pause (20 per address for any login).
+ * 5 wrong passwords for a login from one address -> 15 minutes pause (20 per address for any login,
+ * 10 per login from any address - guessing one account from many addresses).
  */
 
 require_once __DIR__ . '/../config/cors.php';
@@ -19,6 +20,8 @@ require_once __DIR__ . '/../config/RateLimit.php';
 
 const LOGIN_MAX_TRIES = 5;
 const LOGIN_MAX_TRIES_IP = 20;
+// checked when the login does not exist, so the answer takes as long as for a real account
+const LOGIN_DUMMY_HASH = '$2y$12$EouksYynDnqe9wHufrhptOZm6D8GHZ2mlVk15fofMUmae6hO9UrBi';
 const LOGIN_PAUSE_MINUTES = 15;
 
 // Only allow POST
@@ -62,7 +65,8 @@ try {
     $stmt->execute(['username' => $username]);
     $user = $stmt->fetch();
 
-    if (!$user || !password_verify($password, $user['password_hash'])) {
+    $passwordOk = password_verify($password, $user ? $user['password_hash'] : LOGIN_DUMMY_HASH);
+    if (!$user || !$passwordOk) {
         RateLimit::hit($conn, 'login', $userKey);
         RateLimit::hit($conn, 'login_ip', $ip);
         Response::error('Zły login albo hasło', 401);

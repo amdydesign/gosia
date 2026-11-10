@@ -231,3 +231,29 @@
     @apply bg-primary-200 text-primary-900;
   }
 }
+
+/* Phones: 16px in fields, so iOS does not zoom the page on focus (pinch-zoom stays allowed).
+   Unlayered on purpose: wins over the 15px of .input, loses to the larger "!text-lg" fields. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* "Ogranicz ruch" in the system settings: no slides / fades / smooth scrolling.
+   Spinners keep turning - they are the only sign that something is loading. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *:not(.animate-spin),
+  *:not(.animate-spin)::before,
+  *:not(.animate-spin)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

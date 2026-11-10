@@ -1,24 +1,74 @@
 /* Service Worker: app-shell cache + Web Push */
 
-const CACHE_NAME = 'gonia-v1';
+// v2: v1 could hold index.html saved under a missing /assets/ file - dropped on activate
+const CACHE_NAME = 'gonia-v2';
 const SHARE_CACHE = 'gosia-share';
+// The OCR engine (~7 MB) never changes with a deploy - its own cache survives app updates
+const OCR_CACHE = 'gonia-ocr';
 const PRECACHE = ['/', '/index.html', '/manifest.json', '/theme.js'];
+// Which build the cached /assets/ belong to (the entry script named in index.html)
+const BUILD_MARK = '/__build';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => cache.addAll(PRECACHE))
+            // 'reload': straight from the server, not from the browser's HTTP cache
+            .then((cache) => cache.addAll(PRECACHE.map((path) => new Request(path, { cache: 'reload' }))))
             .then(() => self.skipWaiting())
     );
 });
 
 self.addEventListener('activate', (event) => {
+    const keep = [CACHE_NAME, SHARE_CACHE, OCR_CACHE];
     event.waitUntil(
         caches.keys()
-            .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME && k !== SHARE_CACHE).map((k) => caches.delete(k))))
+            .then((keys) => Promise.all(keys.filter((k) => !keep.includes(k)).map((k) => caches.delete(k))))
             .then(() => self.clients.claim())
     );
 });
+
+const isHtml = (response) => (response.headers.get('content-type') || '').includes('text/html');
+
+/**
+ * Keep a fresh index.html as the offline shell. When it names a different entry script
+ * than last time, a new build is out: every cached /assets/ file of the old build is
+ * deleted (file names carry a content hash, so old ones are never asked for again).
+ */
+async function rememberShell(response) {
+    const cache = await caches.open(CACHE_NAME);
+    const html = await response.clone().text();
+    await cache.put('/index.html', response);
+    const tag = (html.match(/<script\b[^>]*\btype=["']module["'][^>]*>/i) || [''])[0];
+    const entry = (tag.match(/\bsrc=["']([^"']+)["']/i) || [])[1];
+    if (!entry) return;
+    const marked = await cache.match(BUILD_MARK);
+    if (marked && (await marked.text()) === entry) return;
+    const requests = await cache.keys();
+    await Promise.all(
+        requests
+            .filter((r) => {
+                const path = new URL(r.url).pathname;
+                return path.startsWith('/assets/') && !html.includes(path);
+            })
+            .map((r) => cache.delete(r))
+    );
+    await cache.put(BUILD_MARK, new Response(entry));
+}
+
+/** Cache first; only a real file is kept - never an error page or index.html served in place of a missing file. */
+function cacheFirst(request, cacheName) {
+    return caches.match(request).then(
+        (cached) =>
+            cached ||
+            fetch(request).then((response) => {
+                if (response.ok && !isHtml(response)) {
+                    const copy = response.clone();
+                    caches.open(cacheName).then((cache) => cache.put(request, copy));
+                }
+                return response;
+            })
+    );
+}
 
 // Android share sheet -> "Gonia": keep the shared screenshots and open the purchase flow
 async function handleShare(request) {
@@ -60,13 +110,16 @@ self.addEventListener('fetch', (event) => {
     if (url.pathname.startsWith('/api/')) return; // never cache API responses
     if (url.pathname.startsWith('/share/')) return; // public share pages (PHP) - not the app
 
+    // The app checking for a new version must reach the server
+    if (request.cache === 'no-store') return;
+
     // SPA navigations: network first, offline fallback to cached shell
     if (request.mode === 'navigate') {
         event.respondWith(
             fetch(request)
                 .then((response) => {
-                    const copy = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
+                    // an error page (500, maintenance) must not become the offline shell
+                    if (response.ok && isHtml(response)) event.waitUntil(rememberShell(response.clone()).catch(() => {}));
                     return response;
                 })
                 .catch(() => caches.match('/index.html'))
@@ -74,19 +127,32 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Hashed build assets, icons and the OCR engine (~7 MB, downloaded once): cache first
-    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/ocr/') || PRECACHE.includes(url.pathname)) {
+    // Hashed build assets and icons: cache first
+    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/')) {
+        event.respondWith(cacheFirst(request, CACHE_NAME));
+        return;
+    }
+    // OCR engine (~7 MB, downloaded once)
+    if (url.pathname.startsWith('/ocr/')) {
+        event.respondWith(cacheFirst(request, OCR_CACHE));
+        return;
+    }
+
+    // manifest / theme.js: the cached copy right away, refreshed in the background for next time
+    if (PRECACHE.includes(url.pathname) && !url.search) {
         event.respondWith(
-            caches.match(request).then((cached) =>
-                cached ||
-                fetch(request).then((response) => {
+            caches.match(request).then((cached) => {
+                const fresh = fetch(request).then((response) => {
                     if (response.ok) {
                         const copy = response.clone();
-                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
                     }
                     return response;
-                })
-            )
+                });
+                if (!cached) return fresh;
+                event.waitUntil(fresh.catch(() => {}));
+                return cached;
+            })
         );
     }
 });

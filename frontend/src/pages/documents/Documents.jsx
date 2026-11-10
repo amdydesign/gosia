@@ -24,6 +24,11 @@ import Field from '../../components/ui/Field';
 import ChoiceChips from '../../components/ui/ChoiceChips';
 import Segmented from '../../components/ui/Segmented';
 import { CardSkeleton } from '../../components/ui/Skeleton';
+import LoadError from '../../components/ui/LoadError';
+import { usePersistentState } from '../../hooks/usePersistentState';
+import { useRefetchOnVisible } from '../../hooks/useRefetchOnVisible';
+import { dismissDocumentUpload, onDocumentsChanged, queueDocumentUploads, useDocumentUploads } from '../../services/documentUploads';
+import { notify } from '../../utils/notify';
 
 const ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.webp,.heic';
 const MAX_SIZE = 20 * 1024 * 1024;
@@ -332,21 +337,29 @@ export default function Documents() {
     const [docs, setDocs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [query, setQuery] = useState('');
+    // Search and filters are remembered - the archive opens the way it was left
+    const [query, setQuery] = usePersistentState('gonia.docs.query', '', (v) => typeof v === 'string');
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [selectedId, setSelectedId] = useState(null); // document card
     const [suggestions, setSuggestions] = useState([]);
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
     const { openCollab, bump } = useQuickActions();
-    const [filter, setFilter] = useState('all');
-    const [sort, setSort] = useState('date_desc');
-    const [year, setYear] = useState('all');
-    const [counterparty, setCounterparty] = useState('all');
-    const [brandFilter, setBrandFilter] = useState('all');
-    const [filtersOpen, setFiltersOpen] = useState(false);
+    const isText = (v) => typeof v === 'string';
+    const [filter, setFilter] = usePersistentState('gonia.docs.filter', 'all', (v) => ['all', 'to_sign', 'signed'].includes(v));
+    const [sort, setSort] = usePersistentState('gonia.docs.sort', 'date_desc', (v) => SORT_OPTIONS.some((o) => o.value === v));
+    const [year, setYear] = usePersistentState('gonia.docs.year', 'all', isText);
+    const [counterparty, setCounterparty] = usePersistentState('gonia.docs.counterparty', 'all', isText);
+    const [brandFilter, setBrandFilter] = usePersistentState('gonia.docs.brand', 'all', isText);
+    const [filtersOpen, setFiltersOpen] = usePersistentState('gonia.docs.filtersOpen', false, (v) => typeof v === 'boolean');
+    const clearFilters = () => {
+        setSort('date_desc');
+        setYear('all');
+        setCounterparty('all');
+        setBrandFilter('all');
+    };
     const activeFilters = (sort !== 'date_desc') + (year !== 'all') + (counterparty !== 'all') + (brandFilter !== 'all');
-    const [uploads, setUploads] = useState([]); // files on their way to the server
+    const uploads = useDocumentUploads(); // files on their way to the server (the queue outlives this screen)
     const [dragging, setDragging] = useState(false);
     const [scan, setScan] = useState(null); // { status, ai } while the scanner is open
     const { data: dashboard, refresh: refreshDashboard } = useDashboard();
@@ -385,6 +398,8 @@ export default function Documents() {
         load(queryRef.current);
         loadSuggestions();
     };
+    // Back from the background: fresh archive (signed elsewhere, added from another device)
+    useRefetchOnVisible(refreshAll);
 
     // One tap: the collaboration is saved straight from the contract / bill data and the
     // documents are linked to it; "Edytuj" in the toast opens it for corrections.
@@ -445,14 +460,39 @@ export default function Documents() {
         }
     };
 
-    const dismissSuggestion = async (s) => {
-        try {
-            await documentsService.dismissCollab(s.document_ids);
-            setSuggestions((prev) => prev.filter((x) => x.key !== s.key));
-        } catch (err) {
-            toast.error(err.message || 'Nie udało się pominąć');
-        }
+    // "Pomiń" with "Cofnij": the server cannot bring a skipped suggestion back, so it is told
+    // only once the toast is gone (or when leaving the screen); until then the tap can be undone
+    const pendingDismiss = useRef(new Map()); // key -> { timer, commit }
+    const dismissSuggestion = (s) => {
+        setSuggestions((prev) => prev.filter((x) => x.key !== s.key));
+        const commit = () => {
+            clearTimeout(pendingDismiss.current.get(s.key)?.timer);
+            pendingDismiss.current.delete(s.key);
+            documentsService.dismissCollab(s.document_ids).catch((err) => {
+                notify.error(err.message || 'Nie udało się pominąć');
+            });
+        };
+        pendingDismiss.current.set(s.key, { timer: setTimeout(commit, 12000), commit });
+        toast.success('Pominięte', {
+            action: {
+                label: 'Cofnij',
+                onClick: () => {
+                    const pending = pendingDismiss.current.get(s.key);
+                    if (!pending) {
+                        toast.error('Za późno — tej propozycji nie da się już przywrócić');
+                        return;
+                    }
+                    clearTimeout(pending.timer);
+                    pendingDismiss.current.delete(s.key);
+                    setSuggestions((prev) => (prev.some((x) => x.key === s.key) ? prev : [s, ...prev]));
+                },
+            },
+        });
     };
+    useEffect(() => {
+        const pending = pendingDismiss.current;
+        return () => [...pending.values()].forEach((p) => p.commit());
+    }, []);
 
     const unlinkDoc = async (doc) => {
         try {
@@ -540,9 +580,11 @@ export default function Documents() {
 
     const visible = useMemo(() => {
         const list = filter === 'all' ? [...inYear] : inYear.filter((d) => (d.status === 'to_sign' ? 'to_sign' : 'signed') === filter);
-        if (sort === 'name') return list.sort((a, b) => a.title.localeCompare(b.title, 'pl', { sensitivity: 'base', numeric: true }));
+        // "Do podpisu" is the only thing here that waits for her - always on top, the chosen order inside
+        const pinned = (a, b) => (b.status === 'to_sign') - (a.status === 'to_sign');
+        if (sort === 'name') return list.sort((a, b) => pinned(a, b) || a.title.localeCompare(b.title, 'pl', { sensitivity: 'base', numeric: true }));
         const dir = sort === 'date_asc' ? 1 : -1;
-        return list.sort((a, b) => dir * (docDate(a).localeCompare(docDate(b)) || a.id - b.id));
+        return list.sort((a, b) => pinned(a, b) || dir * (docDate(a).localeCompare(docDate(b)) || a.id - b.id));
     }, [inYear, filter, sort]);
 
     const toggleStatus = async (doc) => {
@@ -557,43 +599,16 @@ export default function Documents() {
         }
     };
 
-    const setUploadRow = (key, patch) => setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, ...patch } : u)));
-
-    /**
-     * Each job: { key, name, prepare(onStatus) -> { file, text } }. Jobs run one by one
-     * (OCR is heavy); each shows a row with its progress until it lands in the list.
-     */
-    const runUploads = async (jobs, status, ai = false) => {
-        setUploads((prev) => [...jobs.map(({ key, name, error }) => ({ key, name, error: error || '', stage: 'Czekam…' })), ...prev]);
-        let done = 0;
-        for (const job of jobs.filter((j) => !j.error)) {
-            try {
-                const { file, text } = await job.prepare((stage) => setUploadRow(job.key, { stage }));
-                setUploadRow(job.key, { stage: 'Wysyłanie…' });
-                const uploaded = await documentsService.upload({ file, title: '', status, contentText: text });
-                if (ai) {
-                    setUploadRow(job.key, { stage: 'AI analizuje dokument…' });
-                    load(queryRef.current);
-                    try {
-                        await documentsService.analyze(uploaded.id);
-                    } catch (err) {
-                        setUploadRow(job.key, { error: `Dodano, ale analiza AI się nie udała: ${err.message}` });
-                        load(queryRef.current);
-                        continue;
-                    }
-                }
-                setUploads((prev) => prev.filter((u) => u.key !== job.key));
-                done += 1;
+    // The queue (services/documentUploads) tells us when the archive changed
+    useEffect(
+        () =>
+            onDocumentsChanged((what) => {
                 load(queryRef.current);
-            } catch (err) {
-                setUploadRow(job.key, { error: err.message || 'Nie udało się dodać pliku', duplicateId: err.duplicateId || null });
-            }
-        }
-        if (done) {
-            toast.success(done === 1 ? 'Dokument dodany' : `Dodano dokumenty: ${done}`);
-            loadSuggestions();
-        }
-    };
+                if (what === 'done') loadSuggestions();
+            }),
+        [load, loadSuggestions]
+    );
+    const runUploads = queueDocumentUploads;
 
     const uploadFiles = (files, status = 'signed', ai = false) =>
         runUploads(
@@ -647,10 +662,10 @@ export default function Documents() {
         inboxFile({ id: inboxId, has_file: true })
             .then((file) => {
                 if (!file) throw new Error('Screena już nie ma');
-                uploadFiles([file]);
-                return markInboxDone(inboxId);
+                return uploadFiles([file]);
             })
-            .then(() => refreshDashboard())
+            // only a screen that really landed in the archive leaves the inbox
+            .then((added) => (added ? markInboxDone(inboxId).then(() => refreshDashboard()) : null))
             .catch((err) => toast.error(err.message || 'Nie udało się dodać screena'));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inboxId]);
@@ -791,13 +806,8 @@ export default function Documents() {
                     {activeFilters > 0 && (
                         <button
                             type="button"
-                            onClick={() => {
-                                setSort('date_desc');
-                                setYear('all');
-                                setCounterparty('all');
-                                setBrandFilter('all');
-                            }}
-                            className="text-sm font-semibold text-primary-700 px-2 col-span-2 sm:col-span-1 text-left"
+                            onClick={clearFilters}
+                            className="text-sm font-semibold text-primary-700 px-2 min-h-11 col-span-2 sm:col-span-1 text-left"
                         >
                             Wyczyść
                         </button>
@@ -842,7 +852,7 @@ export default function Documents() {
                                     onClick={() => {
                                         setQuery('');
                                         setSelectedId(u.duplicateId);
-                                        setUploads((prev) => prev.filter((x) => x.key !== u.key));
+                                        dismissDocumentUpload(u.key);
                                     }}
                                     className="btn btn-soft btn-sm shrink-0"
                                 >
@@ -850,7 +860,7 @@ export default function Documents() {
                                 </button>
                             )}
                             {u.error && (
-                                <button type="button" onClick={() => setUploads((prev) => prev.filter((x) => x.key !== u.key))} className="p-2 text-ink-muted hover:bg-ink/5 rounded-lg" aria-label="Ukryj">
+                                <button type="button" onClick={() => dismissDocumentUpload(u.key)} className="w-11 h-11 -mr-2 flex items-center justify-center text-ink-muted hover:bg-ink/5 rounded-lg" aria-label="Ukryj">
                                     <X size={16} />
                                 </button>
                             )}
@@ -864,14 +874,20 @@ export default function Documents() {
                     {[0, 1, 2].map((i) => <CardSkeleton key={i} className="h-20" />)}
                 </div>
             ) : error ? (
-                <EmptyState icon={FolderLock} title="Nie udało się pobrać dokumentów" text={error} />
+                <LoadError onRetry={() => { setLoading(true); load(queryRef.current); }} />
             ) : visible.length === 0 ? (
                 <div className="card">
                     <EmptyState
                         icon={FolderLock}
                         title={docs.length > 0 ? (filter === 'to_sign' ? 'Wszystko podpisane!' : filter === 'signed' ? 'Brak podpisanych dokumentów' : 'Brak dokumentów dla tych filtrów') : query ? 'Nic nie znaleziono' : 'Archiwum jest puste'}
                         text={docs.length > 0 ? 'Zmień filtr, rok, kontrahenta lub markę, żeby zobaczyć pozostałe dokumenty.' : query ? 'Spróbuj innego słowa — szukam w nazwach, notatkach i treści dokumentów.' : 'Dodaj pierwszą umowę — wystarczy wybrać plik (na komputerze możesz go też przeciągnąć tutaj).'}
-                        action={!query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>}
+                        action={
+                            docs.length > 0 && activeFilters > 0 ? (
+                                <Button variant="secondary" onClick={clearFilters}>Wyczyść filtry</Button>
+                            ) : (
+                                !query && docs.length === 0 && <Button variant="primary" icon={Plus} onClick={() => setUploadOpen(true)}>Dodaj dokument</Button>
+                            )
+                        }
                     />
                 </div>
             ) : (
@@ -987,7 +1003,24 @@ export default function Documents() {
             onDismiss={dismissSuggestion}
         />
         <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} onPick={uploadFiles} onScan={(status, ai) => setScan({ status, ai })} aiAvailable={aiAvailable} />
-        {scan && <DocumentScanner onCancel={() => setScan(null)} onDone={(pages) => uploadScan(pages, scan.status, scan.ai)} />}
+        {scan && (
+            <DocumentScanner
+                key={scan.key || 'scan'}
+                initialPages={scan.pages}
+                onCancel={(pages) => {
+                    const closed = scan;
+                    setScan(null);
+                    // closing with scanned pages is not silent: one tap brings them all back
+                    if (pages?.length) {
+                        toast.info(`Skan odrzucony · ${pages.length} ${pages.length === 1 ? 'strona' : 'str.'}`, {
+                            duration: 15000,
+                            action: { label: 'Cofnij', onClick: () => setScan({ ...closed, pages, key: Date.now() }) },
+                        });
+                    }
+                }}
+                onDone={(pages) => uploadScan(pages, scan.status, scan.ai)}
+            />
+        )}
         <EditSheet doc={editing} onClose={() => setEditing(null)} onSaved={refreshAll} aiAvailable={aiAvailable} brands={brands} />
         </>
     );

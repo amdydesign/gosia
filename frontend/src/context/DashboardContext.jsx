@@ -15,20 +15,32 @@ export function DashboardProvider({ children }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const inFlight = useRef(null);
+    const again = useRef(false);
 
     const refresh = useCallback(async ({ silent = true } = {}) => {
         if (!isAuthenticated) return null;
-        if (inFlight.current) return inFlight.current;
+        if (inFlight.current) {
+            // The running request may have read the data before the change that asked for this
+            // refresh (a save, an undo) - so it runs once more when it ends, and callers get that result
+            again.current = true;
+            return inFlight.current;
+        }
         if (!silent) setLoading(true);
         inFlight.current = (async () => {
+            let result = null;
             try {
-                const result = await apiRequest('/stats/dashboard.php');
-                setData(result);
-                setError('');
+                do {
+                    again.current = false;
+                    try {
+                        result = await apiRequest('/stats/dashboard.php');
+                        setData(result);
+                        setError('');
+                    } catch (err) {
+                        result = null;
+                        setError(err.message || 'Błąd ładowania danych');
+                    }
+                } while (again.current);
                 return result;
-            } catch (err) {
-                setError(err.message || 'Błąd ładowania danych');
-                return null;
             } finally {
                 setLoading(false);
                 inFlight.current = null;

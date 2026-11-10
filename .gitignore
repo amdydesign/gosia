@@ -35,3 +35,11 @@ cache/
 /collaborations.js
 /returns.js
 /statistics.js
+
+# Build output (npm run deploy copies what is served into the repo root)
+/build/
+/public_build/
+/frontend/dist/
+
+# Schema check marker and other runtime caches
+/api/cache/

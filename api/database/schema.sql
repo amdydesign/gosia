@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100),
+    token_version INT DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP NULL,
     
@@ -26,7 +27,9 @@ CREATE TABLE IF NOT EXISTS collaborations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     brand VARCHAR(100) NOT NULL,
-    type ENUM('post-instagram', 'story', 'reel', 'sesja', 'konsultacja', 'event', 'inne') NOT NULL DEFAULT 'inne',
+    type ENUM('post-instagram', 'story', 'reel', 'sesja', 'konsultacja', 'event', 'umowa-praca', 'inne') NOT NULL DEFAULT 'inne',
+    collab_type VARCHAR(50) DEFAULT 'other',
+    fiscal_tracking BOOLEAN DEFAULT TRUE,
     amount_net DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     amount_gross DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     date DATE NOT NULL,

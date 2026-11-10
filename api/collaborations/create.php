@@ -105,9 +105,9 @@ try {
     Response::success(['id' => $collabId, 'message' => 'Collaboration created'], 'Created', 201);
 
 } catch (Exception $e) {
-    if (isset($conn))
+    if (isset($conn) && $conn->inTransaction())
         $conn->rollBack();
-    if ($_ENV['APP_DEBUG'] === 'true') {
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
         Response::error('Failed to create: ' . $e->getMessage(), 500);
     }
     Response::error('Failed to create collaboration', 500);

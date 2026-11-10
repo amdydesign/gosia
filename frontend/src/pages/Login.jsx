@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { takeReturnPath } from '../utils/api';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -17,7 +18,7 @@ export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const from = location.state?.from?.pathname || '/';
+    const stateFrom = location.state?.from;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -25,6 +26,9 @@ export default function Login() {
         setLoading(true);
         try {
             await login(username.trim(), password, rememberMe);
+            // back to where the session ended (or the page that asked for login)
+            const stored = takeReturnPath();
+            const from = (stateFrom?.pathname ? stateFrom.pathname + (stateFrom.search || '') : null) || stored || '/';
             navigate(from, { replace: true });
         } catch (err) {
             setError(err.message || 'Nieprawidłowy login lub hasło');

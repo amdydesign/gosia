@@ -2,12 +2,14 @@
 /**
  * Restore a backup - CLI only (over SSH on the server).
  *
- *   php api/utils/restore_backup.php api/backups/db-2026-10-26.sql.gz
- *   php api/utils/restore_backup.php db-2026-10-26.sql.gz.enc   (from off-site storage, asks for BACKUP_PASSWORD)
- *   php api/utils/restore_backup.php files-2026-10-25.zip(.enc) (unpacks into api/uploads)
+ *   php api/utils/restore_backup.php api/backups/db-2026-10-26-0f3a9c1b2d4e5f60.sql.gz
+ *   php api/utils/restore_backup.php db-2026-10-26-....sql.gz.enc   (from off-site storage, asks for BACKUP_PASSWORD)
+ *   php api/utils/restore_backup.php files-2026-10-25-....zip(.enc) (unpacks into api/uploads)
+ * (older copies without the random part in the name work the same)
  *
- * The database restore REPLACES all tables with the copy. Make a fresh backup first
- * (php api/cron/backup.php) if the current data may still be needed.
+ * The database restore REPLACES all tables with the copy. Before it touches anything it saves
+ * the current database to api/backups/before-restore-<date>-<random>.sql.gz and prints the path;
+ * if that copy cannot be made, nothing is changed. Remove those files by hand when no longer needed.
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -17,6 +19,8 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/Backup.php';
+require_once __DIR__ . '/../config/Users.php';
+require_once __DIR__ . '/../documents/helpers.php';
 
 $file = $argv[1] ?? '';
 if ($file === '' || !is_file($file)) {
@@ -36,6 +40,10 @@ try {
             $password = trim((string) fgets(STDIN));
         }
         $work = sys_get_temp_dir() . '/' . basename(substr($file, 0, -4));
+        // the decrypted copy is only needed for this run
+        register_shutdown_function(function () use ($work) {
+            @unlink($work);
+        });
         Backup::decryptFile($file, $work, $password);
     }
 
@@ -56,6 +64,20 @@ try {
         exit(1);
     }
     $gz = gzopen($work, 'rb');
+    if (!$gz) {
+        throw new RuntimeException('Nie mogę otworzyć kopii');
+    }
+
+    // Safety copy of what is in the database now - made before the first table is dropped
+    try {
+        $safety = Backup::safetyDump($conn);
+    } catch (Throwable $e) {
+        gzclose($gz);
+        fwrite(STDERR, 'Nie udało się zapisać kopii obecnej bazy, nic nie zmieniam: ' . $e->getMessage() . "\n");
+        exit(1);
+    }
+    echo "Obecna baza zapisana w: " . (realpath($safety) ?: $safety) . "\n";
+
     $statement = '';
     $count = 0;
     while (($line = gzgets($gz)) !== false) {
@@ -71,8 +93,24 @@ try {
         }
     }
     gzclose($gz);
+    if (trim($statement) !== '') {
+        throw new RuntimeException('Kopia jest ucięta (ostatnie polecenie bez końca). Obecna baza sprzed przywracania: ' . $safety);
+    }
     echo "Gotowe: $count poleceń.\n";
+
+    // an older copy may lack newer tables / columns - add them now, not on the next request
+    try {
+        Schema::forget();
+        Users::ensure($conn);
+        Schema::ensureAll($conn);
+        documentsEnsureSchema($conn);
+    } catch (Exception $e) {
+        echo "Uwaga: uruchom jeszcze php api/utils/repair_schema.php (" . $e->getMessage() . ")\n";
+    }
 } catch (Exception $e) {
     fwrite(STDERR, 'Błąd: ' . $e->getMessage() . "\n");
+    if (!empty($safety)) {
+        fwrite(STDERR, 'Baza może być przywrócona tylko częściowo. Stan sprzed przywracania: ' . $safety . "\n");
+    }
     exit(1);
 }

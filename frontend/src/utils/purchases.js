@@ -1,7 +1,9 @@
 /**
  * Purchase helpers: buckets, order grouping, store memory.
  */
-import { addDays, daysFromToday, formatDateShort, toDateInput } from './format';
+import { addDays, daysFromToday, deadlineTone, formatDateShort, toDateInput } from './format';
+
+export { deadlineTone };
 
 export const RETURN_DAY_PRESETS = [14, 30, 60, 100];
 
@@ -22,10 +24,19 @@ export function recoveredOf(p) {
     return Math.max(0, (Number(p.returned_amount) || 0) - (Number(p.return_cost) || 0));
 }
 
+/**
+ * Days left to return, counted on the device from the deadline: the server's
+ * `days_remaining` is from the moment of loading and goes stale in an app left open overnight.
+ */
+export function daysLeft(p) {
+    const days = p?.return_deadline ? daysFromToday(p.return_deadline) : null;
+    return days === null ? Number(p?.days_remaining) : days;
+}
+
 /** "active" = waiting for a decision, "kept" = stays with you, "returned" = sent back */
 export function bucket(p) {
     if (isReturned(p)) return 'returned';
-    if (Number(p.kept_confirmed) === 1 || Number(p.days_remaining) < 0) return 'kept';
+    if (Number(p.kept_confirmed) === 1 || daysLeft(p) < 0) return 'kept';
     return 'active';
 }
 
@@ -38,12 +49,12 @@ export function groupByStore(purchases) {
     for (const p of purchases) {
         const key = (p.store || '').trim().toLowerCase() || `#${p.id}`;
         if (!groups.has(key)) {
-            groups.set(key, { key, store: p.store, return_deadline: p.return_deadline, days_remaining: Number(p.days_remaining), items: [] });
+            groups.set(key, { key, store: p.store, return_deadline: p.return_deadline, days_remaining: daysLeft(p), items: [] });
         }
         const g = groups.get(key);
         g.items.push(p);
-        if (Number(p.days_remaining) < g.days_remaining) {
-            g.days_remaining = Number(p.days_remaining);
+        if (daysLeft(p) < g.days_remaining) {
+            g.days_remaining = daysLeft(p);
             g.return_deadline = p.return_deadline;
         }
     }
@@ -52,12 +63,6 @@ export function groupByStore(purchases) {
         g.orders = new Set(g.items.map((p) => p.purchase_date)).size;
     }
     return Array.from(groups.values());
-}
-
-export function deadlineTone(days) {
-    if (days <= 2) return 'danger';
-    if (days <= 6) return 'warning';
-    return 'ok';
 }
 
 export function deadlineText(days, deadline) {

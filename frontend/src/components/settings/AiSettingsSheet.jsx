@@ -64,6 +64,7 @@ export default function AiSettingsSheet({ onClose }) {
     };
 
     const save = async () => {
+        if (saving) return;
         setSaving(true);
         setError('');
         try {

@@ -60,13 +60,18 @@ const DOCUMENTS_KINDS = ['umowa', 'rachunek', 'faktura', 'inne'];
 const DOCUMENTS_BILLINGS = ['umowa_50', 'umowa_20', 'useme_50', 'useme_20', 'umowa_praca', 'gotowka'];
 
 /**
- * Create the table and add any missing column. Reads the real column list on
- * every request (one cheap query), so it never trusts a stale flag.
+ * Create the table and add any missing column. Reads the real column list
+ * (one cheap query) unless the whole schema was already checked for this
+ * version of the code (Schema::upToDate()).
  */
 function documentsEnsureSchema(PDO $conn)
 {
     static $done = false;
     if ($done) {
+        return;
+    }
+    if (Schema::upToDate()) {
+        $done = true;
         return;
     }
     Schema::ensure($conn, 'documents');

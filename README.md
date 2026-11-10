@@ -117,16 +117,8 @@ RewriteRule . /index.html [L]
 
 ## 🔐 Logowanie
 
-**Domyślne dane:**
-- Login: `admin`
-- Hasło: `password` (zmień w produkcji!)
-
-Aby zmienić hasło, wygeneruj nowy hash:
-```php
-echo password_hash('nowe_haslo', PASSWORD_BCRYPT);
-```
-
-I zaktualizuj w tabeli `users`.
+Pierwsze konto tworzy `api/database/schema.sql`. Hasło ustaw od razu po instalacji (patrz niżej) -
+aplikacja nie ma domyślnego hasła, które wolno zostawić.
 
 **Nie pamiętasz hasła?** Przez SSH na serwerze (tylko z linii poleceń, z przeglądarki niedostępne):
 ```bash
@@ -249,12 +241,10 @@ Wyniki opublikowanej rolki ze **screena statystyk** (AI odczytuje wyświetlenia,
    ```
    Skopiuj wypisane linie do `api/.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` z własnym e-mailem).
 
-2. **Utwórz tabele** (nowa instalacja ma je w `schema.sql`; istniejąca baza):
-   ```bash
-   php api/migrations/add_push_and_attachments.php
-   ```
+2. **Tabele** tworzą się same przy pierwszym użyciu (`api/config/Schema.php`) - nic nie trzeba uruchamiać.
+   Gdyby czegoś brakowało: `php api/utils/repair_schema.php` (tylko z linii poleceń).
 
-3. **Ustaw dzienny cron** na dHosting (panel → Harmonogram zadań), np. o 9:00:
+3. **Ustaw cron co 15 minut** na dHosting (panel → Harmonogram zadań; szczegóły w `DEPLOY.md`):
    ```
    php /ścieżka/do/public_html/api/cron/send_reminders.php
    ```
@@ -278,7 +268,7 @@ GEMINI_API_KEY=...                # Gemini (https://aistudio.google.com/apikey)
 ```
 
 - Gdy są oba klucze, wybór w Ustawieniach albo `AI_PROVIDER=claude|gemini`.
-- Model można zmienić przez `ANTHROPIC_MODEL` / `GEMINI_MODEL` (domyślnie `claude-sonnet-5-5` / `gemini-flash-latest`).
+- Model można zmienić przez `ANTHROPIC_MODEL` / `GEMINI_MODEL` (domyślnie: screeny `claude-haiku-5-5`, umowy i notatki `claude-sonnet-5-5`; Gemini `gemini-flash-latest`).
 - Bez klucza zakupy działają w trybie ręcznym.
 - Zmiana `JWT_SECRET` unieważnia zapisane w aplikacji klucze - trzeba je wpisać ponownie.
 - Endpointy: `api/ai/parse.php` (tryby `purchase` i `collaboration`), `api/settings/ai.php` (zapis klucza). Klucz nigdy nie trafia do przeglądarki.

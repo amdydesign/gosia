@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../config/cors.php';
 require_once __DIR__ . '/../../config/Database.php';
 require_once __DIR__ . '/../../config/Response.php';
 require_once __DIR__ . '/../../middleware/auth.php';
+require_once __DIR__ . '/../../config/OAuthState.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed', 405);
@@ -34,6 +35,12 @@ try {
         Response::error('Brak kodu autoryzacji', 400);
     }
 
+    // "state" from get_auth_url.php comes back in the callback URL. Checked when the app
+    // sends it (older app versions send only the code).
+    if (isset($input['state']) && !OAuthState::valid($input['state'], $userId)) {
+        Response::error('Link do połączenia wygasł. Spróbuj jeszcze raz.', 400);
+    }
+
     // Exchange code for access token
     // https://developers.tiktok.com/doc/oauth-user-access-token-management/
     $tokenUrl = 'https://open.tiktokapis.com/v2/oauth/token/';
@@ -53,7 +60,6 @@ try {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/x-www-form-urlencoded'
     ]);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -62,7 +68,8 @@ try {
     $tokenData = json_decode($response, true);
 
     if ($httpCode !== 200 || isset($tokenData['error'])) {
-        Response::error('Token exchange failed: ' . ($tokenData['error_description'] ?? $tokenData['error'] ?? 'Unknown'), 400);
+        error_log('tiktok exchange: ' . mb_substr((string) $response, 0, 500));
+        Response::error('TikTok odrzucił połączenie. Spróbuj jeszcze raz.', 400);
     }
 
     $accessToken = $tokenData['access_token'];
@@ -80,7 +87,6 @@ try {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         "Authorization: Bearer $accessToken"
     ]);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
     $userResponse = curl_exec($ch);
     curl_close($ch);
@@ -139,5 +145,6 @@ try {
     ]);
 
 } catch (Exception $e) {
-    Response::error('Błąd: ' . $e->getMessage(), 500);
+    error_log('tiktok exchange: ' . $e->getMessage());
+    Response::error('Nie udało się połączyć konta. Spróbuj jeszcze raz.', 500);
 }

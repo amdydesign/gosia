@@ -10,7 +10,7 @@ import { useToast } from '../../context/ToastContext';
 import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
-import { daysFromToday, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate, openPicker } from '../../utils/format';
+import { DEADLINE_TEXT, daysFromToday, deadlineTone, formatCurrency, formatDateLong, formatDateShort, getBillingLabel, getCollabTypeLabel, getTaxBreakdown, getTodayDate, openPicker } from '../../utils/format';
 import { daysWaiting, deliverableProgress, grossOf, hasWorkLeft, isBrief, isLate, isPaid, netOf, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 import { tickWithUndo } from '../../services/collaborations';
 import { readScreens } from '../../services/ai';
@@ -272,7 +272,7 @@ export default function CollabDetailSheet({ collabId, onClose, onChanged }) {
                             {deliverables.map((d, i) => {
                                 const left = Number(d.count) - Number(d.done);
                                 const days = d.due && left > 0 ? daysFromToday(d.due) : null;
-                                const dueTone = days === null ? 'text-ink-muted' : days < 0 ? 'text-red-700 font-semibold' : days <= 2 ? 'text-amber-700 font-semibold' : 'text-ink-muted';
+                                const dueTone = DEADLINE_TEXT[deadlineTone(days)] || 'text-ink-muted';
                                 return (
                                     <div key={i} className={`flex items-center gap-3 px-4 py-2.5 ${left <= 0 ? 'bg-emerald-50/40' : ''}`}>
                                         <span className="flex-1 min-w-0">
@@ -496,7 +496,8 @@ function DateTap({ value, onPick, disabled, className, children, max, label = 'T
                 value={value || ''}
                 max={max}
                 onChange={(e) => onPick(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer"
+                // the tap area reaches past the small text (44 px tall), the look stays the same
+                className="absolute -inset-x-2 -inset-y-3.5 opacity-0 cursor-pointer"
                 aria-label={label}
             />
         </label>

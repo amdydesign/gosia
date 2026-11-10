@@ -32,9 +32,12 @@ const ICON = {
     term: FileText,
 };
 
+// The month / day she was looking at survives closing the app (localStorage) - but only
+// until midnight: the next day the calendar opens on today again, not on a stale date.
 function readSession(key, fallback) {
     try {
-        return sessionStorage.getItem(key) || fallback;
+        const [stamp, value] = (localStorage.getItem(key) || '').split('|');
+        return stamp === getTodayDate() && value ? value : fallback;
     } catch {
         return fallback;
     }
@@ -42,7 +45,7 @@ function readSession(key, fallback) {
 
 function writeSession(key, value) {
     try {
-        sessionStorage.setItem(key, value);
+        localStorage.setItem(key, `${getTodayDate()}|${value}`);
     } catch {
         // ignore
     }

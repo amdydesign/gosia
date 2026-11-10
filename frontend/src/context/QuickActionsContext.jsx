@@ -13,6 +13,7 @@ const QuickActionsContext = createContext(null);
  *   openPurchase({ files?, manual?, prefill? }) - purchase from screenshot (or manual form)
  *   openQuickAdd()                  - "what do you want to add?" chooser
  *   openAiSettings()                - enter the AI key for screenshot reading
+ *   openSettings(section?)          - profile & settings, optionally straight at a section ('backup')
  * `versions` change after every save so lists know when to reload.
  */
 export function QuickActionsProvider({ children }) {
@@ -20,6 +21,7 @@ export function QuickActionsProvider({ children }) {
     const [purchase, setPurchase] = useState(null);
     const [chooserOpen, setChooserOpen] = useState(false);
     const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+    const [settingsTarget, setSettingsTarget] = useState(null); // { section, key } - AppLayout opens the sheet
     const [versions, setVersions] = useState({ collaborations: 0, purchases: 0 });
 
     const bump = useCallback((entity) => {
@@ -38,10 +40,11 @@ export function QuickActionsProvider({ children }) {
 
     const openQuickAdd = useCallback(() => setChooserOpen(true), []);
     const openAiSettings = useCallback(() => setAiSettingsOpen(true), []);
+    const openSettings = useCallback((section = null) => setSettingsTarget({ section, key: Date.now() }), []);
 
     const value = useMemo(
-        () => ({ openCollab, openPurchase, openQuickAdd, openAiSettings, versions, bump }),
-        [openCollab, openPurchase, openQuickAdd, openAiSettings, versions, bump]
+        () => ({ openCollab, openPurchase, openQuickAdd, openAiSettings, openSettings, settingsTarget, versions, bump }),
+        [openCollab, openPurchase, openQuickAdd, openAiSettings, openSettings, settingsTarget, versions, bump]
     );
 
     return (

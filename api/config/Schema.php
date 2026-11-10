@@ -5,6 +5,10 @@
  * Production runs `git pull` without a migration step, so tables added later
  * (attachments, push_subscriptions) may be missing. Endpoints that use them
  * call Schema::ensure() which creates the table on first use.
+ *
+ * To keep that cheap, a full check runs once per version of the code and leaves
+ * a marker in api/cache/ (see upToDate() / fullCheck()); with the marker in place
+ * the per-request checks are skipped.
  */
 
 class Schema
@@ -256,6 +260,7 @@ class Schema
                 title VARCHAR(120) NOT NULL DEFAULT '',
                 model VARCHAR(40) NOT NULL DEFAULT '',
                 prompt_version SMALLINT NOT NULL DEFAULT 1,
+                busy_at DATETIME NULL,
                 deleted_at DATETIME NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -327,12 +332,119 @@ class Schema
         'collaborations.stage' => "ALTER TABLE collaborations ADD COLUMN stage VARCHAR(10) NULL DEFAULT NULL",
         // What to make for the brand: JSON [{label: "Reels IG", count: 2, done: 1, due: "2026-11-05"}]
         // the system prompt + tools a chat started with - kept for good (newer models bind thinking to it)
+        // set while a reply is being written - blocks a second message, the app waits for the first
+        'assistant_chats.busy_at' => "ALTER TABLE assistant_chats ADD COLUMN busy_at DATETIME NULL",
         'assistant_chats.prompt_version' => "ALTER TABLE assistant_chats ADD COLUMN prompt_version SMALLINT NOT NULL DEFAULT 1",
         // what each reply cost (USD, from the API's token counts) - totals per chat and per month
         'assistant_messages.cost_usd' => "ALTER TABLE assistant_messages ADD COLUMN cost_usd DECIMAL(10, 6) NULL",
         'assistant_messages.usage_json' => "ALTER TABLE assistant_messages ADD COLUMN usage_json TEXT NULL",
         'collaborations.deliverables' => "ALTER TABLE collaborations ADD COLUMN deliverables TEXT NULL",
+        // from the old api/migrations scripts (removed - they were reachable from the web)
+        'collaborations.collab_type' => "ALTER TABLE collaborations ADD COLUMN collab_type VARCHAR(50) DEFAULT 'other'",
+        'collaborations.fiscal_tracking' => "ALTER TABLE collaborations ADD COLUMN fiscal_tracking BOOLEAN DEFAULT TRUE",
+        'collaboration_team.is_paid' => "ALTER TABLE collaboration_team ADD COLUMN is_paid BOOLEAN DEFAULT FALSE",
     ];
+
+    /** Files whose change means "check the whole schema again" (see upToDate()). */
+    private static $sources = ['/Schema.php', '/Users.php', '/RateLimit.php', '/../documents/helpers.php'];
+
+    private static $upToDate = null;
+
+    private static function cacheDir()
+    {
+        return __DIR__ . '/../cache';
+    }
+
+    /** Marker name changes by itself whenever a file with definitions changes (git pull). */
+    private static function markerPath($suffix = '.ok')
+    {
+        $parts = [];
+        foreach (self::$sources as $file) {
+            $path = __DIR__ . $file;
+            $parts[] = $file . ':' . @filemtime($path) . ':' . @filesize($path);
+        }
+        return self::cacheDir() . '/schema_' . md5(implode('|', $parts)) . $suffix;
+    }
+
+    /**
+     * True when the whole schema was already checked for this version of the code -
+     * then no SHOW COLUMNS / SHOW TABLES is needed on this request.
+     */
+    public static function upToDate()
+    {
+        if (self::$upToDate === null) {
+            self::$upToDate = is_file(self::markerPath());
+        }
+        return self::$upToDate;
+    }
+
+    /** Forget the marker: the next request checks everything again (after a restore, repair_schema.php). */
+    public static function forget()
+    {
+        foreach ((array) @glob(self::cacheDir() . '/schema_*') as $file) {
+            @unlink($file);
+        }
+        self::$upToDate = false;
+        self::$ensured = [];
+    }
+
+    /**
+     * Check every table and column once and leave a marker file, so later requests skip the checks.
+     * If the marker cannot be written nothing changes: every endpoint keeps checking what it uses.
+     */
+    public static function fullCheck(PDO $conn)
+    {
+        if (self::upToDate()) {
+            return;
+        }
+        try {
+            $dir = self::cacheDir();
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+            }
+            if (!is_dir($dir) || !is_writable($dir)) {
+                return;
+            }
+            if (!is_file($dir . '/.htaccess')) {
+                @file_put_contents($dir . '/.htaccess', "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
+            }
+            // a check that failed is tried again after 10 minutes, not on every request
+            $failed = self::markerPath('.fail');
+            if (is_file($failed) && time() - (int) @filemtime($failed) < 600) {
+                return;
+            }
+            @touch($failed);
+
+            require_once __DIR__ . '/Users.php';
+            require_once __DIR__ . '/RateLimit.php';
+            require_once __DIR__ . '/../documents/helpers.php';
+            Users::ensure($conn);
+            RateLimit::ensureTable($conn);
+            self::ensureAll($conn);
+            documentsEnsureSchema($conn);
+            self::ensureCollabTypeEnum($conn);
+
+            $marker = self::markerPath();
+            foreach ((array) @glob($dir . '/schema_*') as $old) {
+                @unlink($old);
+            }
+            if (@file_put_contents($marker, date('c')) !== false) {
+                self::$upToDate = true;
+            }
+        } catch (Throwable $e) {
+            error_log('Schema::fullCheck: ' . $e->getMessage());
+        }
+    }
+
+    /** 'umowa-praca' in collaborations.type (old migration add_umowa_praca_type). */
+    private static function ensureCollabTypeEnum(PDO $conn)
+    {
+        $column = $conn->query("SHOW COLUMNS FROM collaborations LIKE 'type'")->fetch(PDO::FETCH_ASSOC);
+        $type = strtolower((string) ($column['Type'] ?? ''));
+        if (strpos($type, 'enum(') === 0 && strpos($type, "'umowa-praca'") === false) {
+            $conn->exec("ALTER TABLE collaborations MODIFY COLUMN type ENUM('post-instagram', 'story', 'reel', 'sesja', 'konsultacja', 'event', 'umowa-praca', 'inne') NOT NULL DEFAULT 'inne'");
+        }
+    }
 
     /**
      * Add the column if it does not exist (once per request).
@@ -340,7 +452,7 @@ class Schema
     public static function ensureColumn(PDO $conn, $table, $column)
     {
         $key = $table . '.' . $column;
-        if (isset(self::$ensured[$key]) || !isset(self::$columns[$key])) {
+        if (isset(self::$ensured[$key]) || !isset(self::$columns[$key]) || self::upToDate()) {
             return;
         }
         $stmt = $conn->query("SHOW COLUMNS FROM `" . str_replace('`', '', $table) . "` LIKE " . $conn->quote($column));
@@ -374,6 +486,7 @@ class Schema
     public static function ensureCollaborations(PDO $conn)
     {
         self::ensureColumns($conn, 'collaborations');
+        self::ensureColumns($conn, 'collaboration_team');
     }
 
     /**
@@ -381,7 +494,7 @@ class Schema
      */
     public static function ensure(PDO $conn, $table)
     {
-        if (isset(self::$ensured[$table]) || !isset(self::$definitions[$table])) {
+        if (isset(self::$ensured[$table]) || !isset(self::$definitions[$table]) || self::upToDate()) {
             return;
         }
         $stmt = $conn->query("SHOW TABLES LIKE " . $conn->quote($table));

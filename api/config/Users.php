@@ -7,6 +7,8 @@
  * and the legacy social handles. Every other account sees only its own data.
  */
 
+require_once __DIR__ . '/Schema.php';
+
 class Users
 {
     private static $ensured = false;
@@ -15,12 +17,19 @@ class Users
         'display_name' => "ALTER TABLE users ADD COLUMN display_name VARCHAR(100) NULL",
         'is_admin' => "ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0",
         'is_active' => "ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1",
+        // logs every device out when it grows (new password, blocked account)
+        'token_version' => "ALTER TABLE users ADD COLUMN token_version INT DEFAULT 1",
     ];
 
     /** Add the account columns if missing and make sure there is an admin (once per request). */
     public static function ensure(PDO $conn)
     {
         if (self::$ensured) {
+            return;
+        }
+        // whole schema already checked for this version of the code (Schema::fullCheck)
+        if (Schema::upToDate()) {
+            self::$ensured = true;
             return;
         }
         $existing = array_column($conn->query("SHOW COLUMNS FROM users")->fetchAll(PDO::FETCH_ASSOC), 'Field');
@@ -43,6 +52,8 @@ class Users
             }
         }
         self::$ensured = true;
+        // check the rest once and leave the marker, so later requests skip all of this
+        Schema::fullCheck($conn);
     }
 
     public static function find(PDO $conn, $id)

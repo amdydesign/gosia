@@ -9,6 +9,8 @@ import SocialSection from '../components/social/SocialSection';
 import ExportModal from './collaborations/ExportModal';
 import { formatCurrency } from '../utils/format';
 import { PLATFORMS } from '../components/social/SocialSection';
+import LoadError from '../components/ui/LoadError';
+import { usePersistentState } from '../hooks/usePersistentState';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const MONTHS_SHORT = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
@@ -25,7 +27,18 @@ const TABS = [
  */
 export default function Statistics() {
     const [params, setParams] = useSearchParams();
-    const tab = params.get('tab') === 'finanse' ? 'finanse' : 'glowna';
+    // A link (?tab=finanse) decides; without one the screen opens on the tab she used last
+    const [lastTab, setLastTab] = usePersistentState('gonia.stats.tab', 'glowna', (v) => TABS.some((t) => t.value === v));
+    const tab = params.get('tab') === 'finanse' ? 'finanse' : lastTab;
+    const pickTab = (value) => {
+        setLastTab(value);
+        setParams(value === 'glowna' ? {} : { tab: value }, { replace: true });
+    };
+    // opened from a link: that tab is the one to come back to (once, on arrival - clicks set it themselves)
+    useEffect(() => {
+        if (params.get('tab') === 'finanse') setLastTab('finanse');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="space-y-5 animate-fade-in">
@@ -38,7 +51,7 @@ export default function Statistics() {
                             type="button"
                             role="tab"
                             aria-selected={tab === t.value}
-                            onClick={() => setParams(t.value === 'glowna' ? {} : { tab: t.value }, { replace: true })}
+                            onClick={() => pickTab(t.value)}
                             className={`h-10 px-5 rounded-full text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
                                 tab === t.value ? 'nav-active' : 'text-ink-muted hover:text-ink'
                             }`}
@@ -62,19 +75,26 @@ const RANGES = [
 ];
 
 function Influence() {
-    const [days, setDays] = useState(30);
+    const [days, setDays] = usePersistentState('gonia.stats.range', 30, (v) => RANGES.some((r) => r.value === v));
     const [history, setHistory] = useState(null);
+    const [failed, setFailed] = useState(false);
+    const [reloads, setReloads] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
         statsService
             .getSocialHistory(days)
-            .then((res) => !cancelled && setHistory(res?.data || {}))
-            .catch(() => !cancelled && setHistory({}));
+            .then((res) => {
+                if (cancelled) return;
+                setHistory(res?.data || {});
+                setFailed(false);
+            })
+            // an error is not "0 obserwujących"
+            .catch(() => !cancelled && setFailed(true));
         return () => {
             cancelled = true;
         };
-    }, [days]);
+    }, [days, reloads]);
 
     // Sum of all platforms per day (missing days carry the last known count forward)
     const series = useMemo(() => {
@@ -99,8 +119,8 @@ function Influence() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div className="text-sm font-semibold opacity-80">Obserwujący razem</div>
-                        <div className="font-display text-4xl sm:text-5xl font-semibold tracking-tight mt-1 tabular-nums">{total.toLocaleString('pl-PL')}</div>
-                        <div className="text-sm font-semibold mt-1">
+                        <div className="font-display text-4xl sm:text-5xl font-semibold tracking-tight mt-1 tabular-nums">{failed && !history ? '—' : total.toLocaleString('pl-PL')}</div>
+                        <div className={`text-sm font-semibold mt-1 ${failed && !history ? 'invisible' : ''}`}>
                             {growth === 0 ? 'bez zmian' : `${growth > 0 ? '+' : ''}${growth.toLocaleString('pl-PL')}`} w {RANGES.find((r) => r.value === days)?.label.replace('3 mies.', '3 miesiące').replace('Rok', 'rok')}
                         </div>
                     </div>
@@ -118,8 +138,9 @@ function Influence() {
                         ))}
                     </div>
                 </div>
-                <GrowthChart series={series} />
+                {failed && !history ? null : <GrowthChart series={series} />}
             </section>
+            {failed && <LoadError onRetry={() => { setFailed(false); setReloads((n) => n + 1); }} />}
 
             <SocialSection />
         </>
@@ -154,7 +175,10 @@ function GrowthChart({ series }) {
  */
 function Finances() {
     const currentYear = new Date().getFullYear();
-    const [year, setYear] = useState(currentYear);
+    // The year she was looking at is remembered - but only within that calendar year (January starts on the new one)
+    const [savedYear, setSavedYear] = usePersistentState('gonia.stats.year', null, (v) => v && Number.isInteger(v.year) && v.at === currentYear && v.year <= currentYear);
+    const year = savedYear?.year || currentYear;
+    const setYear = (y) => setSavedYear({ year: y, at: currentYear });
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');

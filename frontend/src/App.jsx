@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -8,23 +9,26 @@ import { QuickActionsProvider } from './context/QuickActionsContext';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { Spinner } from './components/ui/Skeleton';
 
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
-import Statistics from './pages/Statistics';
-import Calendar from './pages/Calendar';
-import Assistant from './pages/Assistant';
-import SocialCallback from './pages/SocialCallback';
-import Collaborations from './pages/collaborations/Collaborations';
-import Purchases from './pages/purchases/Purchases';
 
-import Documents from './pages/documents/Documents';
-import Shares from './pages/shares/Shares';
-import IdeaList from './pages/ideas/IdeaList';
-import IdeaForm from './pages/ideas/IdeaForm';
-import IdeaView from './pages/ideas/IdeaView';
+// Start and login load with the app; every other screen is fetched when first opened.
+// A screen that cannot be fetched (new deploy) lands in ErrorBoundary: "Jest nowa wersja · Odśwież".
+const Statistics = lazy(() => import('./pages/Statistics'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const Assistant = lazy(() => import('./pages/Assistant'));
+const SocialCallback = lazy(() => import('./pages/SocialCallback'));
+const Collaborations = lazy(() => import('./pages/collaborations/Collaborations'));
+const Purchases = lazy(() => import('./pages/purchases/Purchases'));
+const Documents = lazy(() => import('./pages/documents/Documents'));
+const Shares = lazy(() => import('./pages/shares/Shares'));
+const IdeaList = lazy(() => import('./pages/ideas/IdeaList'));
+const IdeaForm = lazy(() => import('./pages/ideas/IdeaForm'));
+const IdeaView = lazy(() => import('./pages/ideas/IdeaView'));
 
 import './App.css';
 
@@ -47,7 +51,9 @@ function App() {
                                             path="/auth/callback/:platform"
                                             element={
                                                 <ProtectedRoute>
-                                                    <SocialCallback />
+                                                    <Suspense fallback={<div className="min-h-dvh flex items-center justify-center"><Spinner size={28} /></div>}>
+                                                        <SocialCallback />
+                                                    </Suspense>
                                                 </ProtectedRoute>
                                             }
                                         />

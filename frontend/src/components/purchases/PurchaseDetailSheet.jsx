@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, ExternalLink, Heart, Loader2, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react';
+import { Check, ExternalLink, Heart, Loader2, MoreHorizontal, Pencil, RotateCcw, Trash2, Undo2 } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import Button from '../ui/Button';
 import Attachments from '../common/Attachments';
@@ -9,7 +9,7 @@ import { useToast } from '../../context/ToastContext';
 import { deletedToast } from '../../services/trash';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
-import { bucket, deadlineText, deadlineTone, recoveredOf, refundPending, RETURN_DAY_PRESETS, withPatch } from '../../utils/purchases';
+import { bucket, daysLeft, deadlineText, deadlineTone, recoveredOf, refundPending, RETURN_DAY_PRESETS, withPatch } from '../../utils/purchases';
 import { formatCurrency, formatDateLong, openPicker, parseAmount } from '../../utils/format';
 
 /**
@@ -25,6 +25,7 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
     const [partial, setPartial] = useState('');
     const [edit, setEdit] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
 
     const { update, returned, keep, delivered, refunded, busyId } = usePurchaseActions({
         onChange: (id, patch) => {
@@ -53,7 +54,7 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
     }
 
     const state = bucket(purchase);
-    const days = Number(purchase.days_remaining);
+    const days = daysLeft(purchase);
     const tone = deadlineTone(days);
     const busy = busyId === purchase.id;
 
@@ -131,9 +132,19 @@ export default function PurchaseDetailSheet({ purchaseId, initial, onClose, onCh
                         <Button variant="primary" className="flex-[2]" icon={Check} loading={saving} onClick={saveEdit}>Zapisz</Button>
                     </>
                 ) : (
-                    <div className="grid grid-cols-2 gap-2 w-full">
-                        <Button variant="secondary" icon={Pencil} onClick={startEdit}>Edytuj</Button>
-                        <Button variant="danger" icon={Trash2} onClick={remove}>Usuń</Button>
+                    // "Usuń" waits under "…" (as in a collaboration) - not a red button next to the main one
+                    <div className="relative flex gap-2 w-full">
+                        <Button variant="secondary" icon={Pencil} className="flex-1" onClick={startEdit}>Edytuj</Button>
+                        <button type="button" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen} aria-label="Więcej" className="btn btn-secondary !px-0 w-12 shrink-0">
+                            <MoreHorizontal size={20} />
+                        </button>
+                        {moreOpen && (
+                            <div className="absolute right-0 bottom-full mb-2 w-56 rounded-2xl bg-surface border border-line shadow-float overflow-hidden z-10">
+                                <button type="button" onClick={() => { setMoreOpen(false); remove(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-50 text-left">
+                                    <Trash2 size={16} /> Usuń
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )
             }

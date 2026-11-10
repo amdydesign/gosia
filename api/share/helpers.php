@@ -252,7 +252,8 @@ function shareStream($path, $mime, $downloadName, $disposition, $cache = 'privat
     header_remove('Content-Type');
     header('Accept-Ranges: bytes');
     header('Content-Type: ' . $mime);
-    header('Content-Disposition: ' . $disposition . "; filename*=UTF-8''" . rawurlencode($downloadName));
+    // an empty name = shown on the page only, nothing to save under
+    header('Content-Disposition: ' . $disposition . ($downloadName === '' ? '' : "; filename*=UTF-8''" . rawurlencode($downloadName)));
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: ' . $cache);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($path)) . ' GMT');

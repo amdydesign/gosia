@@ -11,6 +11,9 @@ import PurchaseDetailSheet from '../../components/purchases/PurchaseDetailSheet'
 import { bucket, buildStoreMemory, deadlineText, deadlineTone, groupByStore, recoveredOf, refundPending, RETURN_COST_PRESETS, withPatch } from '../../utils/purchases';
 import { formatCurrency, formatDateShort } from '../../utils/format';
 import { takeSharedFiles } from '../../utils/shareTarget';
+import LoadError from '../../components/ui/LoadError';
+import { usePersistentState } from '../../hooks/usePersistentState';
+import { useRefetchOnVisible } from '../../hooks/useRefetchOnVisible';
 
 const HISTORY_FILTERS = [
     { value: 'returned', label: 'Zwrócone' },
@@ -33,6 +36,7 @@ const FRAME_TONE = {
 };
 const STRIPE = { danger: '!border-l-red-500', warning: '!border-l-amber-400', ok: '!border-l-emerald-400' };
 const HISTORY_OPEN_KEY = 'gosia-purchases-history';
+const HISTORY_FILTER_KEY = 'gonia.purchases.historyFilter';
 
 /**
  * Purchases & returns: add from a screenshot, decide with one tap
@@ -48,7 +52,8 @@ export default function Purchases() {
     const [purchases, setPurchases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [historyFilter, setHistoryFilter] = useState('returned');
+    const [historyFilter, setHistoryFilter] = usePersistentState(HISTORY_FILTER_KEY, 'returned', (v) => HISTORY_FILTERS.some((f) => f.value === v));
+    const [reloads, setReloads] = useState(0);
     const [historyShown, setHistoryShown] = useState(HISTORY_STEP);
 
     const isNew = location.pathname.endsWith('/new');
@@ -57,13 +62,25 @@ export default function Purchases() {
     useEffect(() => {
         let cancelled = false;
         apiRequest('/purchases/index.php')
-            .then((data) => !cancelled && setPurchases(Array.isArray(data) ? data : []))
+            .then((data) => {
+                if (cancelled) return;
+                setPurchases(Array.isArray(data) ? data : []);
+                setError('');
+            })
             .catch((err) => !cancelled && setError(err.message || 'Nie udało się pobrać zakupów'))
             .finally(() => !cancelled && setLoading(false));
         return () => {
             cancelled = true;
         };
-    }, [versions.purchases]);
+    }, [versions.purchases, reloads]);
+
+    // Back from the background (next morning): fresh list, and the days left are counted again from today
+    useRefetchOnVisible(() => setReloads((n) => n + 1));
+    const retry = () => {
+        setLoading(true);
+        setError('');
+        setReloads((n) => n + 1);
+    };
 
     // Old links (/purchases/new) and screenshots shared from the phone's gallery
     useEffect(() => {
@@ -167,8 +184,8 @@ export default function Purchases() {
 
             {loading ? (
                 <ListSkeleton rows={5} />
-            ) : error ? (
-                <EmptyState icon={ShoppingBag} title="Nie udało się pobrać zakupów" text={error} />
+            ) : error && purchases.length === 0 ? (
+                <LoadError onRetry={retry} />
             ) : purchases.length === 0 ? (
                 <div className="card">
                     <EmptyState icon={ShoppingBag} title="Brak zakupów" text="Wrzuć screena zamówienia, a przypomnę Ci o terminie zwrotu." />

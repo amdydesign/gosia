@@ -23,6 +23,8 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
+    // check for real, even if the marker says this version was already checked
+    Schema::forget();
     Users::ensure($conn);
     RateLimit::ensureTable($conn);
     $checked = Schema::ensureAll($conn);

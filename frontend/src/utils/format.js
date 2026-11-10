@@ -95,6 +95,20 @@ export function daysFromToday(dateString) {
     return Math.round((d - today) / 86400000);
 }
 
+/**
+ * One colour rule for every deadline in the app (returns, things to make, payments):
+ * 'danger' (red) = overdue or 2 days or less, 'warning' (amber) = up to 6 days, 'ok' otherwise.
+ */
+export function deadlineTone(days) {
+    if (days === null || days === undefined || Number.isNaN(Number(days))) return 'ok';
+    if (Number(days) <= 2) return 'danger';
+    if (Number(days) <= 6) return 'warning';
+    return 'ok';
+}
+
+/** Text colour for a deadline tone (the calm one is passed in - it differs per place). */
+export const DEADLINE_TEXT = { danger: 'text-red-700 font-semibold', warning: 'text-amber-700 font-semibold' };
+
 export function pluralDays(n) {
     const abs = Math.abs(n);
     if (abs === 1) return 'dzień';

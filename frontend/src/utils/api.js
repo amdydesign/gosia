@@ -42,10 +42,29 @@ export function clearSession() {
 // Wrong password / expired link answer 401 too - that is not "logged out"
 const LOGIN_CALLS = ['/auth/login.php', '/auth/reset_password'];
 
+// Where she was when the session ended - Login brings her back there (form drafts then restore)
+const RETURN_KEY = 'gonia.returnTo';
+
+export function takeReturnPath() {
+    try {
+        const path = sessionStorage.getItem(RETURN_KEY);
+        sessionStorage.removeItem(RETURN_KEY);
+        return path && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/login') ? path : null;
+    } catch {
+        return null;
+    }
+}
+
 function handleUnauthorized(endpoint) {
     if (LOGIN_CALLS.some((p) => endpoint.startsWith(p))) return false;
     clearSession();
-    if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/reset-password')) {
+    const { pathname, search } = window.location;
+    if (!pathname.startsWith('/login') && !pathname.startsWith('/reset-password')) {
+        try {
+            sessionStorage.setItem(RETURN_KEY, pathname + search);
+        } catch {
+            // storage blocked - she lands on Start
+        }
         window.location.href = '/login';
     }
     return true;

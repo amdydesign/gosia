@@ -10,8 +10,9 @@ import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
 import { addDays, formatCurrency, formatDateLong, formatDateShort, getTodayDate, openPicker, parseAmount, yesterdayDate } from '../../utils/format';
+import DraftNotice from '../ui/DraftNotice';
+import { useDraft } from '../../hooks/useDraft';
 
-const today = getTodayDate();
 const emptyItem = () => ({ name: '', amount: '', include: true });
 
 /**
@@ -26,11 +27,19 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
     const aiEnabled = dashboard?.ai?.enabled !== false;
 
     // "auto" = screenshot picker when AI is on, manual form when it is off
-    const [rawStep, setStep] = useState(manual ? 'review' : 'auto');
+    // "today" is read when the sheet opens - the app may have been open since yesterday
+    const [today] = useState(getTodayDate);
+
+    // Draft of a typed-in purchase (not for one started from a screen / a note - files cannot be kept)
+    const draft = useDraft(prefill || initialFiles?.length ? null : 'purchase.new');
+    const saved = draft.initial?.form;
+
+    const [rawStep, setStep] = useState(manual || saved ? 'review' : 'auto');
     const step = rawStep === 'auto' ? (aiEnabled ? 'pick' : 'review') : rawStep;
     const [files, setFiles] = useState([]);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const savingRef = useRef(false);
     const [keepScreens, setKeepScreens] = useState(true);
     const [totalOnScreen, setTotalOnScreen] = useState(0);
     const [memory, setMemory] = useState(() => buildStoreMemory([]));
@@ -41,8 +50,9 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
         notes: '',
         // "Zrzuć tutaj" may already know the store / item / price
         items: prefill?.item ? [{ name: prefill.item, amount: prefill.amount ? String(prefill.amount) : '', include: true }] : [emptyItem()],
+        ...(saved ? { ...saved, purchase_date: saved.purchase_date || today } : {}),
     }));
-    const daysTouched = useRef(false);
+    const daysTouched = useRef(!!draft.initial?.daysTouched);
     const galleryRef = useRef(null);
     const cameraRef = useRef(null);
     const startedWith = useRef(false);
@@ -91,7 +101,7 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
                 setStep(appending ? 'review' : 'pick');
             }
         },
-        [memory, step]
+        [memory, step, today]
     );
 
     // Files handed over (share target, Start tile)
@@ -129,6 +139,32 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
 
     const updateItem = (i, patch) => setForm((f) => ({ ...f, items: f.items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)) }));
 
+    // Unsaved input: kept as a draft, and a stray tap outside the sheet does not close it
+    const dirty = !!(form.store.trim() || form.notes.trim() || form.items.some((it) => it.name.trim() || it.amount));
+    const saveDraft = draft.save;
+    useEffect(() => {
+        if (!dirty || savingRef.current) return;
+        // "dziś" stays "dziś" when the draft comes back another day
+        saveDraft({ form: { ...form, purchase_date: form.purchase_date === today ? '' : form.purchase_date }, daysTouched: daysTouched.current });
+    }, [dirty, form, today, saveDraft]);
+
+    const discardDraft = () => {
+        const old = form;
+        draft.clear();
+        daysTouched.current = false;
+        setForm({ store: '', purchase_date: today, return_days: 14, notes: '', items: [emptyItem()] });
+        if (!manual && !files.length) setStep('auto');
+        toast.info('Szkic wyczyszczony', {
+            action: {
+                label: 'Cofnij',
+                onClick: () => {
+                    setForm(old);
+                    setStep('review');
+                },
+            },
+        });
+    };
+
     const included = form.items.filter((it) => it.include && it.name.trim());
     const sum = included.reduce((s, it) => s + parseAmount(it.amount), 0);
     const deadline = addDays(form.purchase_date, form.return_days);
@@ -136,6 +172,8 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
     const save = async () => {
         if (!form.store.trim()) return setError('Wpisz sklep.');
         if (!included.length) return setError('Dodaj przynajmniej jedną rzecz.');
+        if (savingRef.current) return undefined; // a second tap while saving must not add the purchase twice
+        savingRef.current = true;
         setSaving(true);
         setError('');
         try {
@@ -153,13 +191,16 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
                     ? `Zapisano: ${form.store.trim()} · ${formatCurrency(sum)}`
                     : `Zapisano ${included.length} rzeczy z ${form.store.trim()} · ${formatCurrency(sum)}`
             );
+            draft.clear();
             refresh();
             onSaved?.();
             onClose();
         } catch (err) {
             setError(err.message || 'Nie udało się zapisać');
+            savingRef.current = false;
             setSaving(false);
         }
+        return undefined;
     };
 
     const dateChoice = form.purchase_date === today ? 'today' : form.purchase_date === yesterdayDate() ? 'yesterday' : 'other';
@@ -172,6 +213,7 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
             title={step === 'review' ? 'Sprawdź i zapisz' : 'Nowy zakup'}
             description={step === 'pick' ? 'Wrzuć screena zamówienia lub zdjęcie paragonu — resztę uzupełnię.' : undefined}
             size="lg"
+            closeOnBackdrop={!dirty && step !== 'reading'}
             footer={
                 step === 'review' ? (
                     <Button variant="primary" size="lg" block icon={Check} loading={saving} onClick={save}>
@@ -225,6 +267,7 @@ export default function PurchaseAddSheet({ initialFiles, manual = false, prefill
 
             {step === 'review' && (
                 <div className="space-y-5 pt-1">
+                    {draft.restored && <DraftNotice onDiscard={discardDraft} className="px-1 -mb-2" />}
                     {!aiEnabled && (
                         <button type="button" onClick={openAiSettings} className="w-full flex items-center gap-3 rounded-xl bg-primary-50/60 border border-primary-100 px-3.5 py-2.5 text-left">
                             <Sparkles size={18} className="text-primary-600 shrink-0" />

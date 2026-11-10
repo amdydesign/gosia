@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Check, Plus, Search, X, Lock, Download, FileText, ChevronRight, ClipboardList } from 'lucide-react';
+import { Banknote, Briefcase, Check, ChevronDown, Plus, Search, X, Lock, Download, FileText, ChevronRight, ClipboardList } from 'lucide-react';
 import { apiRequest } from '../../utils/api';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
@@ -10,11 +10,17 @@ import EmptyState from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 import CollabDetailSheet from '../../components/collaborations/CollabDetailSheet';
 import ExportModal from './ExportModal';
-import { daysFromToday, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, getTodayDate, groupByMonth } from '../../utils/format';
+import { DEADLINE_TEXT, daysFromToday, deadlineTone, formatCurrency, formatDateShort, getBillingLabel, getCollabTypeLabel, getTodayDate, groupByMonth } from '../../utils/format';
 import { daysWaiting, deliverableProgress, grossOf, hasWorkLeft, isBrief, isLate, isPaid, netOf, nextDeliverable, paymentDue, toPublish, WAGE_TYPE } from '../../utils/collabs';
 import { tickWithUndo } from '../../services/collaborations';
+import LoadError from '../../components/ui/LoadError';
+import { usePersistentState } from '../../hooks/usePersistentState';
+import { useRefetchOnVisible } from '../../hooks/useRefetchOnVisible';
 
 const MONTHS_STEP = 6;
+const QUERY_KEY = 'gonia.collabs.query';
+const MONTHS_KEY = 'gonia.collabs.months';
+const PAID_OPEN_KEY = 'gonia.collabs.paidOpen';
 
 /**
  * Collaborations: unpaid on top (one tap = paid), history grouped by month.
@@ -31,9 +37,14 @@ export default function Collaborations() {
     const [collabs, setCollabs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [query, setQuery] = useState('');
-    const [searchOpen, setSearchOpen] = useState(false);
-    const [monthsShown, setMonthsShown] = useState(MONTHS_STEP);
+    // Remembered: coming back from a detail (or tomorrow) shows the list as it was left
+    const [query, setQuery] = usePersistentState(QUERY_KEY, '', (v) => typeof v === 'string');
+    const [searchOpen, setSearchOpen] = useState(() => !!query);
+    const [searchTapped, setSearchTapped] = useState(false); // keyboard only when she opened the search herself
+    const [monthsShown, setMonthsShown] = usePersistentState(MONTHS_KEY, MONTHS_STEP, (v) => Number.isInteger(v) && v >= MONTHS_STEP);
+    // Paid history starts folded (like in Zakupy): what needs doing comes first
+    const [paidOpen, setPaidOpen] = usePersistentState(PAID_OPEN_KEY, false, (v) => typeof v === 'boolean');
+    const [reloads, setReloads] = useState(0);
     const [busyId, setBusyId] = useState(null);
     const [exportOpen, setExportOpen] = useState(false);
     const [docSuggestions, setDocSuggestions] = useState(0); // collaborations proposed from contracts / bills
@@ -44,13 +55,25 @@ export default function Collaborations() {
     useEffect(() => {
         let cancelled = false;
         apiRequest('/collaborations/index.php')
-            .then((data) => !cancelled && setCollabs(Array.isArray(data) ? data : []))
+            .then((data) => {
+                if (cancelled) return;
+                setCollabs(Array.isArray(data) ? data : []);
+                setError('');
+            })
             .catch((err) => !cancelled && setError(err.message || 'Nie udało się pobrać współprac'))
             .finally(() => !cancelled && setLoading(false));
         return () => {
             cancelled = true;
         };
-    }, [versions.collaborations]);
+    }, [versions.collaborations, reloads]);
+
+    // Back from the background (next morning): fresh list, deadlines counted from today
+    useRefetchOnVisible(() => setReloads((n) => n + 1));
+    const retry = () => {
+        setLoading(true);
+        setError('');
+        setReloads((n) => n + 1);
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -172,21 +195,21 @@ export default function Collaborations() {
                 <div className="relative">
                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted" />
                     <input
-                        autoFocus
+                        autoFocus={searchTapped}
                         type="search"
                         className="input !pl-10 !pr-10"
                         placeholder="Szukaj marki lub notatki…"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                     />
-                    <button type="button" onClick={() => { setQuery(''); setSearchOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-ink-muted hover:bg-ink/5" aria-label="Zamknij wyszukiwanie">
+                    <button type="button" onClick={() => { setQuery(''); setSearchOpen(false); }} className="absolute right-0.5 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-full text-ink-muted hover:bg-ink/5" aria-label="Zamknij wyszukiwanie">
                         <X size={16} />
                     </button>
                 </div>
             ) : (
                 <div className="flex items-center gap-2">
                     <Button variant="primary" icon={Plus} onClick={() => openCollab()} className="flex-1 lg:hidden">Dodaj współpracę</Button>
-                    <Button variant="secondary" icon={Search} onClick={() => setSearchOpen(true)} className="lg:flex-none" aria-label="Szukaj">
+                    <Button variant="secondary" icon={Search} onClick={() => { setSearchTapped(true); setSearchOpen(true); }} className="lg:flex-none" aria-label="Szukaj">
                         <span className="hidden lg:inline">Szukaj</span>
                     </Button>
                 </div>
@@ -208,8 +231,8 @@ export default function Collaborations() {
 
             {loading ? (
                 <ListSkeleton rows={6} />
-            ) : error ? (
-                <EmptyState icon={Briefcase} title="Nie udało się pobrać współprac" text={error} />
+            ) : error && collabs.length === 0 ? (
+                <LoadError onRetry={retry} />
             ) : collabs.length === 0 ? (
                 <div className="card">
                     <EmptyState
@@ -263,7 +286,15 @@ export default function Collaborations() {
 
                     {history.length > 0 ? (
                         <section className="space-y-4">
-                            {history.slice(0, monthsShown).map((group) => (
+                            {!query.trim() && (
+                                <button type="button" onClick={() => setPaidOpen((o) => !o)} aria-expanded={paidOpen} className="w-full min-h-11 flex items-center justify-between gap-3 px-1 text-sm font-semibold text-ink-muted hover:text-ink">
+                                    <span>
+                                        Opłacone <span className="font-medium">· {history.reduce((n, g) => n + g.items.length, 0)}</span>
+                                    </span>
+                                    <ChevronDown size={17} className={`transition-transform ${paidOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                            )}
+                            {(paidOpen || !!query.trim()) && history.slice(0, monthsShown).map((group) => (
                                 <div key={group.key}>
                                     <div className="flex items-baseline justify-between px-1 mb-2">
                                         <h2 className="section-label">{group.label}</h2>
@@ -278,7 +309,7 @@ export default function Collaborations() {
                                     </div>
                                 </div>
                             ))}
-                            {history.length > monthsShown && (
+                            {(paidOpen || !!query.trim()) && history.length > monthsShown && (
                                 <Button variant="secondary" block onClick={() => setMonthsShown((n) => n + MONTHS_STEP)}>
                                     Pokaż starsze
                                 </Button>
@@ -343,6 +374,12 @@ function UnpaidRow({ collab, busy, onOpen, onPaid, onTick }) {
                     ? `termin minął ${-dueIn} dni temu`
                     : dueIn >= 0 ? `przelew do ${formatDateShort(due)}` : waiting > 0 ? `czeka ${waiting} dni` : 'od dziś';
     const progress = deliverableProgress(collab);
+    // Her own deadlines (thing to make, publication) get the shared colours; a late transfer is red;
+    // waiting for the client's transfer stays calm - nothing for her to do yet
+    const whenTone =
+        status === 'late'
+            ? DEADLINE_TEXT.danger
+            : (status === 'todo' && DEADLINE_TEXT[deadlineTone(nextIn)]) || (status === 'publish' && DEADLINE_TEXT[deadlineTone(publishIn)]) || 'text-ink-muted';
     return (
         <div className="flex items-center gap-3 pl-4 pr-3 py-3">
             <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
@@ -352,7 +389,7 @@ function UnpaidRow({ collab, busy, onOpen, onPaid, onTick }) {
                     {progress.total > 0 && progress.done < progress.total && (
                         <span className="shrink-0 text-xs font-bold text-ink tabular-nums">{progress.done}/{progress.total}</span>
                     )}
-                    <span className={`text-xs truncate ${status === 'late' || (status === 'todo' && nextIn !== null && nextIn < 0) ? 'text-red-700 font-semibold' : 'text-ink-muted'}`}>
+                    <span className={`text-xs truncate ${whenTone}`}>
                         {status === 'todo' ? when : `${formatDateShort(collab.date)} · ${when}`}
                     </span>
                 </div>
@@ -381,7 +418,8 @@ function UnpaidRow({ collab, busy, onOpen, onPaid, onTick }) {
                     aria-label={`Oznacz ${collab.brand} jako opłacone`}
                     title="Przelew doszedł"
                 >
-                    <Check size={20} strokeWidth={2.75} />
+                    {/* money, not a tick: ✓ in this list means "zrobione" */}
+                    <Banknote size={21} strokeWidth={2.25} />
                 </button>
             )}
         </div>
@@ -393,7 +431,7 @@ function PrepRow({ collab, busy, onOpen, onTick }) {
     const next = nextDeliverable(collab);
     const progress = deliverableProgress(collab);
     const days = next?.due ? daysFromToday(next.due) : null;
-    const tone = days === null ? 'text-ink-muted' : days < 0 ? 'text-red-700 font-semibold' : days <= 2 ? 'text-amber-700 font-semibold' : 'text-ink-muted';
+    const tone = DEADLINE_TEXT[deadlineTone(days)] || 'text-ink-muted';
     const when = days === null ? '' : days < 0 ? ' · termin minął' : days === 0 ? ' · dziś' : days === 1 ? ' · jutro' : ` · do ${formatDateShort(next.due)}`;
     return (
         <div className="flex items-center gap-3 pl-4 pr-3 py-3">

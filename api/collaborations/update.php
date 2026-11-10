@@ -27,12 +27,16 @@ try {
 
     Schema::ensureCollaborations($conn);
 
-    // Verify ownership
-    $stmt = $conn->prepare("SELECT id, brand, payment_status, paid_at, published_at, deliverables FROM collaborations WHERE id = :id AND user_id = :user_id");
+    // Verify ownership. The row stays locked until commit, so two quick "Zrobione" taps
+    // (tick below reads and writes the same list) cannot overwrite each other.
+    $conn->beginTransaction();
+    $stmt = $conn->prepare("SELECT id, brand, payment_status, paid_at, published_at, deliverables FROM collaborations WHERE id = :id AND user_id = :user_id FOR UPDATE");
     $stmt->execute(['id' => $id, 'user_id' => $userId]);
     $current = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$current)
+    if (!$current) {
+        $conn->rollBack();
         Response::error('Not found', 404);
+    }
 
     // "Zrobione" on one thing from the brief: { tick: { index, delta: 1 | -1 } }.
     // The last one made marks the collaboration published (payment term starts) - unless it already is.
@@ -41,6 +45,7 @@ try {
         $list = collabDecodeDeliverables($current['deliverables']);
         $index = (int) ($input['tick']['index'] ?? -1);
         if (!isset($list[$index])) {
+            $conn->rollBack();
             Response::notFound('Tej pozycji już nie ma');
         }
         $delta = ((int) ($input['tick']['delta'] ?? 1)) < 0 ? -1 : 1;
@@ -54,8 +59,6 @@ try {
             $autoPublished = true;
         }
     }
-
-    $conn->beginTransaction();
 
     // Update main fields
     $fields = [];
@@ -184,7 +187,11 @@ try {
     Response::success($result);
 
 } catch (Exception $e) {
-    if (isset($conn))
+    if (isset($conn) && $conn->inTransaction())
         $conn->rollBack();
-    Response::error('Update failed: ' . $e->getMessage(), 500);
+    error_log('collaborations/update: ' . $e->getMessage());
+    if (($_ENV['APP_DEBUG'] ?? '') === 'true') {
+        Response::error('Update failed: ' . $e->getMessage(), 500);
+    }
+    Response::error('Nie udało się zapisać. Spróbuj jeszcze raz.', 500);
 }

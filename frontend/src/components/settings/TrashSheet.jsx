@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RotateCcw, Trash2, X } from 'lucide-react';
 import Sheet from '../ui/Sheet';
 import EmptyState from '../ui/EmptyState';
+import LoadError from '../ui/LoadError';
 import { useToast } from '../../context/ToastContext';
 import { useDashboard } from '../../context/DashboardContext';
 import { useQuickActions } from '../../context/QuickActionsContext';
@@ -29,12 +30,15 @@ export default function TrashSheet({ open, onClose }) {
     const { bump } = useQuickActions();
     const confirm = useConfirm();
     const [items, setItems] = useState(null);
+    const [failed, setFailed] = useState(false);
     const [busyId, setBusyId] = useState(null);
 
     const load = useCallback(() => {
+        setFailed(false);
         listTrash()
             .then((list) => setItems(Array.isArray(list) ? list : []))
-            .catch(() => setItems([]));
+            // no internet is not an empty bin
+            .catch(() => setFailed(true));
     }, []);
 
     useEffect(() => {
@@ -83,7 +87,9 @@ export default function TrashSheet({ open, onClose }) {
 
     return (
         <Sheet open={open} onClose={onClose} title="Kosz" description="Usunięte rzeczy czekają tu 30 dni, potem znikają same. Możesz też opróżnić kosz od razu." size="sm">
-            {items === null ? (
+            {failed ? (
+                <LoadError onRetry={load} />
+            ) : items === null ? (
                 <p className="text-sm text-ink-muted py-6 text-center">Ładowanie…</p>
             ) : items.length === 0 ? (
                 <EmptyState icon={Trash2} title="Kosz jest pusty" text="Nic nie usunęłaś w ostatnich 30 dniach." />
@@ -119,7 +125,7 @@ export default function TrashSheet({ open, onClose }) {
                     ))}
                 </div>
             )}
-            {items?.length > 0 && (
+            {!failed && items?.length > 0 && (
                 <button
                     type="button"
                     onClick={() => discard(items)}

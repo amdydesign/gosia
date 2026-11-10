@@ -21,7 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 try {
     // Authenticate
     $userId = getCurrentUserId();
+    // the mode goes into the download's file name - only known values
     $mode = $_GET['mode'] ?? 'official';
+    if (!in_array($mode, ['official', 'private', 'full'], true)) {
+        $mode = 'full';
+    }
 
     // Get database connection
     $db = new Database();

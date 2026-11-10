@@ -21,6 +21,7 @@ export default function SecuritySheet({ open, onClose, onChangePassword }) {
 
     const saveEmail = async (e) => {
         e.preventDefault();
+        if (savingEmail) return;
         setSavingEmail(true);
         try {
             const data = await updateProfileFields({ email: email.trim() });

@@ -79,5 +79,6 @@ try {
     Response::success(['url' => $url]);
 
 } catch (Exception $e) {
-    Response::error('Error: ' . $e->getMessage(), 500);
+    error_log('youtube get_auth_url: ' . $e->getMessage());
+    Response::error('Nie udało się przygotować połączenia z YouTube.', 500);
 }

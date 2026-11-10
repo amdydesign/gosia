@@ -112,6 +112,9 @@ class WebPush
      */
     public function send($endpoint, $p256dh, $auth, array $payload, $ttl = 86400)
     {
+        if (!self::allowedEndpoint($endpoint)) {
+            return 0;
+        }
         $body = $this->encryptPayload(
             json_encode($payload, JSON_UNESCAPED_UNICODE),
             self::base64UrlDecode($p256dh),
@@ -126,6 +129,8 @@ class WebPush
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 15,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
             CURLOPT_HTTPHEADER => [
                 'Authorization: vapid t=' . $jwt . ', k=' . self::base64UrlEncode($this->vapidPublicKey),
                 'Content-Encoding: aes128gcm',
@@ -140,6 +145,34 @@ class WebPush
         curl_close($ch);
 
         return $status;
+    }
+
+    /**
+     * Only https addresses of the browsers' push services (Chrome/Android, Safari/iOS, Edge, Firefox) -
+     * the server never posts to any other host a client gives it.
+     */
+    public static function allowedEndpoint($endpoint)
+    {
+        $parts = parse_url((string) $endpoint);
+        if (!$parts || strtolower($parts['scheme'] ?? '') !== 'https' || isset($parts['user']) || isset($parts['pass'])) {
+            return false;
+        }
+        if (isset($parts['port']) && (int) $parts['port'] !== 443) {
+            return false;
+        }
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        return $host === 'fcm.googleapis.com'
+            || (bool) preg_match('/^[a-z0-9.-]+\.(?:push\.apple\.com|notify\.windows\.com|push\.services\.mozilla\.com)$/', $host);
+    }
+
+    /** Does the user have any device with notifications on? */
+    public static function hasSubscriptions(PDO $conn, $userId)
+    {
+        require_once __DIR__ . '/Schema.php';
+        Schema::ensure($conn, 'push_subscriptions');
+        $stmt = $conn->prepare("SELECT 1 FROM push_subscriptions WHERE user_id = :user_id LIMIT 1");
+        $stmt->execute(['user_id' => $userId]);
+        return (bool) $stmt->fetchColumn();
     }
 
     /**

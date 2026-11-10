@@ -29,6 +29,10 @@ try {
     if (empty($endpoint) || !filter_var($endpoint, FILTER_VALIDATE_URL) || strpos($endpoint, 'https://') !== 0) {
         Response::validationError(['endpoint' => 'Valid https endpoint is required']);
     }
+    // only the browsers' own push services - the server will post to this address
+    if (strlen($endpoint) > 500 || !WebPush::allowedEndpoint($endpoint)) {
+        Response::validationError(['endpoint' => 'Ta przeglądarka nie obsługuje powiadomień w aplikacji.']);
+    }
     if (empty($p256dh) || empty($auth)) {
         Response::validationError(['keys' => 'p256dh and auth keys are required']);
     }

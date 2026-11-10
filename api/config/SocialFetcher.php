@@ -122,12 +122,53 @@ class SocialFetcher
             return '@' . ltrim($value, '@');
         }
         if ($platform === 'facebook') {
-            if (preg_match('#facebook\.com/([^?\s]+)#i', $value, $m)) {
-                return rtrim($m[1], '/');
-            }
-            return $value;
+            return self::facebookPath($value);
         }
         return $value;
+    }
+
+    /**
+     * Facebook profile as a path on facebook.com ("gosia.page", "profile.php?id=123", "people/Name/123").
+     * Accepts a handle or a facebook.com link; anything else (another site, odd characters) gives ''.
+     * The server only ever fetches https://www.facebook.com/<this path>.
+     */
+    public static function facebookPath($value)
+    {
+        $value = trim((string) $value);
+        if (preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $value) || preg_match('#^[a-z0-9.-]*(?:facebook|fb)\.com(?:/|$)#i', $value)) {
+            $parts = parse_url(preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $value) ? $value : 'https://' . $value);
+            $host = strtolower((string) ($parts['host'] ?? ''));
+            if (!$parts || !preg_match('/^(?:[a-z0-9-]+\.)*(?:facebook|fb)\.com$/', $host) || isset($parts['user']) || isset($parts['port'])) {
+                return '';
+            }
+            $value = (string) ($parts['path'] ?? '');
+            if (preg_match('#^/?profile\.php$#', $value) && preg_match('/(?:^|&)id=(\d+)/', (string) ($parts['query'] ?? ''), $m)) {
+                return 'profile.php?id=' . $m[1];
+            }
+        }
+        $value = trim(ltrim($value, '@'), '/');
+        if (preg_match('/^profile\.php\?id=(\d+)$/', $value, $m)) {
+            return 'profile.php?id=' . $m[1];
+        }
+        $value = rawurldecode($value);
+        if ($value === '' || strlen($value) > 200 || strpos($value, '..') !== false || strpos($value, '//') !== false
+            || !preg_match('#^[\p{L}\p{N}._/-]+$#u', $value)) {
+            return '';
+        }
+        return $value;
+    }
+
+    /** https://www.facebook.com/... for a stored handle, or null when it is not a Facebook profile. */
+    private static function facebookUrl($handle)
+    {
+        $path = self::facebookPath($handle);
+        if ($path === '') {
+            return null;
+        }
+        if (strpos($path, 'profile.php?id=') === 0) {
+            return 'https://www.facebook.com/' . $path;
+        }
+        return 'https://www.facebook.com/' . implode('/', array_map('rawurlencode', explode('/', $path)));
     }
 
     // ------------------------------------------------------------------
@@ -345,6 +386,9 @@ class SocialFetcher
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 5,
+            // https only, also after a redirect
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
             CURLOPT_TIMEOUT => $timeout,
             CURLOPT_CONNECTTIMEOUT => 8,
             CURLOPT_ENCODING => '',
@@ -496,7 +540,10 @@ class SocialFetcher
 
     private function facebookHtml($handle)
     {
-        $path = preg_match('#^https?://#i', $handle) ? $handle : 'https://www.facebook.com/' . ltrim($handle, '/');
+        $path = self::facebookUrl($handle);
+        if ($path === null) {
+            return null;
+        }
         foreach ([$path, str_replace('www.facebook.com', 'm.facebook.com', $path)] as $url) {
             try {
                 [$code, $body] = $this->http($url, ['Accept: text/html']);
@@ -527,7 +574,7 @@ class SocialFetcher
         }
         $target = $cfg['url'] ?? '';
         if ($handle) {
-            $target = preg_match('#^https?://#i', $handle) ? $handle : 'https://www.facebook.com/' . ltrim($handle, '/');
+            $target = self::facebookUrl($handle) ?? '';
         }
         if (!$target) {
             return null;

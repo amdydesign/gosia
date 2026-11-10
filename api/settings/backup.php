@@ -29,7 +29,7 @@ try {
     if (isset($_GET['download'])) {
         $name = (string) $_GET['download'];
         $path = Backup::dir() . '/' . $name;
-        if (!preg_match('/^(db|files)-\d{4}-\d{2}-\d{2}\.(sql\.gz|zip)$/', $name) || !is_file($path)) {
+        if (!preg_match(Backup::NAME_PATTERN, $name) || !is_file($path)) {
             Response::notFound('Nie ma takiej kopii');
         }
         header_remove('Content-Type');

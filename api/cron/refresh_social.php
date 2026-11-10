@@ -14,6 +14,7 @@
 
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../config/SocialFetcher.php';
+require_once __DIR__ . '/../utils/CronLock.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->safeLoad();
@@ -36,6 +37,11 @@ $force = $isCli ? in_array('--force', $argv ?? [], true) : !empty($_GET['force']
 try {
     $db = new Database();
     $conn = $db->getConnection();
+    // one run at a time - the previous one may still be waiting for slow sites
+    if (!CronLock::acquire($conn, 'social')) {
+        echo $isCli ? "Already running.\n" : json_encode(['success' => true, 'message' => 'Already running', 'processed' => []]);
+        exit;
+    }
     $fetcher = new SocialFetcher($conn);
 
     Users::ensure($conn);
@@ -66,6 +72,7 @@ try {
     } else {
         echo json_encode(['success' => true, 'processed' => $summary], JSON_UNESCAPED_UNICODE);
     }
+    CronLock::release($conn, 'social');
 
 } catch (Exception $e) {
     if ($isCli) {

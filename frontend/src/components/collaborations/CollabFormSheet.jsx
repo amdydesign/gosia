@@ -11,8 +11,27 @@ import { addDays, formatCurrency, getTaxBreakdown, getTodayDate, openPicker, par
 import { BILLING_OPTIONS, PAYMENT_DAY_PRESETS, TYPE_OPTIONS, WAGE_TYPE, buildBrandMemory, grossOf, typeFromDeliverables, wageLabel } from '../../utils/collabs';
 import { uploadAttachment } from '../../services/attachments';
 import DeliverablesEditor from './DeliverablesEditor';
+import DraftNotice from '../ui/DraftNotice';
+import { useDraft } from '../../hooks/useDraft';
 
-const today = getTodayDate();
+const emptyForm = (today) => ({
+    brand: '',
+    amount: '',
+    collab_type: 'umowa_50',
+    type: 'reel',
+    date: today,
+    paid: false,
+    notes: '',
+    team: [],
+    payment_days: null, // null = 30 days (default)
+    publish_by: '',
+    paid_at: '',
+    brief: false, // not agreed yet - "W przygotowaniu"
+    deliverables: [], // [{ label, count, done, due }]
+});
+
+/** Anything worth keeping in a new form? (defaults alone are not a draft) */
+const hasContent = (f) => !!(f.brand.trim() || f.amount || f.notes.trim() || f.publish_by || f.deliverables.length || f.team.length);
 
 const STAGE_OPTIONS = [
     { value: 'agreed', label: 'Umowa / zlecenie' },
@@ -36,31 +55,30 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
     const { data: dashboard, refresh } = useDashboard();
     const aiEnabled = !!dashboard?.ai?.enabled;
 
+    // "today" is read when the form opens - the app may have been open since yesterday
+    const [today] = useState(getTodayDate);
+
+    // Draft: a plain new form, or the changes to this collaboration. A form opened with a
+    // prefill / a screen has its source elsewhere (the note, the inbox) and keeps no draft.
+    const draft = useDraft(isEdit ? `collab.edit.${collabId}` : prefill || initialFiles?.length ? null : 'collab.new');
+    const saved = draft.initial?.form;
+
     const [form, setForm] = useState(() => ({
-        brand: '',
-        amount: '',
-        collab_type: 'umowa_50',
-        type: 'reel',
-        date: today,
-        paid: false,
-        notes: '',
-        team: [],
-        payment_days: null, // null = 30 days (default)
-        publish_by: '',
-        paid_at: '',
-        brief: false, // not agreed yet - "W przygotowaniu"
-        deliverables: [], // [{ label, count, done, due }]
+        ...emptyForm(today),
         ...normalizePrefill(prefill),
+        ...(!isEdit && saved ? { ...saved, date: saved.date || today } : {}),
     }));
+    const [serverForm, setServerForm] = useState(null); // edit: what is saved - the draft is whatever differs
     const [sourceFiles, setSourceFiles] = useState([]); // the brief / screen read by AI - attached after saving
     const [originalStatus, setOriginalStatus] = useState('pending');
     const [memory, setMemory] = useState(null);
     const [loading, setLoading] = useState(isEdit);
     const [saving, setSaving] = useState(false);
+    const savingRef = useRef(false);
     const [reading, setReading] = useState(false);
     const [error, setError] = useState('');
-    const [moreOpen, setMoreOpen] = useState(() => !!(prefill?.notes || prefill?.team?.length));
-    const touched = useRef(new Set(prefill ? ['collab_type', 'type', 'amount'] : []));
+    const [moreOpen, setMoreOpen] = useState(() => !!(prefill?.notes || prefill?.team?.length || saved?.notes || saved?.team?.length));
+    const touched = useRef(new Set(prefill || saved ? ['collab_type', 'type', 'amount', ...(draft.initial?.touched || [])] : []));
     const fileRef = useRef(null);
 
     const isWage = form.type === WAGE_TYPE;
@@ -96,7 +114,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                 if (cancelled) return;
                 touched.current = new Set(['collab_type', 'type', 'amount']);
                 setOriginalStatus(c.payment_status || 'pending');
-                setForm({
+                const server = {
                     brand: c.brand || '',
                     amount: grossOf(c) ? String(grossOf(c)) : '',
                     collab_type: c.collab_type || 'umowa_50',
@@ -110,7 +128,9 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                     paid_at: c.paid_at || '',
                     brief: c.stage === 'brief' && c.payment_status !== 'paid',
                     deliverables: (c.deliverables || []).map((d) => ({ ...d, due: d.due || '' })),
-                });
+                };
+                setServerForm(server);
+                setForm(saved ? { ...server, ...saved, date: saved.date || server.date } : server);
                 if (c.notes || c.team?.length) setMoreOpen(true);
             })
             .catch((err) => !cancelled && setError(err.message || 'Nie udało się wczytać'))
@@ -118,7 +138,25 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
         return () => {
             cancelled = true;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [collabId, isEdit]);
+
+    // Unsaved input: kept as a draft, and a stray tap outside the sheet does not close it
+    const dirty = isEdit ? !!serverForm && JSON.stringify(form) !== JSON.stringify(serverForm) : hasContent(form);
+    const saveDraft = draft.save;
+    useEffect(() => {
+        if (!dirty || savingRef.current) return;
+        // "dziś" stays "dziś" when the draft comes back another day
+        saveDraft({ form: { ...form, date: !isEdit && form.date === today ? '' : form.date }, touched: [...touched.current] });
+    }, [dirty, form, today, isEdit, saveDraft]);
+
+    const discardDraft = () => {
+        const old = form;
+        draft.clear();
+        setForm(isEdit && serverForm ? serverForm : { ...emptyForm(today), ...(memory ? { collab_type: memory.defaults.collab_type, type: memory.defaults.type } : {}) });
+        touched.current = new Set(isEdit ? ['collab_type', 'type', 'amount'] : []);
+        toast.info('Szkic wyczyszczony', { action: { label: 'Cofnij', onClick: () => setForm(old) } });
+    };
 
     const set = (name, value) => {
         touched.current.add(name);
@@ -225,6 +263,9 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
             setError('Wpisz markę albo wybierz ją z listy.');
             return;
         }
+        // a second tap / Enter while the first save is on its way must not add it twice
+        if (savingRef.current || loading || reading) return;
+        savingRef.current = true;
         setSaving(true);
         setError('');
         const payload = {
@@ -261,11 +302,13 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
                     );
                 }
             }
+            draft.clear();
             refresh();
             onSaved?.(savedId);
             onClose();
         } catch (err) {
             setError(err.message || 'Nie udało się zapisać');
+            savingRef.current = false;
             setSaving(false);
         }
     };
@@ -279,6 +322,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
             onClose={onClose}
             title={isEdit ? 'Edytuj współpracę' : 'Nowa współpraca'}
             size="lg"
+            closeOnBackdrop={!dirty}
             footer={
                 <Button type="submit" form="collab-form" variant="primary" size="lg" block icon={Check} loading={saving} disabled={loading || reading}>
                     {isEdit ? 'Zapisz zmiany' : 'Zapisz'}
@@ -290,6 +334,7 @@ export default function CollabFormSheet({ collabId, prefill, initialFiles, onClo
             ) : (
                 <form id="collab-form" onSubmit={submit} className="space-y-5 pt-1">
                     {error && <div className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-3.5 py-2.5">{error}</div>}
+                    {draft.restored && <DraftNotice onDiscard={discardDraft} className="px-1 -mb-2" />}
 
                     {aiEnabled && !isEdit && (
                         <>
@@ -487,6 +532,7 @@ function PublishBy({ value, onChange }) {
  */
 function Terms({ form, isWage, dateChoice, set, onPaidAt, isEdit }) {
     const [open, setOpen] = useState(false);
+    const today = getTodayDate();
     const billing = BILLING_OPTIONS.find((o) => o.value === form.collab_type)?.label;
     const when = dateChoice === 'today' ? 'dziś' : dateChoice === 'yesterday' ? 'wczoraj' : formatDateShort(form.date);
     const summary = [!isWage && billing, when, !form.paid && !isWage && `płatność ${form.payment_days || 30} dni`].filter(Boolean).join(' · ');

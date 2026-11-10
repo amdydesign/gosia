@@ -34,6 +34,10 @@ class Assistant
     const DEFAULT_MODEL = 'claude-sonnet-5-5';
     const MAX_TOKENS = 64000;
     const MAX_STEPS = 16;
+    // one reply may not cost more than this: past it the model gets one last call without tools to wrap up
+    const REPLY_BUDGET_USD = 1.5;
+    // a reply still being written blocks the chat for at most this long (covers a killed PHP process)
+    const BUSY_MINUTES = 15;
 
     /**
      * Version of the system prompt + tool set a chat was started with. Newer models bind their
@@ -235,10 +239,12 @@ PROMPT;
      * Run one assistant reply on top of $history (API messages, objects) ending with her message.
      *
      * @param callable $emit fn(string $event, array $data) - forwards progress to the app
+     * @param callable|null $save fn(array $rows) - stores finished steps right away (a tool call always together
+     *                            with its results, so the stored history can be replayed whatever happens next)
      * @return array ['messages' => [['kind' => ..., 'message' => object]], 'model' => served model]
      * @throws RuntimeException with a Polish message
      */
-    public static function reply(PDO $conn, $userId, array $history, $model, callable $emit, $version = self::PROMPT_VERSION)
+    public static function reply(PDO $conn, $userId, array $history, $model, callable $emit, $version = self::PROMPT_VERSION, ?callable $save = null)
     {
         $key = AiClient::key('claude');
         if ($key === '') {
@@ -255,9 +261,17 @@ PROMPT;
         $hasText = false;
         $totalCost = 0.0;
         $promptTokens = 0;
+        $pending = [];
+        $stop = null;
+        $flush = function () use (&$pending, $save) {
+            if ($pending && $save) {
+                $save($pending);
+            }
+            $pending = [];
+        };
 
         for ($step = 0; $step < self::MAX_STEPS; $step++) {
-            $last = $step === self::MAX_STEPS - 1;
+            $last = $step === self::MAX_STEPS - 1 || $totalCost >= self::REPLY_BUDGET_USD;
             $result = self::stream($key, $model, $messages, $options, $last, function ($event, $data) use ($emit, &$needBreak, &$hasText) {
                 if ($event === 'text') {
                     if ($needBreak && $hasText) {
@@ -283,13 +297,14 @@ PROMPT;
             $promptTokens = self::promptTokens($result['usage']);
             $totalCost += $cost;
             $messages[] = $message;
-            $new[] = ['kind' => 'assistant', 'message' => $message, 'model' => $served, 'cost' => $cost, 'usage' => $result['usage']];
+            $new[] = $pending[] = ['kind' => 'assistant', 'message' => $message, 'model' => $served, 'cost' => $cost, 'usage' => $result['usage']];
 
             if ($stop === 'pause_turn') {
                 // a long web search paused - send it back as is and let it carry on
                 continue;
             }
             if ($stop !== 'tool_use') {
+                $flush();
                 break;
             }
 
@@ -318,8 +333,14 @@ PROMPT;
             }
             $toolMessage = (object) ['role' => 'user', 'content' => $results];
             $messages[] = $toolMessage;
-            $new[] = ['kind' => 'tool', 'message' => $toolMessage, 'model' => null, 'cost' => $toolCost > 0 ? round($toolCost, 6) : null];
+            $new[] = $pending[] = ['kind' => 'tool', 'message' => $toolMessage, 'model' => null, 'cost' => $toolCost > 0 ? round($toolCost, 6) : null];
             $totalCost += $toolCost;
+            $flush();
+        }
+        $flush();
+        if ($stop === 'max_tokens') {
+            // shown only now (not stored): the answer hit the length limit
+            $emit('text', ['text' => "\n\nOdpowiedź się urwała, bo była za długa. Napisz „dokończ”."]);
         }
 
         return ['messages' => $new, 'model' => $served, 'cost' => round($totalCost, 6), 'prompt_tokens' => $promptTokens];
@@ -457,7 +478,8 @@ PROMPT;
      */
     private static function stream($key, $model, array $messages, array &$options, $noTools, callable $emit)
     {
-        for ($attempt = 0; $attempt < 9; $attempt++) {
+        $transient = 0;
+        for ($attempt = 0; $attempt < 12; $attempt++) {
             $headers = ['Content-Type: application/json', 'x-api-key: ' . $key, 'anthropic-version: 2023-06-01'];
             $betas = [];
             if (!empty($options['fallbacks'])) {
@@ -479,6 +501,7 @@ PROMPT;
 
             $parser = new AssistantStreamParser($emit);
             $status = 0;
+            $retryAfter = 0;
             $errorBody = '';
             $ch = curl_init(self::URL);
             curl_setopt_array($ch, [
@@ -487,9 +510,11 @@ PROMPT;
                 CURLOPT_POSTFIELDS => $body,
                 CURLOPT_CONNECTTIMEOUT => 15,
                 CURLOPT_TIMEOUT => 600,
-                CURLOPT_HEADERFUNCTION => function ($ch, $line) use (&$status) {
+                CURLOPT_HEADERFUNCTION => function ($ch, $line) use (&$status, &$retryAfter) {
                     if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
                         $status = (int) $m[1];
+                    } elseif (preg_match('/^retry-after:\s*(\d+)/i', $line, $m)) {
+                        $retryAfter = (int) $m[1];
                     }
                     return strlen($line);
                 },
@@ -508,6 +533,12 @@ PROMPT;
 
             if ($status === 200) {
                 if ($parser->error) {
+                    // overloaded before anything was written: wait and ask again (nothing was shown yet)
+                    $type = $parser->error['type'] ?? '';
+                    if (in_array($type, ['overloaded_error', 'rate_limit_error', 'api_error'], true) && !$parser->result()['content'] && $transient < 3) {
+                        sleep([2, 5, 10][$transient++]);
+                        continue;
+                    }
                     throw new RuntimeException(self::streamErrorMessage($parser->error));
                 }
                 if ($ok === false && !$parser->finished) {
@@ -560,8 +591,9 @@ PROMPT;
                     continue;
                 }
             }
-            if (($status === 529 || $status >= 500) && $attempt < 2) {
-                sleep(2);
+            if (($status === 429 || $status === 529 || $status >= 500) && $transient < 3) {
+                // growing pause; a rate limit says itself how long to wait (never more than 20 s)
+                sleep(min(20, max($retryAfter, [2, 5, 10][$transient++])));
                 continue;
             }
             throw new RuntimeException(self::httpErrorMessage($status, $detail));
