@@ -494,6 +494,31 @@ export default function Documents() {
         return () => [...pending.values()].forEach((p) => p.commit());
     }, []);
 
+    // A late contract added to a collaboration that already exists ("Cofnij" takes it back out)
+    const linkDoc = async (doc, collab) => {
+        try {
+            await documentsService.linkCollab([doc.id], collab.id);
+            bump('collaborations');
+            refreshDashboard();
+            toast.success(`Dodano do współpracy ${collab.brand}`, {
+                action: {
+                    label: 'Cofnij',
+                    onClick: async () => {
+                        try {
+                            await documentsService.unlinkCollab([doc.id]);
+                            refreshAll();
+                        } catch (err) {
+                            notify.error(err.message || 'Nie udało się cofnąć');
+                        }
+                    },
+                },
+            });
+            refreshAll();
+        } catch (err) {
+            toast.error(err.message || 'Nie udało się połączyć');
+        }
+    };
+
     const unlinkDoc = async (doc) => {
         try {
             await documentsService.unlinkCollab([doc.id]);
@@ -992,6 +1017,7 @@ export default function Documents() {
                     [doc.id]
                 )
             }
+            onLinkCollab={linkDoc}
             onUnlinkCollab={unlinkDoc}
         />
         <CollabSuggestionsSheet

@@ -7,6 +7,7 @@ import { documentThumbnail } from '../../utils/thumbnail';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency } from '../../utils/format';
 import ContractTerms from './ContractTerms';
+import LinkToCollab from './LinkToCollab';
 
 const PREVIEW_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
@@ -39,7 +40,7 @@ function Row({ icon, label, children }) {
 /**
  * Document card: first-page thumbnail, summary and all actions in one place.
  */
-export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onFilterBrand, onCreateCollab, onUnlinkCollab, onTermsSaved }) {
+export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownload, onEdit, onDelete, onToggleStatus, onFilterCounterparty, onFilterBrand, onCreateCollab, onLinkCollab, onUnlinkCollab, onTermsSaved }) {
     const toast = useToast();
     const navigate = useNavigate();
     const [thumb, setThumb] = useState({ loading: true, data: null });
@@ -187,10 +188,8 @@ export default function DocumentDetailSheet({ doc, onClose, onPreview, onDownloa
                         </div>
                     ) : (
                         <>
-                            <p className="text-xs text-ink-muted mt-1">Dokument nie jest jeszcze przypisany do żadnej współpracy.</p>
-                            <button type="button" onClick={() => onCreateCollab(doc)} className="btn btn-soft btn-sm w-full mt-2.5">
-                                <Briefcase size={14} /> Utwórz współpracę z tego dokumentu
-                            </button>
+                            <p className="text-xs text-ink-muted mt-1">Do której współpracy dodać ten dokument?</p>
+                            <LinkToCollab key={doc.id} doc={doc} onLink={onLinkCollab} onCreate={onCreateCollab} />
                         </>
                     )}
                 </div>
